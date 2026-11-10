@@ -6,7 +6,7 @@ Status follows the app-wide plan in [`docs/superpowers/plans/2026-10-25-contract
 
 ## Current focus
 
-The core rules, PBN package, and solo client are in place. Beginner through Expert bots are selectable; Advanced adds third-hand honor-sequence play, and Expert adds Gerber, splinter raises, Reverse Drury, and Lebensohl suit, invitation, and stopper continuations. Card-play hints identify legal moves or optional solver recommendations. Next is broader SAYC / 2/1 bidding and strategy coverage.
+The core rules, PBN package, and solo client are in place. Beginner through Expert bots are selectable; Advanced adds third-hand honor-sequence play, and Expert adds Gerber, splinter raises, Reverse Drury, and Lebensohl suit, invitation, and stopper continuations. Switchable hints suggest a call or card with a reason and explain the meaning of calls in common SAYC / 2/1 situations. Next is broader SAYC / 2/1 bidding and strategy coverage.
 
 ## Solo app
 

@@ -1,5 +1,11 @@
 # Changes
 
+## 0.1.7 - 2026-11-10
+
+- Added a Hints switch (off by default, remembered on the device) in place of the Show hint button. With hints on, the auction shows your high-card points and highlights the suggested call in the bidding box with its meaning; clicking any call beside a seat explains what it shows; and card play highlights one suggested card with a one-line reason. Suggestions follow the Expert bot and the selected bidding style, and a host solver still takes precedence for card hints.
+- Fixed bots occasionally choosing a call that was no longer legal (about 1 auction in 75), which left the table waiting on the bot. This happened mostly after a strong 2♣ opening with a positive response, a 2♠ Stayman answer, and a few weak-two, 2/1, Unusual 2NT, and king-ask continuations. Those rules now bid at a legal level or stop, and a bot passes if any rule ever picks an unavailable call.
+- Added screenshots of bidding, card play, and hints to the README.
+
 ## 0.1.6 - 2026-11-10
 
 - The table now fills the window and never scrolls: the header, footer, and "Auction" / "Playing as" headings are gone, and every size follows the window. Contract, NS/EW tricks, and whose turn it is sit top-left; the last trick stays in view top-right with its winner outlined; Take back / Redo and Show hint sit in the bottom corners. The hand result and a Next deal button appear at the center of the table.

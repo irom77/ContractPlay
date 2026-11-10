@@ -21,7 +21,7 @@ import {
 } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { deleteSavedHand, loadSoloData, saveSoloData, type PbnMetadata, type SavedHand, type SoloData } from "@contractplay/persistence";
-import { createBot } from "@contractplay/bots";
+import { createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
@@ -47,6 +47,7 @@ const seats: readonly Seat[] = ["north", "east", "south", "west"];
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
 const tablePositions = ["bottom", "left", "top", "right"] as const;
 const isRedSuit = (suit: string): boolean => suit === "hearts" || suit === "diamonds";
+const hintsStorageKey = "contractplay.hints";
 const partnerOf = (seat: Seat): Seat => seats[(seats.indexOf(seat) + 2) % 4]!;
 const samePartnership = (a: Seat, b: Seat): boolean => seats.indexOf(a) % 2 === seats.indexOf(b) % 2;
 const contractRank = (bid: Bid): number => {
@@ -126,8 +127,6 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   latestSoloData.current = soloData;
   const pbnFileInput = useRef<HTMLInputElement>(null);
   const [game, setGame] = useState<GameState | undefined>(() => soloData.currentGame ?? undefined);
-  const gameRef = useRef(game);
-  gameRef.current = game;
   const [currentHandId, setCurrentHandId] = useState(() => soloData.currentHandId ?? (soloData.currentGame ? createHandId() : ""));
   const [dealer, setDealer] = useState<Seat>(() => soloData.currentGame?.dealer ?? "north");
   const [vulnerability, setVulnerability] = useState<Vulnerability>(() => soloData.currentGame?.vulnerability ?? "None");
@@ -140,7 +139,12 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [pbnInput, setPbnInput] = useState("");
   const [currentPbnMetadata, setCurrentPbnMetadata] = useState<PbnMetadata | undefined>(() => soloData.currentPbnMetadata);
   const [message, setMessage] = useState("");
-  const [hint, setHint] = useState<{ game: GameState; seat: Seat; cardIds: ReadonlySet<string>; usesSolver: boolean }>();
+  const [hintsOn, setHintsOn] = useState(() => {
+    try { return persistence.storage.getItem(hintsStorageKey) === "on"; } catch { return false; }
+  });
+  const [bidHint, setBidHint] = useState<{ game: GameState; bid: Bid; reason: string }>();
+  const [playHint, setPlayHint] = useState<{ game: GameState; cardIds: ReadonlySet<string>; reason: string }>();
+  const [explainedCall, setExplainedCall] = useState<{ key: string; index: number }>();
   const [temporaryTrick, setTemporaryTrick] = useState<{ handId: string; cards: readonly TrickCard[] }>();
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
   const [reviewHandId, setReviewHandId] = useState<string>();
@@ -261,7 +265,59 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const canShowHand = !isReviewing && !!game && !!actor &&
     (game.phase === "auction" || game.phase === "play") &&
     (!playAgainstBots || actor === userSeat || userControlsDummy);
-  const visibleHint = game && hint?.game === game && hint.seat === game.currentActor ? hint : undefined;
+  // Hints are worked out for the position the user is about to act in, and dropped as soon as the position changes.
+  const hintGame = hintsOn && canShowHand ? game : undefined;
+  const visibleBidHint = hintGame && bidHint?.game === hintGame ? bidHint : undefined;
+  const visibleHint = hintGame && playHint?.game === hintGame ? playHint : undefined;
+  const callsKey = `${reviewHandId ?? currentHandId}:${shownGame?.auction.length ?? 0}`;
+  const shownExplanation = hintsOn && explainedCall?.key === callsKey ? explainedCall.index : undefined;
+
+  useEffect(() => {
+    if (!hintGame) return;
+    let cancelled = false;
+    const seat = hintGame.currentActor;
+    const failed = () => { if (!cancelled) setMessage("Unable to get a hint. Please try again."); };
+    if (hintGame.phase === "auction") {
+      suggestBid(hintGame.hands[seat], hintGame.auction, seat, biddingStyle).then((suggestion) => {
+        if (!cancelled && isCallAvailable(hintGame, suggestion.bid)) setBidHint({ game: hintGame, ...suggestion });
+      }).catch(failed);
+    } else if (hintGame.phase === "play") {
+      const context = {
+        seat,
+        hand: hintGame.hands[seat],
+        currentTrick: hintGame.currentTrick,
+        ...(hintGame.currentTrick[0] ? { ledSuit: hintGame.currentTrick[0].card.suit } : {}),
+        ...(hintGame.contract && hintGame.contract.strain !== "notrump" ? { trump: hintGame.contract.strain } : {})
+      };
+      const suggestion = solver
+        ? requestHint(context, solver).then((cards) => ({ cards, reason: "Recommended by the solver." }))
+        : suggestPlay(context).then(({ card, reason }) => ({ cards: [card], reason }));
+      suggestion.then(({ cards, reason }) => {
+        if (!cancelled) setPlayHint({ game: hintGame, cardIds: new Set(cards.map(cardId)), reason });
+      }).catch(failed);
+    }
+    return () => { cancelled = true; };
+  }, [hintGame, biddingStyle, solver]);
+
+  useEffect(() => {
+    if (shownExplanation === undefined) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !(event.target as HTMLElement | null)?.closest?.(".seat-auction-call, .call-meaning")) setExplainedCall(undefined);
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("click", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [shownExplanation]);
+
+  function toggleHints() {
+    const next = !hintsOn;
+    setHintsOn(next);
+    setExplainedCall(undefined);
+    try { persistence.storage.setItem(hintsStorageKey, next ? "on" : "off"); } catch { /* the choice just won't be remembered */ }
+  }
   const phaseLabel = shownGame?.phase === "complete" ? "Hand complete" : "Passed out";
   const dummyVisible = !!shownGame?.contract && (shownGame.currentTrick.length > 0 || shownGame.completedTricks.length > 0 || shownGame.phase === "complete");
   const completedNsTricks = shownGame?.contract
@@ -348,26 +404,6 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       setMessage("");
     } else {
       setMessage(result.error.message);
-    }
-  }
-
-  async function showHint() {
-    if (!game || game.phase !== "play") return;
-    const requestedGame = game;
-    const seat = requestedGame.currentActor;
-    try {
-      const cards = await requestHint({
-        seat,
-        hand: requestedGame.hands[seat],
-        currentTrick: requestedGame.currentTrick,
-        ...(requestedGame.currentTrick[0] ? { ledSuit: requestedGame.currentTrick[0].card.suit } : {}),
-        ...(requestedGame.contract && requestedGame.contract.strain !== "notrump" ? { trump: requestedGame.contract.strain } : {})
-      }, solver);
-      if (gameRef.current !== requestedGame) return;
-      setHint({ game: requestedGame, seat, cardIds: new Set(cards.map(cardId)), usesSolver: !!solver });
-      setMessage("");
-    } catch {
-      if (gameRef.current === requestedGame) setMessage("Unable to get a hint. Please try again.");
     }
   }
 
@@ -566,13 +602,17 @@ export default function App({ solver }: { solver?: Solver } = {}) {
               const position = positionOf(seat);
               const hasPlayed = phase === "play" && shownGame.currentTrick.some((play) => play.seat === seat);
               const isActor = shownActor === seat && liveTurn;
-              const seatCalls = showCalls ? shownGame.auction.filter((entry) => entry.seat === seat) : [];
+              const seatCalls = showCalls ? shownGame.auction.map((entry, index) => ({ ...entry, index })).filter((entry) => entry.seat === seat) : [];
+              const explainedHere = seatCalls.find(({ index }) => index === shownExplanation);
               const vulnerable = shownGame.vulnerability === "Both" || (shownGame.vulnerability === "NS" && samePartnership(seat, "north")) || (shownGame.vulnerability === "EW" && samePartnership(seat, "east"));
               const isDealer = shownGame.dealer === seat;
               const dummyCards = dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(shownGame.hands[seat]) : [];
-              return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${dummyCards.length ? "has-dummy" : ""} ${dummyCards.length && playFromDummy ? "playable-dummy" : ""}`}>
+              return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${dummyCards.length ? "has-dummy" : ""} ${dummyCards.length && playFromDummy ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
                 <span className="seat-compass" role="img" aria-label={`${seatNames[seat]}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}`} title={`${seatNames[seat]}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
-                {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid }, index) => <span className={`seat-auction-call ${callChipClass(bid)}`} key={`${seat}-${index}`}>{compactCallLabel(bid)}</span>)}</span> : null}
+                {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => hintsOn
+                  ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => setExplainedCall(shownExplanation === index ? undefined : { key: callsKey, index })}>{compactCallLabel(bid)}</button>
+                  : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null}
+                {explainedHere ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainBid(shownGame.auction, explainedHere.index, biddingStyle, playAgainstBots && seat !== userSeat ? botSkill : "expert")}</p> : null}
                 {dummyCards.length ? <section className="dummy-table-hand" aria-label={`${seatNames[seat]}'s dummy hand`}>
                   {SUITS.map((suit) => {
                     const suitCards = dummyCards.filter((card) => card.suit === suit);
@@ -594,11 +634,11 @@ export default function App({ solver }: { solver?: Solver } = {}) {
                 <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
                   {[1, 2, 3, 4, 5, 6, 7].map((level) => biddingStrains.map((strain) => {
                     const bid = `${level}${strain}` as Bid;
-                    return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""}`} aria-label={`${level} ${strain}`} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
+                    return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""} ${visibleBidHint?.bid === bid ? "hinted-bid" : ""}`} aria-label={`${level} ${strain}`} title={visibleBidHint?.bid === bid ? "Suggested bid" : undefined} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
                   }))}
                 </div>
                 <div className="bid-special-calls" role="group" aria-label="Pass, double, or redouble">
-                  {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid}`} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
+                  {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid} ${visibleBidHint?.bid === bid ? "hinted-bid" : ""}`} title={visibleBidHint?.bid === bid ? "Suggested call" : undefined} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
                 </div>
               </div> : null}
             </section>
@@ -618,9 +658,11 @@ export default function App({ solver }: { solver?: Solver } = {}) {
               <button className="secondary-button" disabled={!!temporaryTrick || !game || game.history.cursor >= game.history.actions.length} onClick={redo}><span aria-hidden="true">↷ </span>Redo</button>
             </div>}
 
-            {canAct && game.phase === "play" ? <div className="hint-controls">
-              {visibleHint ? <p role="status">{visibleHint.usesSolver ? "Solver recommendations are highlighted." : "Legal cards are highlighted."}</p> : null}
-              <button className="secondary-button" onClick={() => { void showHint(); }}>Show hint</button>
+            {!isReviewing && liveTurn ? <div className="hint-controls">
+              {hintsOn && phase === "auction" && handSeat ? <strong className="hand-points" aria-label={`${highCardPoints(shownGame.hands[handSeat])} high-card points`}>{highCardPoints(shownGame.hands[handSeat])} HCP</strong> : null}
+              {visibleBidHint && phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
+              {visibleHint && phase === "play" ? <p role="status">{visibleHint.reason}</p> : null}
+              <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
             </div> : null}
 
             {message ? <p className="error-message" role="alert">{message}</p> : null}

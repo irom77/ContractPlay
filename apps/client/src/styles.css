@@ -55,7 +55,15 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .table-tools-row { display: flex; align-items: center; gap: var(--u); }
 .history-controls { bottom: var(--u); left: calc(2 * var(--u)); }
 .hint-controls { right: calc(2 * var(--u)); bottom: var(--u); flex-direction: column; align-items: flex-end; }
-.hint-controls p { margin: 0; max-width: calc(30 * var(--u)); color: var(--gold); font-size: var(--text-s); text-align: right; }
+.hint-controls p { margin: 0; max-width: max(200px, calc(34 * var(--u))); border-radius: 8px; padding: calc(.8 * var(--u)) calc(1.2 * var(--u)); background: rgba(8, 28, 24, .82); color: var(--ink); font-size: var(--text-m); line-height: 1.35; text-align: right; }
+.hint-controls p strong { display: block; color: var(--gold); font-family: var(--suit-font); font-size: var(--text-m); }
+.hand-points { border-radius: 999px; padding: calc(.5 * var(--u)) calc(1.3 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-m); font-weight: 800; }
+.hint-toggle { display: flex; align-items: center; gap: calc(1.1 * var(--u)); }
+.hint-switch { position: relative; width: calc(4.4 * var(--u)); min-width: 26px; height: calc(2.4 * var(--u)); min-height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .22); transition: background .15s; }
+.hint-switch::after { content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; aspect-ratio: 1; border-radius: 50%; background: #fdfcf8; transition: left .15s, transform .15s; }
+.hint-toggle[aria-checked="true"] { border-color: var(--gold); color: var(--gold); }
+.hint-toggle[aria-checked="true"] .hint-switch { background: var(--gold); }
+.hint-toggle[aria-checked="true"] .hint-switch::after { left: calc(100% - 2px); transform: translateX(-100%); }
 
 .contract-badge { display: flex; align-items: baseline; gap: calc(.9 * var(--u)); border: 0; border-radius: 8px; padding: calc(.7 * var(--u)) calc(1.5 * var(--u)); background: #fdfcf8; color: var(--card-black); box-shadow: 0 3px 8px #0007; font-family: var(--suit-font); cursor: pointer; }
 .contract-badge strong { font-size: max(18px, calc(3.6 * var(--u))); font-weight: 800; line-height: 1.1; }
@@ -171,6 +179,19 @@ button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var
 .seat-auction-call.call-pass { background: #2f7d4f; color: #fff; }
 .seat-auction-call.call-double { background: #c22b25; color: #fff; }
 .seat-auction-call.call-redouble { background: #1f55b5; color: #fff; }
+button.seat-auction-call { border: 0; cursor: help; }
+button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max(2px, calc(.35 * var(--u))) solid var(--gold); outline-offset: 1px; }
+/* What a call means: a note hanging off the seat that made it, shown while hints are on. */
+.call-meaning { position: absolute; z-index: 8; width: max-content; max-width: max(230px, calc(40 * var(--u))); margin: 0; border: 1px solid var(--gold); border-radius: 8px; padding: calc(1.1 * var(--u)) calc(1.4 * var(--u)); background: #0b211d; color: var(--ink); box-shadow: 0 6px 18px #000a; font-size: var(--text-m); line-height: 1.35; text-align: left; }
+.call-meaning strong { margin-right: .35em; color: var(--gold); font-family: var(--suit-font); }
+.call-meaning strong.auction-call-red { color: #ff6b6b; }
+.seat.explaining-seat { z-index: 9; }
+.pos-top .call-meaning { top: calc(100% + var(--u)); left: 50%; transform: translateX(-50%); }
+.pos-bottom .call-meaning { bottom: calc(100% + var(--u)); left: 50%; transform: translateX(-50%); }
+.pos-left .call-meaning { top: calc(100% + var(--u)); left: 0; }
+.pos-right .call-meaning { top: calc(100% + var(--u)); right: 0; }
+/* During the auction the points and suggested call sit below the right-hand seat, so its note opens upward. */
+.auction-layout .pos-right .call-meaning { top: auto; bottom: calc(100% + var(--u)); }
 
 /* ---------- Dummy ---------- */
 .dummy-table-hand { display: flex; gap: calc(.8 * var(--u)); --h: calc(14 * var(--u)); --step: calc(4.2 * var(--u)); }
@@ -196,6 +217,7 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .bid-cell, .bid-special { display: flex; height: calc(4.7 * var(--u)); align-items: center; justify-content: center; border: 0; border-radius: calc(.6 * var(--u)); padding: 0; background: #fdfcf8; color: var(--card-black); font: 800 var(--text-l)/1 var(--suit-font); cursor: pointer; }
 .bid-cell.bid-red { color: var(--card-red); }
 .bid-cell:hover:not(:disabled), .bid-special:hover:not(:disabled) { box-shadow: 0 0 0 max(2px, calc(.35 * var(--u))) var(--gold); }
+.bid-cell.hinted-bid:not(:disabled), .bid-special.hinted-bid:not(:disabled) { background: var(--gold); color: var(--deep); box-shadow: 0 0 0 max(2px, calc(.35 * var(--u))) #fff6d6, 0 0 calc(2.4 * var(--u)) var(--gold); }
 .bid-cell:disabled { background: rgba(255, 255, 255, .07); color: rgba(255, 255, 255, .22); cursor: not-allowed; }
 .bid-special-calls { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: calc(.5 * var(--u)); margin-top: var(--u); }
 .bid-special { height: calc(5 * var(--u)); color: #fff; }
@@ -218,6 +240,8 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
   .pos-top { top: max(104px, calc(24 * var(--u))); }
   .pos-bottom { bottom: max(48px, calc(8 * var(--u))); }
   .centered-auction { --u: 1.8vw; }
+  /* The hint note becomes a band above the bottom seat so it never covers that seat's calls. */
+  .hint-controls p { position: absolute; right: 0; bottom: max(82px, calc(15 * var(--u))); width: calc(100vw - 4 * var(--u)); max-width: none; }
   .auction-layout .pos-left, .auction-layout .pos-right { top: 24%; }
   .pos-left.has-dummy, .pos-right.has-dummy { top: max(190px, calc(40 * var(--u))); }
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { applyAction, createGameState, deal, trickWinner, undoAction, validatePlay } from "@contractplay/core";
+import { applyAction, cardId, createGameState, deal, trickWinner, undoAction, validatePlay } from "@contractplay/core";
 import type { GameState, Solver } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -193,7 +193,7 @@ describe("bridge table", () => {
     const table = container.querySelector(".table-surface") as HTMLElement;
 
     expect(container.querySelector(".hand-zone .cards-row")).toBeTruthy();
-    expect(within(table).getByRole("button", { name: "Show hint" })).toBeTruthy();
+    expect(within(table).getByRole("switch", { name: "Hints" })).toBeTruthy();
     expect(within(table).getByRole("button", { name: "Take back" })).toBeTruthy();
     expect(within(table).getByRole("button", { name: "Redo" })).toBeTruthy();
     expect(container.querySelector("h1, header, footer, .hand-zone h2, .hand-zone h3, .table-status h2")).toBeNull();
@@ -260,7 +260,9 @@ describe("bridge table", () => {
     vi.useFakeTimers();
     const game = gameAfterPlays(3);
     const finalSeat = game.currentActor;
-    const finalCard = game.hands[finalSeat].find((card) => validatePlay(game.hands[finalSeat], card, game.currentTrick[0]?.card.suit).legal)!;
+    // The Beginner bot completes the trick with its first legal card in card-id order, which decides who leads next.
+    const finalCard = game.hands[finalSeat].filter((card) => validatePlay(game.hands[finalSeat], card, game.currentTrick[0]?.card.suit).legal)
+      .sort((a, b) => cardId(a).localeCompare(cardId(b)))[0]!;
     const completed = applyAction(game, { type: "play", seat: finalSeat, card: finalCard });
     if (!completed.ok) throw new Error(completed.error.message);
     const nextSeat = completed.state.currentActor;
@@ -478,7 +480,7 @@ describe("bridge table", () => {
     expect(container.querySelector(".status-pill")?.textContent).toBe("East to play");
   });
 
-  it("shows every legal card as a hint without playing a card", async () => {
+  it("highlights one suggested card with a reason without playing it", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const user = userEvent.setup();
     render(<App />);
@@ -492,11 +494,11 @@ describe("bridge table", () => {
     await selectCall("pass");
     const historyBefore = JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.history;
 
-    await user.click(screen.getByRole("button", { name: "Show hint" }));
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
 
-    expect(await screen.findByText("Legal cards are highlighted.")).toBeTruthy();
+    await waitFor(() => expect(document.querySelector(".hint-controls p")?.textContent).toMatch(/^Lead /));
     expect(screen.getAllByRole("button", { name: /^Play / })).toHaveLength(13);
-    expect(screen.getAllByRole("button", { name: /^Play / }).every((card) => card.classList.contains("hinted-card"))).toBe(true);
+    expect(screen.getAllByRole("button", { name: /^Play / }).filter((card) => card.classList.contains("hinted-card"))).toHaveLength(1);
     expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.history).toEqual(historyBefore);
   });
 
@@ -514,11 +516,11 @@ describe("bridge table", () => {
     await selectCall("pass");
     await selectCall("pass");
 
-    await user.click(screen.getByRole("button", { name: "Show hint" }));
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
 
-    expect(await screen.findByText("Solver recommendations are highlighted.")).toBeTruthy();
+    expect(await screen.findByText("Recommended by the solver.")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^Play / }).filter((card) => card.classList.contains("hinted-card"))).toHaveLength(1);
-    expect(solver.recommendPlays).toHaveBeenCalledTimes(1);
+    expect(solver.recommendPlays).toHaveBeenCalled();
   });
 
   it("shows a message when solver recommendations fail", async () => {
@@ -531,12 +533,12 @@ describe("bridge table", () => {
       await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
     }
 
-    await user.click(screen.getByRole("button", { name: "Show hint" }));
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("Unable to get a hint. Please try again.");
   });
 
-  it("limits a follow-suit hint to cards of the led suit", async () => {
+  it("suggests a card of the led suit when following", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
     const user = userEvent.setup();
     render(<App />);
@@ -551,13 +553,53 @@ describe("bridge table", () => {
     await user.click(screen.getByRole("button", { name: "Play 4 of spades" }));
     const playableCards = screen.getAllByRole("button", { name: /^Play / });
 
-    await user.click(screen.getByRole("button", { name: "Show hint" }));
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
 
-    expect(await screen.findByText("Legal cards are highlighted.")).toBeTruthy();
+    await waitFor(() => expect(document.querySelector(".hinted-card")).toBeTruthy());
     const hintedCards = screen.getAllByRole("button", { name: /^Play / }).filter((card) => card.classList.contains("hinted-card"));
-    expect(hintedCards.length).toBeGreaterThan(0);
+    expect(hintedCards).toHaveLength(1);
     expect(hintedCards.length).toBeLessThan(playableCards.length);
     expect(hintedCards.every((card) => card.getAttribute("aria-label")?.endsWith("of spades"))).toBe(true);
+  });
+
+  it("keeps hints hidden until they are switched on, then shows points, a suggested bid and call meanings", async () => {
+    let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+    for (const bid of ["1spades", "pass"] as const) {
+      const result = applyAction(game, { type: "bid", seat: game.currentActor, bid });
+      if (!result.ok) throw new Error(result.error.message);
+      game = result.state;
+    }
+    storeCurrentGame(game);
+    const user = userEvent.setup();
+    const { container, unmount } = render(<App />);
+    const hints = screen.getByRole("switch", { name: "Hints" });
+
+    expect(hints.getAttribute("aria-checked")).toBe("false");
+    expect(container.querySelector(".hand-points, .hinted-bid, .call-meaning")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Explain North's 1 spades" })).toBeNull();
+
+    await user.click(hints);
+
+    const points = game.hands.south.reduce((total, card) => total + ({ A: 4, K: 3, Q: 2, J: 1 }[card.rank as string] ?? 0), 0);
+    expect(container.querySelector(".hand-points")?.textContent).toBe(`${points} HCP`);
+    await waitFor(() => expect(container.querySelectorAll(".hinted-bid")).toHaveLength(1));
+    expect(container.querySelector(".hint-controls p")?.textContent).toMatch(/^Suggested: /);
+    expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.auction).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: "Explain North's 1 spades" }));
+    expect(container.querySelector(".call-meaning")?.textContent).toContain("12–21 points with at least five spades");
+    await user.click(screen.getByRole("button", { name: "Explain East's Pass" }));
+    expect(container.querySelectorAll(".call-meaning")).toHaveLength(1);
+    expect(container.querySelector(".call-meaning")?.textContent).toContain("No overcall");
+    await user.keyboard("{Escape}");
+    expect(container.querySelector(".call-meaning")).toBeNull();
+
+    unmount();
+    render(<App />);
+    expect(screen.getByRole("switch", { name: "Hints" }).getAttribute("aria-checked")).toBe("true");
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
+    expect(document.querySelector(".hand-points, .hinted-bid")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Explain North's 1 spades" })).toBeNull();
   });
 
   it("does not display a pending hint after dealing a replacement hand", async () => {
@@ -569,11 +611,12 @@ describe("bridge table", () => {
     }
 
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Show hint" }));
+      fireEvent.click(screen.getByRole("switch", { name: "Hints" }));
       fireEvent.click(screen.getByRole("button", { name: "Deal a new hand" }));
     });
 
-    expect(screen.queryByText("Legal cards are highlighted.")).toBeNull();
+    expect(document.querySelector(".hinted-card")).toBeNull();
+    expect(document.querySelector(".hint-controls p")?.textContent ?? "").not.toMatch(/^Lead /);
   });
 
   it("plays legal cards through a complete hand and shows the result", async () => {
@@ -686,17 +729,15 @@ describe("bridge table", () => {
     });
     const symbol = screen.getByRole("region", { name: "Current trick" }).textContent?.match(/[♠♥♦♣]/)?.[0];
     const suitName: Record<string, string> = { "♠": "spades", "♥": "hearts", "♦": "diamonds", "♣": "clubs" };
-    await user.click(screen.getByRole("button", { name: "Show hint" }));
-    expect(await screen.findByText("Legal cards are highlighted.")).toBeTruthy();
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
+    await waitFor(() => expect(document.querySelector(".hinted-card")).toBeTruthy());
     const hintedDummyCards = screen.getAllByRole("button", { name: /^Play / }).filter((button) => button.classList.contains("hinted-card"));
-    expect(hintedDummyCards.length).toBeGreaterThan(0);
+    expect(hintedDummyCards).toHaveLength(1);
     const dummyCards = screen.getAllByRole("button", { name: /^Play / });
     const ledSuit = symbol ? suitName[symbol] : undefined;
     const canFollowSuit = ledSuit !== undefined && dummyCards.some((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`));
     if (canFollowSuit) {
       expect(hintedDummyCards.every((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`))).toBe(true);
-    } else {
-      expect(hintedDummyCards).toHaveLength(dummyCards.length);
     }
     const dummyCard = canFollowSuit ? dummyCards.find((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`)) : dummyCards[0];
     await user.click(dummyCard!);

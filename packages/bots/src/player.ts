@@ -8,6 +8,41 @@ export interface ConventionSystem {
 const highCardPoints: Readonly<Record<string, number>> = { A: 4, K: 3, Q: 2, J: 1 };
 const suits: readonly Suit[] = ["spades", "hearts", "diamonds", "clubs"];
 
+const strainOrder = ["clubs", "diamonds", "hearts", "spades", "notrump"] as const;
+
+/** Orders contract bids; 0 for pass, double and redouble. */
+function contractRank(bid: Bid): number {
+  const match = /^([1-7])(clubs|diamonds|hearts|spades|notrump)$/.exec(bid);
+  return match ? Number(match[1]) * 5 + strainOrder.indexOf(match[2] as typeof strainOrder[number]) + 1 : 0;
+}
+
+function isLegalCall(bid: Bid, auction: readonly PublicBid[], seat: Seat): boolean {
+  if (bid === "pass") return true;
+  const lastContract = [...auction].reverse().find((call) => contractRank(call.bid) > 0);
+  if (bid !== "double" && bid !== "redouble") return contractRank(bid) > (lastContract ? contractRank(lastContract.bid) : 0);
+  if (!lastContract) return false;
+  const lastNonPass = [...auction.slice(auction.indexOf(lastContract) + 1)].reverse().find((call) => call.bid !== "pass");
+  const ourContract = SEATS.indexOf(lastContract.seat) % 2 === SEATS.indexOf(seat) % 2;
+  return bid === "double" ? !lastNonPass && !ourContract : lastNonPass?.bid === "double" && ourContract;
+}
+
+/** The same strain at the lowest level that is still legal over the auction so far; pass if no level is left. */
+function atLegalLevel(bid: Bid, auction: readonly PublicBid[]): Bid {
+  const lastContract = [...auction].reverse().find((call) => contractRank(call.bid) > 0);
+  const floor = lastContract ? contractRank(lastContract.bid) : 0;
+  for (let level = Number(bid[0]); level <= 7; level++) {
+    const raised = `${level}${bid.slice(1)}` as Bid;
+    if (contractRank(raised) > floor) return raised;
+  }
+  return "pass";
+}
+
+/** Places the final contract after a king reply: the planned slam if it can still be bid, else pass it or settle in 6NT. */
+function placeAfterKingReply(planned: Bid, reply: Bid, auction: readonly PublicBid[]): Bid {
+  if (atLegalLevel(planned, auction) === planned) return planned;
+  return reply === planned ? "pass" : atLegalLevel("6notrump", auction);
+}
+
 function points(hand: Hand): number {
   return hand.reduce((total, card) => total + (highCardPoints[card.rank] ?? 0), 0);
 }
@@ -588,7 +623,7 @@ export class BeginnerBot implements BotPlayer {
           .map((suit) => ({ suit, length: hand.filter((card) => card.suit === suit).length }))
           .filter(({ suit, length }) => suit !== positiveSuit && length >= 5)
           .sort((a, b) => b.length - a.length)[0]?.suit;
-        if (sideSuit) return `${sideSuit === "clubs" || sideSuit === "diamonds" ? 3 : 2}${sideSuit}` as Bid;
+        if (sideSuit) return atLegalLevel(`2${sideSuit}` as Bid, auction);
         return "3notrump";
       }
       if (opening?.seat === seat && response?.seat === partner && opening.bid === "2clubs" && response.bid === "2diamonds") {
@@ -959,7 +994,8 @@ export class BeginnerBot implements BotPlayer {
               if (responderPoints >= 8) return `3${shownMajor}` as Bid;
             }
             const otherMajor = shownMajor === "hearts" ? "spades" : "hearts";
-            if (hand.filter((card) => card.suit === otherMajor).length >= 4) return `2${otherMajor}` as Bid;
+            // Opener's 2 spades denies four hearts, so only the spade suit is still worth showing at the two level.
+            if (otherMajor === "spades" && hand.filter((card) => card.suit === otherMajor).length >= 4) return `2${otherMajor}` as Bid;
             if (isBalanced(hand) && responderPoints >= 10) return "3notrump";
             if (isBalanced(hand) && responderPoints >= 8) return "2notrump";
             return "pass";
@@ -1090,7 +1126,7 @@ export class BeginnerBot implements BotPlayer {
         if (majorSupport >= 3 && responderPoints >= 11 && responderPoints <= 12) return `3${openingMajor}` as Bid;
         if (isBalanced(hand) && hasUnbidStoppers && responderPoints >= 11 && responderPoints <= 12) return "2notrump";
         if (isBalanced(hand) && !hasUnbidStoppers && majorSupport === 2 && minorSupport < 4 && responderPoints >= 11 && responderPoints <= 12) {
-          return `2${openingMajor}` as Bid;
+          return atLegalLevel(`2${openingMajor}` as Bid, auction);
         }
         if (!isBalanced(hand) && minorSupport >= 5 && responderPoints >= 11 && responderPoints <= 12) {
           return `3${rebidSuit}` as Bid;
@@ -1102,7 +1138,7 @@ export class BeginnerBot implements BotPlayer {
           hand.filter((card) => card.suit === alternateMajor).length >= 5
         ) return `2${alternateMajor}` as Bid;
         if (majorSupport === 2 && minorSupport < 4 && responderPoints <= 9) {
-          return `2${openingMajor}` as Bid;
+          return atLegalLevel(`2${openingMajor}` as Bid, auction);
         }
       }
       const isOneLevelSuit = (bid: Bid | undefined) => bid !== undefined && /^1(clubs|diamonds|hearts|spades)$/.test(bid);
@@ -1139,7 +1175,7 @@ export class BeginnerBot implements BotPlayer {
         if (hand.filter((card) => card.suit === secondMajor).length >= 3 && points(hand) >= 16) {
           return `3${secondMajor}` as Bid;
         }
-        return `2${followupOpeningMajor}` as Bid;
+        return atLegalLevel(`2${followupOpeningMajor}` as Bid, auction);
       }
       const [fitOpening, fitResponse, fitOpenerRebid, responderMajorBid] = contractCalls;
       const fitOpeningMajor = fitOpening?.bid.match(/^1(hearts|spades)$/)?.[1] as Suit | undefined;
@@ -1268,7 +1304,7 @@ export class BeginnerBot implements BotPlayer {
         });
         if (isBalanced(hand) && responderPoints >= 13 && hasStoppers) return "3notrump";
         if (isBalanced(hand) && responderPoints >= 10 && responderPoints <= 12 && hasStoppers) return "2notrump";
-        if (responderPoints >= 10 && hand.filter((card) => card.suit === openingMajor).length >= 2) return `2${openingMajor}` as Bid;
+        if (responderPoints >= 10 && hand.filter((card) => card.suit === openingMajor).length >= 2) return atLegalLevel(`2${openingMajor}` as Bid, auction);
       }
       if (
         this.convention.style === "SAYC" && opening && response && openerRebid && openingMajor && responseSuit &&
@@ -1322,7 +1358,7 @@ export class BeginnerBot implements BotPlayer {
         twoOverOne.responseSuit === "diamonds" && points(hand) >= 12 && points(hand) <= 17 &&
         hand.filter((card) => card.suit === "clubs").length >= 4
       ) return "3clubs";
-      return `2${twoOverOne.openingSuit}` as Bid;
+      return atLegalLevel(`2${twoOverOne.openingSuit}` as Bid, auction);
     }
     if (twoOverOne && contractCalls.length === 3 && twoOverOne.responderSeat === seat) {
       const shownSideMajor = twoOverOne.openingSuit === "hearts" ? "spades" : "hearts";
@@ -1361,7 +1397,7 @@ export class BeginnerBot implements BotPlayer {
         contractCalls[2]?.bid === `2${twoOverOne.openingSuit}` &&
         twoOverOne.responseSuit === "clubs" &&
         hand.filter((card) => card.suit === shownSideMajor).length >= 4
-      ) return `2${shownSideMajor}` as Bid;
+      ) return atLegalLevel(`2${shownSideMajor}` as Bid, auction);
       const sideMajor = twoOverOne.openingSuit === "hearts" ? "spades" : "hearts";
       if (contractCalls[2]?.bid === "3clubs" && hand.filter((card) => card.suit === sideMajor).length >= 4) {
         return `3${sideMajor}` as Bid;
@@ -1378,7 +1414,7 @@ export class BeginnerBot implements BotPlayer {
         twoOverOne.responseSuit === "clubs" && contractCalls[2]?.bid === "2diamonds" &&
         hand.filter((card) => card.suit === "diamonds").length >= 4
       ) return "5diamonds";
-      if (hand.filter((card) => card.suit === twoOverOne.responseSuit).length >= 6) return `3${twoOverOne.responseSuit}` as Bid;
+      if (hand.filter((card) => card.suit === twoOverOne.responseSuit).length >= 6) return atLegalLevel(`3${twoOverOne.responseSuit}` as Bid, auction);
       if (hand.filter((card) => card.suit === sideMajor).length >= 4) {
         return contractCalls[2]?.bid === "2diamonds" && twoOverOne.responseSuit === "clubs"
           ? `2${sideMajor}` as Bid
@@ -1822,7 +1858,7 @@ export class IntermediateBot implements BotPlayer {
         if (preferredSuit && points(hand) <= 9 && hand.filter((card) => card.suit === preferredSuit).length >= 5) {
           return Promise.resolve(`4${preferredSuit}` as Bid);
         }
-        if (preferredSuit) return Promise.resolve(`3${preferredSuit}` as Bid);
+        if (preferredSuit) return Promise.resolve(atLegalLevel(`3${preferredSuit}` as Bid, auction));
       }
     }
     if (auction.length === 5 && contractCalls.length === 3 && auction[2]?.bid === "pass" && auction[4]?.bid === "pass") {
@@ -1844,7 +1880,7 @@ export class IntermediateBot implements BotPlayer {
             const gameLevel = preferredSuit === "hearts" || preferredSuit === "spades" ? 4 : 5;
             return Promise.resolve(`${gameLevel}${preferredSuit}` as Bid);
           }
-          return Promise.resolve(`3${preferredSuit}` as Bid);
+          return Promise.resolve(atLegalLevel(`3${preferredSuit}` as Bid, auction));
         }
       }
     }
@@ -1939,8 +1975,8 @@ export class IntermediateBot implements BotPlayer {
       ) {
         const responseLength = hand.filter((card) => card.suit === responseSuit).length;
         const responseIsMajor = responseSuit === "hearts" || responseSuit === "spades";
-        if (responseIsMajor && responseLength >= 3) return Promise.resolve(`3${responseSuit}` as Bid);
-        if (points(hand) <= 8) return Promise.resolve(`3${weakTwoSuit}` as Bid);
+        if (responseIsMajor && responseLength >= 3) return Promise.resolve(atLegalLevel(`3${responseSuit}` as Bid, auction));
+        if (points(hand) <= 8) return Promise.resolve(atLegalLevel(`3${weakTwoSuit}` as Bid, auction));
         const feature = suits.find((suit) => {
           if (suit === weakTwoSuit || suit === responseSuit) return false;
           const cards = hand.filter((card) => card.suit === suit);
@@ -1948,7 +1984,9 @@ export class IntermediateBot implements BotPlayer {
             (cards.length >= 2 && cards.some((card) => card.rank === "K")) ||
             (cards.length >= 4 && cards.some((card) => card.rank === "Q"));
         });
-        return Promise.resolve(feature ? `3${feature}` as Bid : "3notrump");
+        // A feature that can no longer be shown at the three level is not worth going higher for: repeat the suit instead.
+        const featureBid = feature ? `3${feature}` as Bid : "3notrump";
+        return Promise.resolve(isLegalCall(featureBid, auction, seat) ? featureBid : atLegalLevel(`3${weakTwoSuit}` as Bid, auction));
       }
       if (opening?.seat === seat && weakTwoSuit && inquiry?.bid === "2notrump" && inquiry.seat === partner) {
         const hcp = points(hand);
@@ -2734,7 +2772,7 @@ export class ExpertBot implements BotPlayer {
             : calls[6].bid === "6spades" ? 3
               : calls[6].bid === "6notrump" ? 4 : undefined;
       const allKingsKnown = partnerKings === 4 || (partnerKings !== undefined && ownKings + partnerKings === 4);
-      return Promise.resolve(`${allKingsKnown ? 7 : 6}${agreedBlackwoodMajor}` as Bid);
+      return Promise.resolve(placeAfterKingReply(`${allKingsKnown ? 7 : 6}${agreedBlackwoodMajor}` as Bid, calls[6].bid, auction));
     }
 
     if (calls.length === 1 && calls[0]?.seat === partner && (calls[0].bid === "1notrump" || calls[0].bid === "2notrump")) {
@@ -2911,7 +2949,7 @@ export class ExpertBot implements BotPlayer {
         openerRebid?.bid === "1notrump" && openerRebid.seat === seat && checkback?.bid === forcingAsk &&
         checkback.seat === partner && auction.every(({ bid }) => bid === "pass" || bid === opening.bid || bid === response.bid || bid === openerRebid.bid || bid === checkback.bid)
       ) {
-        if (hand.filter((card) => card.suit === responderMajor).length >= 3) return Promise.resolve(`2${responderMajor}` as Bid);
+        if (hand.filter((card) => card.suit === responderMajor).length >= 3) return Promise.resolve(atLegalLevel(`2${responderMajor}` as Bid, auction));
         const otherMajor = responderMajor === "hearts" ? "spades" : "hearts";
         if (hand.filter((card) => card.suit === otherMajor).length >= 4) return Promise.resolve(`2${otherMajor}` as Bid);
         return Promise.resolve(denialBid);
@@ -2934,8 +2972,9 @@ export class ExpertBot implements BotPlayer {
         const responderPoints = points(hand);
         const hasStoppers = suits.every((suit) => hasStopper(hand, suit));
         if (isBalanced(hand) && hasStoppers && responderPoints >= 13) return Promise.resolve("3notrump");
-        if (isBalanced(hand) && hasStoppers && responderPoints >= 10 && responderPoints <= 12) return Promise.resolve("2notrump");
-        if (hand.filter((card) => card.suit === responderMajor).length >= 5) return Promise.resolve(`2${responderMajor}` as Bid);
+        // In 2/1 the denial is itself 2NT, so an invitational hand has nothing to add and passes it.
+        if (isBalanced(hand) && hasStoppers && responderPoints >= 10 && responderPoints <= 12) return Promise.resolve(isLegalCall("2notrump", auction, seat) ? "2notrump" : "pass");
+        if (hand.filter((card) => card.suit === responderMajor).length >= 5) return Promise.resolve(atLegalLevel(`2${responderMajor}` as Bid, auction));
       }
       if (
         openingMinor && opening?.seat === partner && responderMajor && response?.seat === seat &&
@@ -2953,7 +2992,7 @@ export class ExpertBot implements BotPlayer {
           return Promise.resolve("2notrump");
         }
         if (hand.filter((card) => card.suit === responderMajor).length >= 5) {
-          return Promise.resolve(`2${responderMajor}` as Bid);
+          return Promise.resolve(atLegalLevel(`2${responderMajor}` as Bid, auction));
         }
       }
     }
@@ -3331,7 +3370,7 @@ export class ExpertBot implements BotPlayer {
           : kingAnswer === "6hearts" ? 2
             : kingAnswer === "6spades" ? 3 : undefined;
       const allKingsKnown = partnerKings === 4 || (partnerKings !== undefined && ownKings + partnerKings === 4);
-      return Promise.resolve(`${allKingsKnown ? 7 : 6}${naturalSideMajorGame.major}` as Bid);
+      return Promise.resolve(placeAfterKingReply(`${allKingsKnown ? 7 : 6}${naturalSideMajorGame.major}` as Bid, kingAnswer ?? "pass", auction));
     }
 
     if (calls.length === 4 && this.config.biddingStyle === "2/1") {
@@ -3425,7 +3464,7 @@ export class ExpertBot implements BotPlayer {
             : calls[8].bid === "6spades" ? 3
               : calls[8].bid === "6notrump" ? 4 : undefined;
       const allKingsKnown = partnerKings === 4 || (partnerKings !== undefined && ownKings + partnerKings === 4);
-      return Promise.resolve(`${allKingsKnown ? 7 : 6}${sideMajorBlackwoodFit.major}` as Bid);
+      return Promise.resolve(placeAfterKingReply(`${allKingsKnown ? 7 : 6}${sideMajorBlackwoodFit.major}` as Bid, calls[8].bid, auction));
     }
 
     if (calls.length === 3) {
@@ -3599,10 +3638,27 @@ export class ExpertBot implements BotPlayer {
   }
 }
 
-export function createBot(config: BotConfig): BotPlayer {
+/** The bidding and play rules for a skill level, exactly as written. */
+export function createRuleBot(config: BotConfig): BotPlayer {
   if (config.skill === "beginner") return new BeginnerBot(config);
   if (config.skill === "intermediate") return new IntermediateBot(config);
   if (config.skill === "advanced") return new AdvancedBot(config);
   if (config.skill === "expert") return new ExpertBot(config);
   throw new Error(`Bot skill ${config.skill} is not implemented yet`);
+}
+
+/**
+ * A bot for the table. Should a rule ever choose a call the auction no longer allows, the bot passes instead, so a
+ * table never waits on a call that cannot be made.
+ */
+export function createBot(config: BotConfig): BotPlayer {
+  const bot = createRuleBot(config);
+  return {
+    config: bot.config,
+    async chooseBid(hand, auction, seat) {
+      const bid = await bot.chooseBid(hand, auction, seat);
+      return isLegalCall(bid, auction, seat) ? bid : "pass";
+    },
+    chooseCard: (context) => bot.chooseCard(context)
+  };
 }
