@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applyAction,
   cardId,
@@ -24,25 +24,29 @@ import { deleteSavedHand, loadSoloData, saveSoloData, type PbnMetadata, type Sav
 import { createBot } from "@contractplay/bots";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
+import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 
 const seatNames: Record<Seat, string> = { north: "North", east: "East", south: "South", west: "West" };
 const biddingStrains = ["clubs", "diamonds", "hearts", "spades", "notrump"] as const;
 const suitSymbols: Record<Suit, string> = { spades: "♠", hearts: "♥", diamonds: "♦", clubs: "♣" };
 const suitNames: Record<Suit, string> = { spades: "spades", hearts: "hearts", diamonds: "diamonds", clubs: "clubs" };
 const ranks: Record<string, string> = { A: "ace", K: "king", Q: "queen", J: "jack", T: "ten" };
-const cardPipLayouts: Record<number, readonly string[]> = {
-  2: ["1 / 1", "5 / 1"],
-  3: ["1 / 1", "3 / 1", "5 / 1"],
-  4: ["1 / 1", "1 / 2", "5 / 1", "5 / 2"],
-  5: ["1 / 1", "1 / 2", "3 / 1 / 4 / 3", "5 / 1", "5 / 2"],
-  6: ["1 / 1", "1 / 2", "3 / 1", "3 / 2", "5 / 1", "5 / 2"],
-  7: ["1 / 1", "1 / 2", "2 / 1", "2 / 2", "3 / 1 / 4 / 3", "5 / 1", "5 / 2"],
-  8: ["1 / 1", "1 / 2", "2 / 1", "2 / 2", "4 / 1", "4 / 2", "5 / 1", "5 / 2"],
-  9: ["1 / 1", "1 / 2", "2 / 1", "2 / 2", "3 / 1 / 4 / 3", "4 / 1", "4 / 2", "5 / 1", "5 / 2"],
-  10: ["1 / 1", "1 / 2", "2 / 1", "2 / 2", "3 / 1", "3 / 2", "4 / 1", "4 / 2", "5 / 1", "5 / 2"]
+/** Pip centres as [x, y] percentages of the pip area; the lower half is drawn upside down like a printed card. */
+const cardPipLayouts: Record<number, readonly (readonly [number, number])[]> = {
+  2: [[50, 0], [50, 100]],
+  3: [[50, 0], [50, 50], [50, 100]],
+  4: [[0, 0], [100, 0], [0, 100], [100, 100]],
+  5: [[0, 0], [100, 0], [50, 50], [0, 100], [100, 100]],
+  6: [[0, 0], [100, 0], [0, 50], [100, 50], [0, 100], [100, 100]],
+  7: [[0, 0], [100, 0], [50, 25], [0, 50], [100, 50], [0, 100], [100, 100]],
+  8: [[0, 0], [100, 0], [50, 25], [0, 50], [100, 50], [50, 75], [0, 100], [100, 100]],
+  9: [[0, 0], [100, 0], [0, 33], [100, 33], [50, 50], [0, 67], [100, 67], [0, 100], [100, 100]],
+  10: [[0, 0], [100, 0], [50, 17], [0, 33], [100, 33], [0, 67], [100, 67], [50, 83], [0, 100], [100, 100]]
 };
 const seats: readonly Seat[] = ["north", "east", "south", "west"];
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
+const tablePositions = ["bottom", "left", "top", "right"] as const;
+const isRedSuit = (suit: string): boolean => suit === "hearts" || suit === "diamonds";
 const partnerOf = (seat: Seat): Seat => seats[(seats.indexOf(seat) + 2) % 4]!;
 const samePartnership = (a: Seat, b: Seat): boolean => seats.indexOf(a) % 2 === seats.indexOf(b) % 2;
 const contractRank = (bid: Bid): number => {
@@ -84,15 +88,20 @@ function cardLabel(card: Card): string {
 function cardFace(card: Card) {
   const suit = suitSymbols[card.suit];
   const rank = card.rank === "T" ? "10" : card.rank;
-  const pipCount = card.rank === "T" ? 10 : Number(card.rank);
-  const pips = cardPipLayouts[pipCount];
+  const pips = cardPipLayouts[card.rank === "T" ? 10 : Number(card.rank)];
+  const corner = (side: "top" | "bottom") => <span className={`card-corner card-corner-${side}`} aria-hidden="true"><span className={rank === "10" ? "card-rank-ten" : undefined}>{rank}</span><span>{suit}</span></span>;
   return <>
-    <span className="card-corner card-corner-top" aria-hidden="true"><span>{rank}</span><span>{suit}</span></span>
-    {pips ? <span className={`card-pips pip-count-${pipCount}`} aria-hidden="true">{pips.map((area, index) => <span className="card-pip" style={{ gridArea: area }} key={`${area}-${index}`}>{suit}</span>)}</span>
+    {corner("top")}
+    {pips ? <span className="card-pips" aria-hidden="true">{pips.map(([x, y], index) => <span className={`card-pip ${y > 50 ? "card-pip-flipped" : ""}`} style={{ left: `${x}%`, top: `${y}%` }} key={index}>{suit}</span>)}</span>
       : card.rank === "A" ? <span className="card-center-suit" aria-hidden="true">{suit}</span>
         : <span className="card-portrait" aria-hidden="true"><span>{card.rank}</span><span>{suit}</span></span>}
-    <span className="card-corner card-corner-bottom" aria-hidden="true"><span>{rank}</span><span>{suit}</span></span>
+    {corner("bottom")}
   </>;
+}
+
+function callChipClass(bid: Bid): string {
+  if (bid === "pass" || bid === "double" || bid === "redouble") return `call-${bid}`;
+  return isRedSuit(bid.slice(1)) ? "auction-call-red" : "";
 }
 
 function sortHand(cards: readonly Card[]): Card[] {
@@ -126,9 +135,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [userSeat, setUserSeat] = useState<Seat>("north");
   const [botSkill, setBotSkill] = useState<SkillLevel>("beginner");
   const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">("SAYC");
-  const [auctionPinned, setAuctionPinned] = useState(false);
-  const [auctionHovered, setAuctionHovered] = useState(false);
-  const [auctionFocused, setAuctionFocused] = useState(false);
+  const [auctionShown, setAuctionShown] = useState(false);
+  const [fullscreen, setFullscreenState] = useState(false);
   const [pbnInput, setPbnInput] = useState("");
   const [currentPbnMetadata, setCurrentPbnMetadata] = useState<PbnMetadata | undefined>(() => soloData.currentPbnMetadata);
   const [message, setMessage] = useState("");
@@ -242,7 +250,6 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   }, [game, playAgainstBots, temporaryTrick, userSeat, biddingStyle, botSkill]);
 
   const actor = game?.currentActor;
-  const actorName = actor ? seatNames[actor] : "";
   const selectedHand = reviewHandId ? soloData.completedHands.find((hand) => hand.id === reviewHandId) : undefined;
   const shownGame = selectedHand ? reviewState(selectedHand, reviewCursor) : game;
   const isReviewing = !!selectedHand;
@@ -255,8 +262,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     (game.phase === "auction" || game.phase === "play") &&
     (!playAgainstBots || actor === userSeat || userControlsDummy);
   const visibleHint = game && hint?.game === game && hint.seat === game.currentActor ? hint : undefined;
-  const auctionDrawerOpen = auctionPinned || auctionHovered || auctionFocused;
-  const phaseLabel = shownGame?.phase === "auction" ? "Auction" : shownGame?.phase === "play" ? "Card play" : shownGame?.phase === "complete" ? "Hand complete" : "Passed out";
+  const phaseLabel = shownGame?.phase === "complete" ? "Hand complete" : "Passed out";
+  const dummyVisible = !!shownGame?.contract && (shownGame.currentTrick.length > 0 || shownGame.completedTricks.length > 0 || shownGame.phase === "complete");
   const completedNsTricks = shownGame?.contract
     ? shownGame.completedTricks.filter((trick) => samePartnership(
         trickWinner(trick, shownGame.contract!.strain === "notrump" ? undefined : shownGame.contract!.strain),
@@ -275,9 +282,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     setCurrentHandId(id);
     setGame(createGameState({ deal: deal(), dealer, vulnerability }));
     setCurrentPbnMetadata(undefined);
-    setAuctionPinned(false);
-    setAuctionHovered(false);
-    setAuctionFocused(false);
+    setAuctionShown(false);
     setReviewHandId(undefined);
     setMessage("");
   }
@@ -300,9 +305,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     }
     setCurrentHandId(createHandId());
     setGame(imported);
-    setAuctionPinned(false);
-    setAuctionHovered(false);
-    setAuctionFocused(false);
+    setAuctionShown(false);
     setCurrentPbnMetadata({ tags: board.tags, comments: board.comments });
     setDealer(board.dealer);
     setVulnerability(board.vulnerability ?? "None");
@@ -427,13 +430,42 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     if (shownGame?.phase === "auction" && list) list.scrollTop = list.scrollHeight;
   }, [shownGame?.phase, shownAuctionLength]);
 
-  const auctionRows = useMemo(() => {
-    if (!shownGame) return [];
-    const dealerIndex = seats.indexOf(shownGame.dealer);
-    const padded = [...Array(dealerIndex).fill(undefined), ...shownGame.auction];
-    return Array.from({ length: Math.ceil(padded.length / 4) }, (_, row) => padded.slice(row * 4, row * 4 + 4));
-  }, [shownGame?.dealer, shownGame?.auction]);
 
+  useEffect(() => {
+    const sync = () => { void isFullscreen().then(setFullscreenState).catch(() => undefined); };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if ((event.target as HTMLElement | null)?.closest?.("input, textarea, select")) return;
+      if (event.key === "f" || event.key === "F") {
+        event.preventDefault();
+        void toggleFullscreen();
+      } else if (event.key === "Escape" && isNativeClient()) {
+        void setFullscreen(false).then(setFullscreenState).catch(() => undefined);
+      }
+    };
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  async function toggleFullscreen() {
+    try {
+      setFullscreenState(await setFullscreen(!(await isFullscreen())));
+    } catch {
+      setMessage("Full screen is not available here.");
+    }
+  }
+
+  const dealSettings = <>
+    <label>Dealer<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
+    <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label>
+    <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
+    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+  </>;
   const pbnImportForm = <details className="pbn-import">
     <summary>Import a PBN deal</summary>
     <form onSubmit={(event) => { event.preventDefault(); importHand(); }}>
@@ -445,176 +477,170 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     </form>
   </details>;
   const recentHandsPanel = <section className="recent-panel" aria-label="Recent hands">
-    <div className="section-heading"><div><p className="eyebrow">ON THIS DEVICE</p><h2>Recent hands</h2></div><span className="auction-count">{soloData.completedHands.length}</span></div>
+    <div className="section-heading"><h2>Recent hands</h2><span className="auction-count">{soloData.completedHands.length}</span></div>
     {soloData.completedHands.length ? <ul className="recent-list">{soloData.completedHands.map((hand, index) => <li key={hand.id}>
       <button className="review-link" aria-label={`Review hand ${index + 1}`} onClick={() => openReview(hand)}><strong>Hand {soloData.completedHands.length - index}</strong><span>{new Date(hand.savedAt).toLocaleDateString()}</span></button>
       <div className="recent-actions"><button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN hand ${index + 1}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete hand ${index + 1}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}
   </section>;
-  const tableMenu = shownGame ? <details className="table-menu">
-    <summary>Table menu</summary>
-    <div className="table-menu-content">
-      {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
-      {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">
-        <span className="eyebrow">NEXT DEAL</span>
-        <label>Dealer<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-        <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label>
-        <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-        {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
-      </section> : null}
-      {pbnImportForm}
-      {recentHandsPanel}
-    </div>
-  </details> : null;
+  const fullscreenButton = <button className="icon-button" type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} aria-pressed={fullscreen} title={`${fullscreen ? "Exit full screen" : "Full screen"} (F)`} onClick={() => { void toggleFullscreen(); }}>
+    <svg viewBox="0 0 24 24" aria-hidden="true">{fullscreen
+      ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+      : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}</svg>
+  </button>;
+  const version = <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>;
 
-  return (
-    <main className="app-shell">
-      <header className="site-header">
-        <a className="brand" href="#home" aria-label="ContractPlay home"><span className="brand-mark">C</span><span>ContractPlay</span></a>
-        <div className="header-actions">
-          <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>
-          {tableMenu}
-        </div>
-      </header>
-
-      {!shownGame ? <section className="welcome-row" aria-labelledby="page-title">
-        <div>
-          <p className="eyebrow">THE TABLE IS YOURS</p>
-          <h1 id="page-title">A clearer way to play bridge.</h1>
-          <p className="page-intro">Follow every call and card, one move at a time.</p>
-        </div>
-      </section> : null}
-
-      {!shownGame ? (
-        <section className="empty-table" aria-label="Bridge table preview">
-          <div className="empty-suit suit-red">♥</div><div className="empty-suit">♠</div>
-          <h2>A fresh deal is waiting</h2>
-          <p>Choose the board settings, then follow the auction and play through all thirteen tricks.</p>
-          <div className="setup-controls">
-            <label>Dealer<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-            <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label>
-            <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-            {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
-          </div>
-          <button className="text-button" onClick={startHand}>Start a new hand <span aria-hidden="true">→</span></button>
+  if (!shownGame) {
+    return (
+      <main className="app-shell">
+        <section className="empty-table" aria-label="New deal">
+          <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span><span className="table-tools-row">{version}{fullscreenButton}</span></div>
+          <div className="setup-controls">{dealSettings}</div>
+          <button className="primary-button" onClick={startHand}>Start a new hand</button>
           {pbnImportForm}
         </section>
-      ) : shownGame ? (
-        <>
-        <div className={`game-layout ${shownGame.phase === "auction" ? "auction-layout" : shownGame.phase === "play" ? "play-layout" : ""}`}>
-          <section className="table-panel" aria-label={isReviewing ? "Hand review" : "Bridge table"}>
-            <div className="table-heading">
-              <div><p className="eyebrow">{shownGame.contract ? `BOARD 1 · ${callLabel(`${shownGame.contract.level}${shownGame.contract.strain}` as Bid)} · ${seatNames[shownGame.contract.declarer]} DECLARES` : `BOARD 1 · DEALER ${seatNames[shownGame.dealer].toUpperCase()} · VULNERABILITY ${shownGame.vulnerability.toUpperCase()}`}</p><h2>{isReviewing ? "Hand review" : phaseLabel}</h2></div>
-              <span className="status-pill" aria-live="polite">{isReviewing ? `Review · ${reviewCursor} of ${handCount}` : shownGame.phase === "auction" || shownGame.phase === "play" ? `${playAgainstBots && shownActor !== userSeat && !userControlsDummy ? "Bot · " : ""}${seatNames[shownActor!]} to ${shownGame.phase === "auction" ? "bid" : "play"}` : phaseLabel}</span>
+        {message ? <p className="error-message" role="alert">{message}</p> : null}
+      </main>
+    );
+  }
+
+  const phase = shownGame.phase;
+  const contract = shownGame.contract;
+  const trump = contract && contract.strain !== "notrump" ? contract.strain : undefined;
+  const liveTurn = phase === "auction" || phase === "play";
+  // The seat drawn at the bottom edge: the user against bots, otherwise declarer (so dummy faces them) or South.
+  const bottomSeat: Seat = playAgainstBots ? userSeat : contract ? contract.declarer : "south";
+  const positionOf = (seat: Seat) => tablePositions[(seats.indexOf(seat) - seats.indexOf(bottomSeat) + 4) % 4]!;
+  const canAct = canShowHand && !!game && !!actor;
+  // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.
+  const playFromDummy = canAct && phase === "play" && dummyVisible && actor === dummySeat && positionOf(actor) !== "bottom";
+  const handIsInteractive = canAct && !playFromDummy;
+  const handSeat: Seat | undefined = handIsInteractive ? actor : playAgainstBots || isReviewing || playFromDummy ? bottomSeat : undefined;
+  const handCards = handSeat ? sortHand(shownGame.hands[handSeat]) : [];
+  const handIsDummy = dummyVisible && handSeat === dummySeat;
+  const showCalls = phase !== "play" || auctionShown;
+  const lastTrick = shownGame.completedTricks.at(-1);
+  const lastTrickWinner = lastTrick ? trickWinner(lastTrick, trump) : undefined;
+  const contractText = contract ? <>{contract.level}<span className={isRedSuit(contract.strain) ? "red-card" : ""}>{contract.strain === "notrump" ? "NT" : suitSymbols[contract.strain]}</span>{"X".repeat(contract.doubled)}</> : null;
+  const statusText = isReviewing
+    ? `Reviewing action ${reviewCursor} of ${handCount}`
+    : liveTurn ? `${playAgainstBots && shownActor !== userSeat && !userControlsDummy ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
+  const auctionList = shownGame.auction.length ? <ol className="sr-only" ref={auctionListRef} aria-label="Auction calls">{shownGame.auction.map(({ seat, bid }, index) => <li key={`${seat}-${index}`}><span>{seatNames[seat]}</span><strong>{callLabel(bid)}</strong></li>)}</ol> : null;
+  const tableCard = (card: Card, className: string, label: string) => <span className={`${className} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={cardId(card)} role="img" aria-label={label}>{cardFace(card)}</span>;
+
+  return (
+    <main className={`app-shell ${fullscreen ? "is-fullscreen" : ""}`}>
+      <div className={`game-layout ${phase === "auction" ? "auction-layout" : phase === "play" ? "play-layout" : ""}`}>
+        <section className="table-panel" aria-label={isReviewing ? "Hand review" : "Bridge table"}>
+          <div className={`table-surface ${phase === "play" && auctionShown ? "calls-shown" : ""}`}>
+            <div className="table-status">
+              {contract ? <button className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${shownGame.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={() => setAuctionShown((shown) => !shown)}>
+                <strong>{contractText}</strong><span>{seatNames[contract.declarer][0]}</span>
+              </button> : null}
+              {contract ? <span className="trick-count" role="group" aria-label={`NS ${completedNsTricks} · EW ${completedEwTricks} tricks`} aria-live="polite">
+                <span>NS<b>{completedNsTricks}</b></span><span>EW<b>{completedEwTricks}</b></span>
+              </span> : null}
+              <span className="status-pill" aria-live="polite">{statusText}</span>
             </div>
 
-            <div className="table-surface">
-              {seats.map((seat) => {
-                const hasPlayed = shownGame.phase === "play" && shownGame.currentTrick.some((play) => play.seat === seat);
-                const isActor = shownActor === seat && (shownGame.phase === "auction" || shownGame.phase === "play");
-                const seatStatus = isActor ? (shownGame.phase === "auction" ? "To bid" : "To play") : hasPlayed ? "Played" : "";
-                return <div key={seat} className={`seat seat-${seat} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""}`}>
-                  <span className="seat-compass">{seat[0]!.toUpperCase()}</span><span>{seatNames[seat]}</span>{seatStatus ? <span className="seat-status">{seatStatus}</span> : null}
-                </div>;
-              })}
-              <div className="trick-area" role="region" aria-label="Current trick">
-                {displayedTrick.length ? displayedTrick.map(({ seat, card }) => <span className={`trick-card trick-card-position-${seat} ${card.suit === "hearts" || card.suit === "diamonds" ? "red-card" : ""}`} key={seat} role="img" aria-label={`${seatNames[seat]} played ${cardLabel(card)}`}>
-                  {cardFace(card)}<span className="trick-card-seat" aria-hidden="true">{seatNames[seat][0]}</span>
-                </span>) : <span className="trick-placeholder">{shownGame.contract ? `${seatNames[shownGame.trickLeader]} leads` : "Auction in progress"}</span>}
+            <div className="table-tools">
+              <div className="table-tools-row">
+                <details className="table-menu">
+                  <summary className="icon-button" aria-label="Table menu" title="Table menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></summary>
+                  <div className="table-menu-content">
+                    {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
+                    {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section> : null}
+                    {pbnImportForm}
+                    {recentHandsPanel}
+                    {version}
+                  </div>
+                </details>
+                {fullscreenButton}
               </div>
-              {shownGame.phase === "auction" ? <section className="auction-panel centered-auction" aria-label="Auction">
-                <div className="section-heading"><div><p className="eyebrow">{shownGame.vulnerability === "None" ? "NON-VULNERABLE" : `${shownGame.vulnerability.toUpperCase()} VULNERABLE`}</p><h2>Auction</h2></div><span className="auction-count">{shownGame.auction.length}</span></div>
-                <div className="bidding-history-wrap" aria-live="polite">
-                  <table className="bidding-history" aria-label="Auction calls by seat">
-                    <thead><tr>{seats.map((seat) => <th className={shownGame.currentActor === seat ? "auction-seat-active" : ""} key={seat} scope="col" aria-label={seatNames[seat]}>{seatNames[seat].slice(0, 1)}</th>)}</tr></thead>
-                    <tbody>{auctionRows.map((row, rowIndex) => <tr key={rowIndex}>{seats.map((seat, seatIndex) => {
-                      const callIndex = rowIndex * 4 + seatIndex - seats.indexOf(shownGame.dealer);
-                      const entry = callIndex >= 0 ? shownGame.auction[callIndex] : undefined;
-                      return <td key={seat} className={entry && (entry.bid.endsWith("hearts") || entry.bid.endsWith("diamonds")) ? "auction-call-red" : ""}>{entry ? compactCallLabel(entry.bid) : ""}</td>;
-                    })}</tr>)}</tbody>
-                  </table>
-                  {shownGame.auction.length ? <ol className="sr-only" ref={auctionListRef}>{shownGame.auction.map(({ seat, bid }, index) => <li key={`${seat}-${index}`}><span>{seatNames[seat]}</span><strong>{callLabel(bid)}</strong></li>)}</ol> : <p className="quiet-copy">The first call is yours to make.</p>}
-                </div>
-                {!isReviewing && game?.phase === "auction" && (!playAgainstBots || game.currentActor === userSeat) ? <div className="bid-picker" aria-label="Choose a bid">
-                  <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
-                    <span className="bid-grid-corner" aria-hidden="true">Level</span>{biddingStrains.map((strain) => <span className={`bid-strain bid-strain-${strain}`} key={strain} aria-label={strain}>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span>)}
-                    {[1, 2, 3, 4, 5, 6, 7].map((level) => <Fragment key={level}><span className="bid-level">{level}</span>{biddingStrains.map((strain) => {
-                      const bid = `${level}${strain}` as Bid;
-                      const available = isCallAvailable(game, bid);
-                      return <button key={bid} type="button" className={`bid-cell ${strain === "hearts" || strain === "diamonds" ? "bid-red" : ""}`} aria-label={`${level} ${strain}`} disabled={!available} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
-                    })}</Fragment>)}
-                  </div>
-                  <div className="bid-special-calls" role="group" aria-label="Pass, double, or redouble">
-                    {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`secondary-button bid-special bid-special-${bid}`} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
-                  </div>
-                </div> : null}
-              </section> : null}
+              {lastTrick ? <button className="last-trick-button" type="button" disabled={shownGame.currentTrick.length > 0} aria-pressed={lastTrickOpen} aria-label={lastTrickOpen ? "Hide last trick" : "Last trick"} title={shownGame.currentTrick.length > 0 ? "Last trick" : lastTrickOpen ? "Hide last trick" : "Show last trick on the table"} onClick={() => setLastTrickOpen((open) => !open)}>
+                {lastTrick.map(({ seat, card }) => <span className={`table-card last-trick-card trick-pos-${positionOf(seat)} ${seat === lastTrickWinner ? "last-trick-winner" : ""} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={seat} aria-hidden="true">{cardFace(card)}</span>)}
+              </button> : null}
             </div>
-            {shownGame.contract ? <div className="trick-summary" aria-live="polite">
-              <span className="trick-count">NS {completedNsTricks} · EW {completedEwTricks} tricks</span>
-              {shownGame.completedTricks.length ? <button className="secondary-button last-trick-button" type="button" disabled={shownGame.currentTrick.length > 0} aria-pressed={lastTrickOpen} onClick={() => setLastTrickOpen((open) => !open)}>{lastTrickOpen ? "Hide last trick" : "Last trick"}</button> : null}
+
+            {seats.map((seat) => {
+              const position = positionOf(seat);
+              const hasPlayed = phase === "play" && shownGame.currentTrick.some((play) => play.seat === seat);
+              const isActor = shownActor === seat && liveTurn;
+              const seatCalls = showCalls ? shownGame.auction.filter((entry) => entry.seat === seat) : [];
+              const vulnerable = shownGame.vulnerability === "Both" || (shownGame.vulnerability === "NS" && samePartnership(seat, "north")) || (shownGame.vulnerability === "EW" && samePartnership(seat, "east"));
+              const isDealer = shownGame.dealer === seat;
+              const dummyCards = dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(shownGame.hands[seat]) : [];
+              return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${dummyCards.length ? "has-dummy" : ""} ${dummyCards.length && playFromDummy ? "playable-dummy" : ""}`}>
+                <span className="seat-compass" role="img" aria-label={`${seatNames[seat]}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}`} title={`${seatNames[seat]}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
+                {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid }, index) => <span className={`seat-auction-call ${callChipClass(bid)}`} key={`${seat}-${index}`}>{compactCallLabel(bid)}</span>)}</span> : null}
+                {dummyCards.length ? <section className="dummy-table-hand" aria-label={`${seatNames[seat]}'s dummy hand`}>
+                  {SUITS.map((suit) => {
+                    const suitCards = dummyCards.filter((card) => card.suit === suit);
+                    return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => playFromDummy
+                      ? <button className={`table-card dummy-card ${isRedSuit(card.suit) ? "red-card" : ""} ${visibleHint?.cardIds.has(cardId(card)) ? "hinted-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={!!temporaryTrick} onClick={() => submitAction({ type: "play", seat, card })}>{cardFace(card)}</button>
+                      : tableCard(card, "table-card dummy-card", cardLabel(card)))}</div> : null;
+                  })}
+                </section> : null}
+              </div>;
+            })}
+
+            <div className="trick-area" role="region" aria-label="Current trick">
+              {displayedTrick.map(({ seat, card }) => tableCard(card, `trick-card trick-card-position-${seat} trick-pos-${positionOf(seat)}`, `${seatNames[seat]} played ${cardLabel(card)}`))}
+            </div>
+
+            <section className={phase === "auction" ? "auction-panel centered-auction" : "sr-only"} aria-label="Auction">
+              {auctionList}
+              {!isReviewing && game?.phase === "auction" && (!playAgainstBots || game.currentActor === userSeat) ? <div className="bid-picker" aria-label="Choose a bid">
+                <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
+                  {[1, 2, 3, 4, 5, 6, 7].map((level) => biddingStrains.map((strain) => {
+                    const bid = `${level}${strain}` as Bid;
+                    return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""}`} aria-label={`${level} ${strain}`} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
+                  }))}
+                </div>
+                <div className="bid-special-calls" role="group" aria-label="Pass, double, or redouble">
+                  {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid}`} disabled={!isCallAvailable(game, bid)} onClick={() => submitAction({ type: "bid", seat: game.currentActor, bid })}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
+                </div>
+              </div> : null}
+            </section>
+
+            {phase === "complete" && shownGame.score && contract ? <section className={`score-panel ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
+              <h2>{contractText} by {seatNames[contract.declarer]}</h2>
+              <p>{shownGame.score.tricksTaken} tricks for {samePartnership(contract.declarer, "north") ? "NS" : "EW"} · {shownGame.score.score > 0 ? "+" : ""}{shownGame.score.score} NS</p>
+              {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}
+            </section> : null}
+            {phase === "passed-out" ? <div className="score-panel"><h2>Passed out</h2>{!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}</div> : null}
+
+            {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">
+              <button className="secondary-button" aria-label="Previous action" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}><span aria-hidden="true">‹</span> Previous</button>
+              <button className="secondary-button" aria-label="Next action" disabled={reviewCursor >= handCount} onClick={() => setReviewCursor((cursor) => Math.min(handCount, cursor + 1))}>Next <span aria-hidden="true">›</span></button>
+            </div> : <div className="history-controls">
+              <button className="secondary-button" disabled={!game || game.history.cursor === 0} onClick={takeBack}><span aria-hidden="true">↶ </span>Take back</button>
+              <button className="secondary-button" disabled={!!temporaryTrick || !game || game.history.cursor >= game.history.actions.length} onClick={redo}><span aria-hidden="true">↷ </span>Redo</button>
+            </div>}
+
+            {canAct && game.phase === "play" ? <div className="hint-controls">
+              {visibleHint ? <p role="status">{visibleHint.usesSolver ? "Solver recommendations are highlighted." : "Legal cards are highlighted."}</p> : null}
+              <button className="secondary-button" onClick={() => { void showHint(); }}>Show hint</button>
             </div> : null}
 
-            {canShowHand && game && actor ? <section className="hand-panel" aria-label={`${actorName}'s hand`}>
-              <div className="hand-heading"><div><p className="eyebrow">{userControlsDummy ? "DUMMY · PLAYING AS" : "PLAYING AS"}</p><h3>{actorName}</h3></div><span>{game.hands[actor].length} cards</span></div>
-              <div className="hand-play-row">
+            {message ? <p className="error-message" role="alert">{message}</p> : null}
+          </div>
+
+          <div className="hand-zone">
+            {handSeat && handCards.length ? <section className="hand-panel" aria-label={`${seatNames[handSeat]}'s ${handIsInteractive ? "hand" : "cards"}`}>
               <div className="cards-row">
-                {sortHand(game.hands[actor]).map((card) => game.phase === "play"
-                  ? <button className={`playing-card ${card.suit === "hearts" || card.suit === "diamonds" ? "red-card" : ""} ${visibleHint?.cardIds.has(cardId(card)) ? "hinted-card" : ""}`} key={`${card.suit}-${card.rank}`} aria-label={`Play ${cardLabel(card)}`} disabled={!!temporaryTrick} onClick={() => submitAction({ type: "play", seat: actor, card })}>{cardFace(card)}</button>
-                  : <span className={`playing-card auction-card ${card.suit === "hearts" || card.suit === "diamonds" ? "red-card" : ""}`} key={`${card.suit}-${card.rank}`} role="img" aria-label={cardLabel(card)}>{cardFace(card)}</span>)}
-              </div>
-              {game.phase === "play" ? <div className="hint-controls">
-                <button className="secondary-button" onClick={() => { void showHint(); }}>Show hint</button>
-                <button className="secondary-button" disabled={!game || game.history.cursor === 0} onClick={takeBack}>Take back</button>
-                {visibleHint ? <p role="status">{visibleHint.usesSolver ? "Solver recommendations are highlighted." : "Legal cards are highlighted."}</p> : null}
-              </div> : null}
+                {handSeat !== bottomSeat || handIsDummy ? <span className="hand-tag"><span className="seat-compass" aria-hidden="true">{handSeat[0]!.toUpperCase()}</span>{handIsDummy ? <span>DUMMY</span> : <span className="sr-only">{seatNames[handSeat]}</span>}</span> : null}
+                {handCards.map((card, index) => {
+                  const className = `playing-card ${isRedSuit(card.suit) ? "red-card" : ""} ${index > 0 && handCards[index - 1]!.suit !== card.suit ? "suit-gap" : ""}`;
+                  return handIsInteractive && game.phase === "play"
+                    ? <button className={`${className} ${visibleHint?.cardIds.has(cardId(card)) ? "hinted-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={!!temporaryTrick} onClick={() => submitAction({ type: "play", seat: handSeat, card })}>{cardFace(card)}</button>
+                    : tableCard(card, `${className} auction-card`, cardLabel(card));
+                })}
               </div>
             </section> : null}
-
-            {isReviewing ? <div className="review-controls" aria-label="Review controls">
-              <button className="secondary-button" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}>Previous action</button>
-              <span>Reviewing action {reviewCursor} of {handCount}</span>
-              <button className="secondary-button" disabled={reviewCursor >= handCount} onClick={() => setReviewCursor((cursor) => Math.min(handCount, cursor + 1))}>Next action</button>
-            </div> : <div className="history-controls">
-              {shownGame.phase !== "play" || !canShowHand ? <button className="secondary-button" disabled={!game || game.history.cursor === 0} onClick={takeBack}>Take back</button> : null}
-              <button className="secondary-button" disabled={!!temporaryTrick || !game || game.history.cursor >= game.history.actions.length} onClick={redo}>Redo</button>
-            </div>}
-          </section>
-
-          <aside className={`side-panel ${shownGame.phase === "play" ? `auction-drawer ${auctionDrawerOpen ? "drawer-open" : ""}` : ""}`}
-            onPointerEnter={(event) => { if (shownGame.phase === "play" && event.pointerType === "mouse") setAuctionHovered(true); }}
-            onPointerLeave={(event) => { if (shownGame.phase === "play" && event.pointerType === "mouse") setAuctionHovered(false); }}
-            onFocus={() => { if (shownGame.phase === "play") setAuctionFocused(true); }}
-            onBlur={(event) => { if (shownGame.phase === "play" && !event.currentTarget.contains(event.relatedTarget as Node | null)) setAuctionFocused(false); }}>
-            {shownGame.phase === "play" ? <>
-              <button className="auction-drawer-toggle" type="button" aria-label={`${auctionDrawerOpen ? "Hide" : "Show"} auction, ${shownGame.auction.length} calls`} aria-expanded={auctionDrawerOpen} aria-controls="play-auction-panel" onClick={() => {
-                if (auctionPinned) {
-                  setAuctionPinned(false);
-                  setAuctionFocused(false);
-                } else {
-                  setAuctionPinned(true);
-                }
-              }}><span aria-hidden="true">☰</span></button>
-              <section className="auction-panel auction-drawer-content" id="play-auction-panel" aria-label="Auction" aria-hidden={!auctionDrawerOpen} inert={!auctionDrawerOpen}>
-                <div className="section-heading"><div><p className="eyebrow">CALLS SO FAR</p><h2>Auction</h2></div><span className="auction-count">{shownGame.auction.length}</span></div>
-                {shownGame.auction.length ? <ol className="auction-list" ref={auctionListRef}>{shownGame.auction.map(({ seat, bid }, index) => <li key={`${seat}-${index}`}><span>{seatNames[seat]}</span><strong>{callLabel(bid)}</strong></li>)}</ol> : <p className="quiet-copy">No calls have been made.</p>}
-              </section>
-            </> : null}
-            {shownGame.phase === "complete" || shownGame.phase === "passed-out" ? <section className="auction-panel" aria-label="Auction">
-              <div className="section-heading"><div><p className="eyebrow">CALLS SO FAR</p><h2>Auction</h2></div><span className="auction-count">{shownGame.auction.length}</span></div>
-              {shownGame.auction.length ? <ol className="auction-list" ref={auctionListRef}>{shownGame.auction.map(({ seat, bid }, index) => <li key={`${seat}-${index}`}><span>{seatNames[seat]}</span><strong>{callLabel(bid)}</strong></li>)}</ol> : <p className="quiet-copy">The first call is yours to make.</p>}
-            </section> : null}
-
-            {shownGame.phase === "complete" && shownGame.score ? <section className="score-panel" aria-label="Hand result"><p className="eyebrow">HAND RESULT</p><h2>{shownGame.contract?.level} {shownGame.contract?.strain}</h2><p>{shownGame.score.tricksTaken} tricks for {shownGame.contract?.declarer === "north" || shownGame.contract?.declarer === "south" ? "NS" : "EW"} · {shownGame.score.score > 0 ? "+" : ""}{shownGame.score.score} NS</p></section> : null}
-            {shownGame.phase === "passed-out" ? <p className="score-panel">Passed out. Deal another hand when you’re ready.</p> : null}
-
-          </aside>
-        </div>
-        </>
-      ) : null}
-
-      {message ? <p className="error-message" role="alert">{message}</p> : null}
-      <footer className="app-footer"><span>ContractPlay</span><span>Every hand has a story.</span></footer>
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

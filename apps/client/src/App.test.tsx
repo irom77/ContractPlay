@@ -184,19 +184,64 @@ describe("bridge table", () => {
     storeCurrentGame(game);
     render(<App />);
 
-    expect(screen.getByText(`NS ${nsWon ? 1 : 0} · EW ${nsWon ? 0 : 1} tricks`)).toBeTruthy();
+    expect(screen.getByRole("group", { name: `NS ${nsWon ? 1 : 0} · EW ${nsWon ? 0 : 1} tricks` })).toBeTruthy();
   });
 
-  it("keeps hand action row aligned with cards", () => {
+  it("keeps the hand and its actions on the table without headings", () => {
     storeCurrentGame(gameAfterPlays(3));
     const { container } = render(<App />);
-    const actionRow = container.querySelector(".hand-play-row");
+    const table = container.querySelector(".table-surface") as HTMLElement;
 
-    expect(actionRow).toBeTruthy();
-    expect(actionRow?.querySelector(".cards-row")).toBeTruthy();
-    expect(actionRow?.querySelector(".hint-controls")).toBeTruthy();
-    expect(within(actionRow as HTMLElement).getByRole("button", { name: "Show hint" })).toBeTruthy();
-    expect(within(actionRow as HTMLElement).getByRole("button", { name: "Take back" })).toBeTruthy();
+    expect(container.querySelector(".hand-zone .cards-row")).toBeTruthy();
+    expect(within(table).getByRole("button", { name: "Show hint" })).toBeTruthy();
+    expect(within(table).getByRole("button", { name: "Take back" })).toBeTruthy();
+    expect(within(table).getByRole("button", { name: "Redo" })).toBeTruthy();
+    expect(container.querySelector("h1, header, footer, .hand-zone h2, .hand-zone h3, .table-status h2")).toBeNull();
+  });
+
+  it("plays dummy from across the table while declarer's cards stay in view", () => {
+    const game = gameAfterPlays(1);
+    const dummy = game.currentActor;
+    storeCurrentGame(game);
+    render(<App />);
+
+    expect(dummy).toBe("south");
+    const dummyHand = screen.getByRole("region", { name: "South's dummy hand" });
+    expect(within(dummyHand).getAllByRole("button", { name: /^Play / })).toHaveLength(13);
+    expect(screen.getByRole("region", { name: "North's cards" }).querySelectorAll(".playing-card")).toHaveLength(13);
+    fireEvent.click(within(dummyHand).getByRole("button", { name: playButtonLabel(game.hands.south.find((card) => validatePlay(game.hands.south, card, game.currentTrick[0]?.card.suit).legal)!) }));
+    expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card")).toHaveLength(2);
+    expect(within(screen.getByRole("region", { name: "South's dummy hand" })).queryByRole("button")).toBeNull();
+  });
+
+  it("toggles full screen from the table button and the F key", async () => {
+    let fullscreenElement: Element | null = null;
+    Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+    document.documentElement.requestFullscreen = vi.fn(() => { fullscreenElement = document.documentElement; return Promise.resolve(); });
+    document.exitFullscreen = vi.fn(() => { fullscreenElement = null; return Promise.resolve(); });
+    storeCurrentGame(gameAfterPlays(3));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Full screen" }));
+    expect(await screen.findByRole("button", { name: "Exit full screen" })).toBeTruthy();
+    expect(document.documentElement.requestFullscreen).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(document, { key: "f" });
+    expect(await screen.findByRole("button", { name: "Full screen" })).toBeTruthy();
+    expect(document.exitFullscreen).toHaveBeenCalledTimes(1);
+    delete (document as { fullscreenElement?: unknown }).fullscreenElement;
+  });
+
+  it("always shows the last trick beside the table with its winner marked", () => {
+    const game = gameAfterPlays(5);
+    storeCurrentGame(game);
+    const { container } = render(<App />);
+    const winner = trickWinner(game.completedTricks[0]!, game.contract?.strain === "notrump" ? undefined : game.contract?.strain);
+    const lastTrick = screen.getByRole("button", { name: "Last trick" });
+
+    expect(lastTrick.querySelectorAll(".last-trick-card")).toHaveLength(4);
+    expect(lastTrick.querySelectorAll(".last-trick-winner")).toHaveLength(1);
+    expect(container.querySelector(`.seat-${winner}`)).toBeTruthy();
   });
 
   it("disables redo while the completed trick pause is active", () => {
@@ -245,7 +290,7 @@ describe("bridge table", () => {
     storeCurrentGame(gameAfterPlays(4), [saved]);
     render(<App />);
 
-    await user.click(screen.getByText("Table menu"));
+    await user.click(screen.getByLabelText("Table menu"));
     await user.click(screen.getByRole("button", { name: "Review hand 1" }));
     for (let action = 0; action < 8; action += 1) {
       await user.click(screen.getByRole("button", { name: "Next action" }));
@@ -276,9 +321,9 @@ describe("bridge table", () => {
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
 
     expect(screen.getByRole("region", { name: "Auction" }).closest(".auction-layout")).toBeTruthy();
-    const menu = screen.getByText("Table menu").closest("details");
+    const menu = screen.getByLabelText("Table menu").closest("details");
     expect(menu).toBeTruthy();
-    await user.click(screen.getByText("Table menu"));
+    await user.click(screen.getByLabelText("Table menu"));
     expect(within(menu!).getByLabelText("Dealer")).toBeTruthy();
     expect(within(menu!).getByText("Import a PBN deal")).toBeTruthy();
     expect(within(menu!).getByRole("region", { name: "Recent hands" })).toBeTruthy();
@@ -331,7 +376,7 @@ describe("bridge table", () => {
 
   it("enables Double and Redouble only for the correct partnership and aligns calls by seat", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    const { container } = render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
 
     expect(screen.getByRole("button", { name: "X" }).hasAttribute("disabled")).toBe(true);
@@ -344,8 +389,8 @@ describe("bridge table", () => {
     expect(screen.getByRole("button", { name: "XX" }).hasAttribute("disabled")).toBe(false);
     await user.click(screen.getByRole("button", { name: "XX" }));
 
-    const auctionCells = screen.getByRole("table", { name: "Auction calls by seat" }).querySelectorAll("tbody tr:first-child td");
-    expect([...auctionCells].map((cell) => cell.textContent)).toEqual(["1♣", "X", "XX", ""]);
+    const seatCalls = ["north", "east", "south", "west"].map((seat) => container.querySelector(`.seat-${seat} .seat-auction-calls`)?.textContent ?? "");
+    expect(seatCalls).toEqual(["1♣", "X", "XX", ""]);
   });
 
   it("rejects an off-suit card when the player can follow suit", async () => {
@@ -376,25 +421,24 @@ describe("bridge table", () => {
       await user.click(screen.getByRole("button", { name: bidButtonLabel(bid) }));
     }
 
-    const drawer = container.querySelector("#play-auction-panel")!;
     const toggle = screen.getByRole("button", { name: /show auction/i });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(drawer.getAttribute("aria-hidden")).toBe("true");
+    expect(container.querySelector(".seat-auction-calls")).toBeNull();
     expect(container.querySelector(".play-layout")).toBeTruthy();
-
-    await user.hover(toggle.closest("aside")!);
-    expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    await user.unhover(toggle.closest("aside")!);
-    expect(toggle.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(container.querySelector(".seat-north .seat-auction-calls")?.textContent).toBe("1♣");
+    expect(container.querySelectorAll(".seat-auction-call.call-pass")).toHaveLength(3);
+    fireEvent.click(screen.getByRole("button", { name: /hide auction/i }));
+    expect(container.querySelector(".seat-auction-calls")).toBeNull();
     expect(screen.getByRole("region", { name: "Auction" })).toBeTruthy();
     expect(screen.getByText("East to play")).toBeTruthy();
+    expect(container.querySelector(".seat-east.active-seat")).toBeTruthy();
 
     await user.click(screen.getAllByRole("button", { name: /^Play / })[0]!);
-    expect(container.querySelector(".seat-east .seat-status")?.textContent).toBe("Played");
-    expect(container.querySelector(".seat-south .seat-status")?.textContent).toBe("To play");
+    expect(container.querySelector(".seat-east.played-seat")).toBeTruthy();
+    expect(container.querySelector(".seat-south.active-seat")).toBeTruthy();
   });
 
   it("keeps the auction visible on a passed-out hand", async () => {
@@ -560,25 +604,28 @@ describe("bridge table", () => {
 
     expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Hand result" }).textContent).toContain("tricks for NS");
-    fireEvent.click(screen.getByText("Table menu"));
+    fireEvent.click(screen.getByLabelText("Table menu"));
     expect(screen.getByRole("button", { name: "Review hand 1" })).toBeTruthy();
   }, 30000);
 
   it("uses the chosen dealer and vulnerability for a new deal", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    const { container } = render(<App />);
 
     await user.selectOptions(screen.getByLabelText("Dealer"), "south");
     await user.selectOptions(screen.getByLabelText("Vulnerability"), "Both");
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
 
-    expect(screen.getByText("BOARD 1 · DEALER SOUTH · VULNERABILITY BOTH")).toBeTruthy();
+    expect(container.querySelector(".seat-south.dealer-seat .dealer-mark")).toBeTruthy();
+    expect(container.querySelectorAll(".dealer-seat")).toHaveLength(1);
+    expect(container.querySelectorAll(".vulnerable-seat")).toHaveLength(4);
     expect(screen.getByText("South to bid")).toBeTruthy();
-    await user.click(screen.getByText("Table menu"));
+    await user.click(screen.getByLabelText("Table menu"));
     await user.selectOptions(screen.getByLabelText("Dealer"), "west");
     await user.selectOptions(screen.getByLabelText("Vulnerability"), "NS");
     await user.click(screen.getByRole("button", { name: "Deal a new hand" }));
-    expect(screen.getByText("BOARD 1 · DEALER WEST · VULNERABILITY NS")).toBeTruthy();
+    expect(container.querySelector(".seat-west.dealer-seat")).toBeTruthy();
+    expect([...container.querySelectorAll(".vulnerable-seat")].map((seat) => seat.classList.contains("seat-north") || seat.classList.contains("seat-south"))).toEqual([true, true]);
   });
 
   it("runs the three non-user seats through the auction using the selected style", async () => {
@@ -632,8 +679,9 @@ describe("bridge table", () => {
     await waitFor(() => expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card")).toHaveLength(1));
     let dummyHand: HTMLElement | null | undefined;
     await waitFor(() => {
-      dummyHand = ["North", "South"].map((seat) => screen.queryByRole("region", { name: `${seat}'s hand` }))
-        .find((handPanel) => handPanel?.textContent?.includes("DUMMY"));
+      // Dummy is played from across the table when partner declares, or from the user's own hand when the user is dummy.
+      dummyHand = screen.queryByRole("region", { name: /'s dummy hand$/ })?.querySelector("button")?.closest("section")
+        ?? ["North", "South"].map((seat) => screen.queryByRole("region", { name: `${seat}'s hand` })).find((handPanel) => handPanel?.textContent?.includes("DUMMY"));
       expect(dummyHand).toBeTruthy();
     });
     const symbol = screen.getByRole("region", { name: "Current trick" }).textContent?.match(/[♠♥♦♣]/)?.[0];
@@ -661,7 +709,7 @@ describe("bridge table", () => {
     fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
     fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
-    fireEvent.click(screen.getByText("Table menu"));
+    fireEvent.click(screen.getByLabelText("Table menu"));
     fireEvent.change(screen.getByLabelText("Dealer"), { target: { value: "west" } });
     fireEvent.click(screen.getByRole("button", { name: "Deal a new hand" }));
 
@@ -708,7 +756,6 @@ describe("bridge table", () => {
     fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
 
     expect(await screen.findByText("North to bid")).toBeTruthy();
-    expect(screen.getByRole("region", { name: "North's hand" }).textContent).toContain("13 cards");
     expect(screen.getByRole("region", { name: "North's hand" }).querySelectorAll(".playing-card")).toHaveLength(13);
     expect(screen.queryByRole("button", { name: /^Play / })).toBeNull();
   });
@@ -741,7 +788,7 @@ describe("bridge table", () => {
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
     render(<App />);
 
-    await user.click(screen.getByText("Table menu"));
+    await user.click(screen.getByLabelText("Table menu"));
     await user.click(screen.getByRole("button", { name: "Export PBN hand 1" }));
 
     const download = createObjectURL.mock.calls[0]?.[0] as CapturedBlob | undefined;
@@ -796,7 +843,7 @@ describe("bridge table", () => {
     saveSoloData(window.localStorage, data);
     render(<App />);
 
-    await user.click(screen.getByText("Table menu"));
+    await user.click(screen.getByLabelText("Table menu"));
     await user.click(screen.getByRole("button", { name: /Review hand 1/ }));
     expect(screen.getByText("Reviewing action 0 of 56")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Next action" }));

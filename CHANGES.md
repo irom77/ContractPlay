@@ -1,5 +1,13 @@
 # Changes
 
+## 0.1.6 - 2026-11-10
+
+- The table now fills the window and never scrolls: the header, footer, and "Auction" / "Playing as" headings are gone, and every size follows the window. Contract, NS/EW tricks, and whose turn it is sit top-left; the last trick stays in view top-right with its winner outlined; Take back / Redo and Show hint sit in the bottom corners. The hand result and a Next deal button appear at the center of the table.
+- Added full-screen mode: use the button at the top-right or press F (Esc leaves it). The desktop app switches its window to full screen.
+- Redesigned the playing cards with bold black and red suits, large corner indices, printed-style pip layouts, and framed court cards; pips never sit under a rank. The hand is fanned along the bottom edge, and dummy is laid out as real cards and played by clicking them while declarer's own cards stay visible.
+- Each seat shows its full call history as bidding-box chips during the auction; during play, click the contract to show or hide the bidding. A red ring marks a vulnerable side and "D" marks the dealer. The table is drawn from the user's seat against bots, and from declarer's seat at a manual table.
+- Auction calls now appear beside the seats that made them while the bidding controls stay compact at center; the table no longer repeats auction/play phase headings. Dummy appears at its compass seat after the opening lead and remains visible through hand completion.
+
 ## 0.1.5 - 2026-10-28
 
 - Replaced the auction call selector with a Trickster-style bidding box: calls are arranged by level and strain, unavailable contract bids and doubles are disabled, and the auction history is aligned by seat.

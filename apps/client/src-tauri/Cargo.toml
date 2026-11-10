@@ -1,6 +1,6 @@
 [package]
 name = "contractplay"
-version = "0.1.5"
+version = "0.1.6"
 description = "Play, learn, and review contract bridge"
 authors = ["ContractPlay contributors"]
 license = "MIT"
