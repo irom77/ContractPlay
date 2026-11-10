@@ -198,6 +198,9 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Apply a vibrant green radial gradient to the table background (bright emerald center fading to deeper green edges).
 - [x] Add a faint, centered felt watermark with card suits and a bridge logo (low opacity, non-interactive).
 - [x] Let a human hand control to bots at any point during an active deal and have bots finish the remaining auction and play (Let bots finish this hand in the table menu; Take back control or Take back returns it).
+- [x] Stop bots passing forcing bids: natural opener rebids over a new-suit response and a negative double, responder rebids over a reverse and over a new suit after a two-level response, and answers to cue-bid raises, at every skill level.
+- [x] Apply competitive and continuation rules after passes before the opening bid, keeping passed-hand agreements when opener's partner passed.
+- [x] Respond with 6+ points to one of a suit and 8+ to 1NT whatever the shape, jump or reverse as opener with 19+, and bid game when the partnership is known to hold 26 points in an uncontested auction.
 
 ## Platform delivery
 
@@ -206,3 +209,4 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Add Windows/macOS installer CI and a macOS iPad simulator build-and-launch workflow; add draft desktop releases from version tags.
 - [x] Pass Windows and macOS installer builds and the iOS/iPadOS simulator build/install/launch workflows in [GitHub Actions](https://github.com/irom77/ContractPlay/actions/runs/40745554895).
 - [x] Document Windows/macOS signing, Apple signing and store submission, web deployment, and account/device requirements in [the platform guide](docs/platform-delivery.md).
+- [x] Enable GitHub Pages with the Actions source and confirm its first deployment (live at https://irom77.github.io/ContractPlay/ since 2026-11-10).

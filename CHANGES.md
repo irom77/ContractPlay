@@ -1,5 +1,12 @@
 # Changes
 
+## 0.1.9 - 2026-11-10
+
+- Bots no longer pass partner's forcing bids. Opener now rebids naturally over a new-suit response and over a negative double, responder bids on over a reverse or a new suit after a two-level response, and a cue-bid raise is answered. Before this, a bot passed one of these in about 3% of deals, sometimes with 20 or more points.
+- Bots now compete after a pass before the opening bid. Overcalls, takeout doubles, balancing, and most follow-up bids used to work only when the opener was the dealer.
+- Bots reach game more often: responder answers one of a suit with 6+ points and 1NT with 8+ points even with an awkward shape, a strong opener jumps or reverses with 19+ points, and a hand that knows the partnership has 26 points bids game. Simulated deals with 27+ points stopping in a partscore fell from about 8% to under 3%.
+- The web app is live on GitHub Pages at https://irom77.github.io/ContractPlay/.
+
 ## 0.1.8 - 2026-11-10
 
 - Added About ContractPlay to the table menu; it shows the app version.

@@ -1,4 +1,5 @@
 import { SEATS, cardId, type Bid, type BotConfig, type BotPlayer, type Hand, type PlayContext, type PublicBid, type Seat, type Suit } from "@contractplay/core";
+import { forcedContinuation, strongOpenerRebid } from "./forcing.js";
 
 export interface ConventionSystem {
   readonly style: "SAYC" | "2/1";
@@ -3648,15 +3649,34 @@ export function createRuleBot(config: BotConfig): BotPlayer {
 }
 
 /**
- * A bot for the table. Should a rule ever choose a call the auction no longer allows, the bot passes instead, so a
- * table never waits on a call that cannot be made.
+ * The auction as the rules should read it. Passes before the opening bid only matter when they make the responding
+ * hand a passed hand; otherwise the auction means the same as one the opener dealt, which is how the rules are written.
+ * So the leading passes are dropped for the defending side, and for the opening side unless opener's partner passed.
+ */
+function withoutInertLeadingPasses(auction: readonly PublicBid[], seat: Seat): readonly PublicBid[] {
+  const first = auction.findIndex(({ bid }) => bid !== "pass");
+  if (first <= 0) return auction;
+  const opener = auction[first]!.seat;
+  const openerPartner = SEATS[(SEATS.indexOf(opener) + 2) % SEATS.length]!;
+  const onOpeningSide = seat === opener || seat === openerPartner;
+  if (onOpeningSide && auction.slice(0, first).some((call) => call.seat === openerPartner)) return auction;
+  return auction.slice(first);
+}
+
+/**
+ * A bot for the table. Where no rule fits and a pass would break a forcing agreement, it makes a natural forced call.
+ * Should a rule ever choose a call the auction no longer allows, the bot passes instead, so a table never waits on a
+ * call that cannot be made.
  */
 export function createBot(config: BotConfig): BotPlayer {
   const bot = createRuleBot(config);
   return {
     config: bot.config,
     async chooseBid(hand, auction, seat) {
-      const bid = await bot.chooseBid(hand, auction, seat);
+      const chosen = await bot.chooseBid(hand, withoutInertLeadingPasses(auction, seat), seat);
+      const bid = chosen === "pass"
+        ? forcedContinuation(hand, auction, seat, bot.config.biddingStyle === "2/1" ? "2/1" : "SAYC") ?? chosen
+        : strongOpenerRebid(hand, auction, seat, chosen) ?? chosen;
       return isLegalCall(bid, auction, seat) ? bid : "pass";
     },
     chooseCard: (context) => bot.chooseCard(context)

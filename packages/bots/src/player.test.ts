@@ -48,7 +48,7 @@ describe("beginner bot", () => {
     expect(await bot.chooseBid(responder, auction, "south")).toBe("2diamonds");
   });
 
-  it("does not force in the fourth suit with fewer than 10 HCP", async () => {
+  it("gives preference rather than force in the fourth suit with fewer than 10 HCP", async () => {
     const bot = createBot({ skill: "beginner", biddingStyle: "SAYC" });
     const responder = hand("spades:K", "hearts:A", "hearts:Q", "hearts:2", "hearts:3", "clubs:2", "clubs:3", "clubs:4", "clubs:5", "clubs:6", "clubs:7", "diamonds:2", "diamonds:3");
     const auction = [
@@ -57,7 +57,7 @@ describe("beginner bot", () => {
       { seat: "north", bid: "1spades" as const }, { seat: "east", bid: "pass" as const }
     ] as const;
 
-    expect(await bot.chooseBid(responder, auction, "south")).toBe("pass");
+    expect(await bot.chooseBid(responder, auction, "south")).toBe("2clubs");
   });
 
   it("responds to fourth-suit forcing by showing three-card support", async () => {
@@ -1135,14 +1135,14 @@ describe("beginner bot", () => {
     expect(await bot.chooseBid(opener, auction, "north")).toBe("2hearts");
   });
 
-  it("passes after a one-level new-suit response without six-card opener support", async () => {
+  it("rebids 1NT rather than pass a forcing one-level response on a balanced hand without a longer suit", async () => {
     const bot = createBot({ skill: "beginner", biddingStyle: "2/1" });
     const opener = hand("hearts:A", "hearts:K", "hearts:Q", "hearts:2", "spades:A", "spades:K", "spades:2", "diamonds:2", "diamonds:3", "diamonds:4", "clubs:2", "clubs:3", "clubs:4");
     const auction = [
       { seat: "north", bid: "1hearts" as const }, { seat: "east", bid: "pass" as const },
       { seat: "south", bid: "1spades" as const }, { seat: "west", bid: "pass" as const }
     ] as const;
-    expect(await bot.chooseBid(opener, auction, "north")).toBe("pass");
+    expect(await bot.chooseBid(opener, auction, "north")).toBe("1notrump");
   });
 
   it("shows a four-card higher second suit at the one level", async () => {
@@ -1633,14 +1633,14 @@ describe("beginner bot", () => {
     expect(await bot.chooseBid(opener, auction, "north")).toBe("pass");
   });
 
-  it("passes on an unbalanced minimum minor opener without a six-card rebid suit", async () => {
+  it("rebids 1NT rather than pass a forcing response with a 5-3-3-2 minor opener", async () => {
     const bot = createBot({ skill: "beginner", biddingStyle: "2/1" });
     const opener = hand("diamonds:A", "diamonds:K", "diamonds:2", "diamonds:3", "diamonds:4", "clubs:J", "clubs:2", "clubs:3", "hearts:2", "hearts:3", "spades:2", "spades:3", "spades:4");
     const auction = [
       { seat: "north", bid: "1diamonds" as const }, { seat: "east", bid: "pass" as const },
       { seat: "south", bid: "1hearts" as const }, { seat: "west", bid: "pass" as const }
     ] as const;
-    expect(await bot.chooseBid(opener, auction, "north")).toBe("pass");
+    expect(await bot.chooseBid(opener, auction, "north")).toBe("1notrump");
   });
 
   it("prefers an available one-level new suit over raising a minor", async () => {
@@ -2977,7 +2977,7 @@ describe("beginner bot", () => {
     expect(await bot.chooseBid(opener, auction, "north")).toBe("pass");
   });
 
-  it("does not make notrump continuations with an unbalanced hand", async () => {
+  it("bids game in a six-card major instead of a notrump continuation with an unbalanced game-going hand", async () => {
     const bot = createBot({ skill: "beginner", biddingStyle: "SAYC" });
     const unbalanced = hand("spades:A", "spades:K", "spades:Q", "spades:J", "spades:T", "spades:9", "hearts:A", "hearts:K", "hearts:Q", "diamonds:2", "diamonds:3", "clubs:2", "clubs:3");
     const auction = [
@@ -2985,7 +2985,7 @@ describe("beginner bot", () => {
       { seat: "south", bid: "1hearts" as const }, { seat: "west", bid: "pass" as const },
       { seat: "north", bid: "1notrump" as const }, { seat: "east", bid: "pass" as const }
     ] as const;
-    expect(await bot.chooseBid(unbalanced, auction, "south")).toBe("pass");
+    expect(await bot.chooseBid(unbalanced, auction, "south")).toBe("4spades");
   });
 
   it.each(["2/1", "SAYC"] as const)("uses a support double with exactly three-card major support in %s", async (biddingStyle) => {

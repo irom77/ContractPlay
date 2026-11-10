@@ -11,7 +11,7 @@ Install the workspace dependencies with `pnpm install --frozen-lockfile`.
 - Start development with `pnpm web:dev`.
 - Build and verify the static package with `pnpm web:verify`.
 - The output is `apps/client/dist`; relative asset paths allow hosting at a domain root, a repository subpath, or in Tauri.
-- The web workflow deploys `main` to GitHub Pages. In GitHub repository settings, select **Settings → Pages → Build and deployment → GitHub Actions** once before the first deployment. To use another static host, deploy `apps/client/dist`.
+- The web workflow deploys `main` to GitHub Pages. The repository's Pages source is set to GitHub Actions and the site is live at https://irom77.github.io/ContractPlay/; a fork needs **Settings → Pages → Build and deployment → GitHub Actions** selected once before its first deployment. To use another static host, deploy `apps/client/dist`.
 
 ### Windows and macOS
 

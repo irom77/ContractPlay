@@ -20,7 +20,7 @@
 
 ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, and hints. At any point in a deal you can hand the rest of the hand to the bots from the table menu. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
-Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. First GitHub Pages deployment and signed or physical-device builds remain pending their documented setup steps. Online multiplayer and complete SAYC and 2/1 agreements remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
+Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app is deployed to GitHub Pages at https://irom77.github.io/ContractPlay/. Signed and physical-device builds remain pending their documented setup steps. Online multiplayer and complete SAYC and 2/1 agreements remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 
 ## Project structure
 
@@ -38,7 +38,7 @@ The core package owns legal actions and immutable game transitions. PBN, persist
 
 ## Bots
 
-Choose Beginner, Intermediate, Advanced, or Expert play, and configure SAYC or 2/1 bidding. The beginner bot covers opening bids and common uncontested and competitive auctions. Intermediate adds natural overcalls, weak three-level openings, major game raises and qualified 3NT placement over them, takeout doubles, and card-play tactics; Advanced adds a third-hand honor play; Expert adds selected conventions and slam tools. Convention coverage is still limited; see [TODO.md](TODO.md) for exact scope.
+Choose Beginner, Intermediate, Advanced, or Expert play, and configure SAYC or 2/1 bidding. The beginner bot covers opening bids and common uncontested and competitive auctions. Intermediate adds natural overcalls, weak three-level openings, major game raises and qualified 3NT placement over them, takeout doubles, and card-play tactics; Advanced adds a third-hand honor play; Expert adds selected conventions and slam tools. At every level, bots answer partner's forcing bids, compete after a pass before the opening bid, and bid game when the partnership is known to hold the points for it. Convention coverage is still limited; see [TODO.md](TODO.md) for exact scope.
 
 Hints are off by default. Suggestions are the Expert bot's choice in the selected bidding style, based on standard technique and not on seeing all four hands, so they can be wrong. Call meanings cover common SAYC and 2/1 situations and fall back to a plain natural description elsewhere. If a host supplies a solver, card hints show its legal recommendations instead.
 
