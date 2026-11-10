@@ -1,6 +1,6 @@
 # Completed TODO archive
 
-Completed checklist entries moved from [TODO.md](TODO.md) on 2026-10-28. Open work remains in TODO.md; completed subtasks are listed here under their roadmap section.
+Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 and as items are completed since. Open work remains in TODO.md; completed subtasks are listed here under their roadmap section.
 
 ## Foundation
 
@@ -193,6 +193,11 @@ Completed checklist entries moved from [TODO.md](TODO.md) on 2026-10-28. Open wo
 - [x] Add Intermediate advances after a takeout double: minimum bids with 0–8 HCP, jump bids with 9–11, natural 1NT/2NT with a stopper, and a cuebid with 12+ HCP.
 - [x] Use 2NT after a takeout double to show a 10+ point limit raise or better with four-card major or five-card minor support in both styles; opener distinguishes minimum and maximum.
 - [x] Connect card-play hint UI to legal move generation and optional solver recommendations. (Without a solver, the client highlights all legal cards; it makes no strategic claim.)
+- [x] Add an About item to the menu that displays the current app version (About ContractPlay in the table menu opens a dialog with the version).
+- [x] Give played hands randomly generated names and show the date played in the hand history instead of generic labels such as "Hand 1" or "Hand 2" (names are stored with each saved hand; older saves get a stable name from their id).
+- [x] Apply a vibrant green radial gradient to the table background (bright emerald center fading to deeper green edges).
+- [x] Add a faint, centered felt watermark with card suits and a bridge logo (low opacity, non-interactive).
+- [x] Let a human hand control to bots at any point during an active deal and have bots finish the remaining auction and play (Let bots finish this hand in the table menu; Take back control or Take back returns it).
 
 ## Platform delivery
 

@@ -18,7 +18,7 @@
 
 ## Status
 
-ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, hand review, and hints. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
+ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, and hints. At any point in a deal you can hand the rest of the hand to the bots from the table menu. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
 Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. First GitHub Pages deployment and signed or physical-device builds remain pending their documented setup steps. Online multiplayer and complete SAYC and 2/1 agreements remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 

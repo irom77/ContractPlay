@@ -6,15 +6,10 @@ Status follows the app-wide plan in [`docs/superpowers/plans/2026-10-25-contract
 
 ## Current focus
 
-The core rules, PBN package, and solo client are in place. Beginner through Expert bots are selectable; Advanced adds third-hand honor-sequence play, and Expert adds Gerber, splinter raises, Reverse Drury, and Lebensohl suit, invitation, and stopper continuations. Switchable hints suggest a call or card with a reason and explain the meaning of calls in common SAYC / 2/1 situations. Next is broader SAYC / 2/1 bidding and strategy coverage.
+The core rules, PBN package, and solo client are in place. Beginner through Expert bots are selectable; Advanced adds third-hand honor-sequence play, and Expert adds Gerber, splinter raises, Reverse Drury, and Lebensohl suit, invitation, and stopper continuations. Switchable hints suggest a call or card with a reason and explain the meaning of calls in common SAYC / 2/1 situations. The table menu has an About dialog, named hand history, and a handover that lets bots finish the current hand. Next is broader SAYC / 2/1 bidding and strategy coverage.
 
 ## Solo app
 
-- [ ] Add an About item to the menu that displays the current app version.
-- [ ] Give played hands randomly generated names and show the date played in the hand history instead of generic labels such as "Hand 1" or "Hand 2".
-- [ ] Apply a vibrant green radial gradient to the table background (bright emerald center fading to deeper green edges).
-- [ ] Add a faint, centered felt watermark with card suits and a bridge logo (low opacity, non-interactive).
-- [ ] Let a human hand control to bots at any point during an active deal and have bots finish the remaining auction and play.
 - [ ] Implement intermediate through expert strategies and complete SAYC / 2/1 agreements.
   - [ ] Implement distinct SAYC and 2/1 response agreements, including game-forcing 2/1 sequences. (2/1 now uses forcing 1NT with 6–12 HCP in the listed uncontested cases; direct 1M–2-over-1 responses require 13+ HCP, allow three-card major support, and continue to game. Opener can show balanced 18–19 HCP with 2NT after a direct 2/1 response. Further detailed continuations and complete SAYC agreements remain.)
   - [ ] Add intermediate, advanced, and expert bidding/play strategies with distinct tested behavior.

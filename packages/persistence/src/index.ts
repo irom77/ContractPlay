@@ -5,6 +5,8 @@ const legacyStorageKey = "bridgelab.solo";
 
 export type SavedHand = Readonly<{
   id: string;
+  /** Display name given when the hand was played; hands saved before names existed have none. */
+  name?: string;
   game: GameState;
   savedAt: string;
   pbnMetadata?: PbnMetadata;
@@ -78,7 +80,7 @@ function isGame(value: unknown): value is GameState {
 }
 
 function isSavedHand(value: unknown): value is SavedHand {
-  return isRecord(value) && typeof value.id === "string" && typeof value.savedAt === "string" && isGame(value.game) && value.game.phase === "complete" &&
+  return isRecord(value) && typeof value.id === "string" && typeof value.savedAt === "string" && (value.name === undefined || typeof value.name === "string") && isGame(value.game) && value.game.phase === "complete" &&
     (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata));
 }
 

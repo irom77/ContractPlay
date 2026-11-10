@@ -288,12 +288,12 @@ describe("bridge table", () => {
 
   it("resets last-trick visibility when exiting review", async () => {
     const user = userEvent.setup();
-    const saved = { id: "saved-hand", game: completedGame(), savedAt: "2026-10-28T00:00:00.000Z" };
+    const saved = { id: "saved-hand", name: "Bold Finesse", game: completedGame(), savedAt: "2026-10-28T00:00:00.000Z" };
     storeCurrentGame(gameAfterPlays(4), [saved]);
     render(<App />);
 
     await user.click(screen.getByLabelText("Table menu"));
-    await user.click(screen.getByRole("button", { name: "Review hand 1" }));
+    await user.click(screen.getByRole("button", { name: /^Review Bold Finesse, played / }));
     for (let action = 0; action < 8; action += 1) {
       await user.click(screen.getByRole("button", { name: "Next action" }));
     }
@@ -364,6 +364,79 @@ describe("bridge table", () => {
   it("shows the current package version in the persistent header", () => {
     render(<App />);
     expect(screen.getByText(`Version ${__CONTRACTPLAY_VERSION__}`)).toBeTruthy();
+  });
+
+  it("opens an About dialog with the app version from the table menu", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+    await user.click(screen.getByLabelText("Table menu"));
+    await user.click(screen.getByRole("button", { name: "About ContractPlay" }));
+
+    const about = screen.getByRole("dialog", { name: "ContractPlay" });
+    expect(within(about).getByText(`Version ${__CONTRACTPLAY_VERSION__}`)).toBeTruthy();
+    expect(screen.getByLabelText("Table menu").closest("details")!.open).toBe(false);
+
+    await user.click(within(about).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("lists saved hands by name and date played, naming older saves from their id", async () => {
+    const user = userEvent.setup();
+    const named = { id: "named-hand", name: "Quiet Squeeze", game: completedGame(), savedAt: "2026-10-28T15:30:00.000Z" };
+    const legacy = { id: "legacy-hand", game: completedGame(), savedAt: "2026-10-27T15:30:00.000Z" };
+    storeCurrentGame(gameAfterPlays(0), [named, legacy]);
+    render(<App />);
+    await user.click(screen.getByLabelText("Table menu"));
+
+    const recent = screen.getByRole("region", { name: "Recent hands" });
+    const played = new Date(named.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    expect(within(recent).getByText("Quiet Squeeze")).toBeTruthy();
+    expect(within(recent).getByText(`Played ${played}`)).toBeTruthy();
+    expect(within(recent).queryByText(/^Hand \d/)).toBeNull();
+    expect(within(recent).getAllByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toHaveLength(2);
+  });
+
+  it("draws a faint, non-interactive felt watermark under the table", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+
+    const watermark = document.querySelector(".table-surface > .table-watermark")!;
+    expect(watermark.getAttribute("aria-hidden")).toBe("true");
+    expect(watermark.textContent).toBe("♠♥♦♣");
+  });
+
+  it("lets bots finish the rest of a hand once the user hands over control", async () => {
+    const user = userEvent.setup();
+    storeCurrentGame(gameAfterPlays(46));
+    render(<App />);
+    expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByLabelText("Table menu"));
+    await user.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
+
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+    await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 4000 });
+    expect(loadSoloData(window.localStorage).currentGame!.phase).toBe("complete");
+  });
+
+  it("has bots bid for every seat after a handover and returns control on request", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+    await user.click(screen.getByLabelText("Table menu"));
+    await user.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
+
+    expect(screen.queryByRole("group", { name: "Contract bids by level and strain" })).toBeNull();
+    await waitFor(() => expect(loadSoloData(window.localStorage).currentGame!.phase).not.toBe("auction"));
+    const game = loadSoloData(window.localStorage).currentGame!;
+    if (game.phase === "play") {
+      await user.click(screen.getByLabelText("Table menu"));
+      await user.click(screen.getByRole("button", { name: "Take back control" }));
+      await waitFor(() => expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0), { timeout: 4000 });
+      expect(screen.getByRole("button", { name: "Let bots finish this hand" })).toBeTruthy();
+    }
   });
 
   it("disables bids that do not outrank the current contract", async () => {
@@ -648,7 +721,8 @@ describe("bridge table", () => {
     expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Hand result" }).textContent).toContain("tricks for NS");
     fireEvent.click(screen.getByLabelText("Table menu"));
-    expect(screen.getByRole("button", { name: "Review hand 1" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toBeTruthy();
+    expect(loadSoloData(window.localStorage).completedHands[0]!.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
   }, 30000);
 
   it("uses the chosen dealer and vulnerability for a new deal", async () => {
@@ -830,7 +904,7 @@ describe("bridge table", () => {
     render(<App />);
 
     await user.click(screen.getByLabelText("Table menu"));
-    await user.click(screen.getByRole("button", { name: "Export PBN hand 1" }));
+    await user.click(screen.getByRole("button", { name: /^Export PBN of / }));
 
     const download = createObjectURL.mock.calls[0]?.[0] as CapturedBlob | undefined;
     expect(download).toBeInstanceOf(CapturedBlob);
@@ -885,7 +959,7 @@ describe("bridge table", () => {
     render(<App />);
 
     await user.click(screen.getByLabelText("Table menu"));
-    await user.click(screen.getByRole("button", { name: /Review hand 1/ }));
+    await user.click(screen.getByRole("button", { name: /^Review / }));
     expect(screen.getByText("Reviewing action 0 of 56")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Next action" }));
     expect(screen.getByText("Reviewing action 1 of 56")).toBeTruthy();

@@ -32,9 +32,12 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
 
 /* ---------- Shell: one screen, never scrolls ---------- */
-.app-shell { position: relative; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #2d6c55 0, #1e4d3e 55%, #12332a 100%); }
+.app-shell { position: relative; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; background: radial-gradient(ellipse at 50% 40%, #1fb06f 0, #14915a 32%, #0b6a40 66%, #06432a 100%); }
 .game-layout, .table-panel { display: flex; flex: 1 1 auto; flex-direction: column; min-height: 0; }
 .table-surface { position: relative; flex: 1 1 auto; min-height: 0; }
+/* Felt watermark: the bridge mark ringed by the four suits, printed faintly under everything on the table. */
+.table-watermark { position: absolute; z-index: 0; top: 50%; left: 50%; width: calc(50 * var(--u)); height: calc(50 * var(--u)); fill: none; stroke: #fff; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: .07; pointer-events: none; user-select: none; transform: translate(-50%, -50%); }
+.table-watermark text { fill: #fff; stroke: none; font: 44px var(--suit-font); text-anchor: middle; dominant-baseline: central; }
 .hand-zone { position: relative; flex: 0 0 calc(28 * var(--u)); }
 
 /* ---------- Buttons ---------- */
@@ -106,7 +109,15 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .recent-actions { display: flex; gap: 10px; }
 .recent-actions button { border: 0; padding: 5px 0; background: transparent; color: var(--gold); font-size: 11px; cursor: pointer; }
 .header-version { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.table-menu-content > .header-version { display: block; margin-top: 14px; text-align: right; }
+.menu-about { width: 100%; margin-top: 14px; }
+
+/* ---------- About ---------- */
+.about-backdrop { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(4, 18, 14, .6); }
+.about-dialog { display: grid; justify-items: center; gap: 8px; width: min(340px, 100%); border: 1px solid var(--line); border-radius: 12px; padding: 26px 24px 22px; background: var(--panel); box-shadow: 0 14px 36px #061815cc; text-align: center; }
+.about-dialog h2 { margin: 6px 0 0; font-size: 24px; }
+.about-dialog p { margin: 0; color: #cfdbd1; font-size: 14px; }
+.about-dialog .about-version { color: var(--gold); font-weight: 700; }
+.about-dialog .primary-button { margin-top: 12px; }
 
 /* ---------- Start screen ---------- */
 .empty-table { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 0; overflow: auto; padding: 64px 20px 20px; }
@@ -115,6 +126,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px 9px 9px 3px; background: var(--gold); color: var(--deep); font-family: Georgia, serif; font-size: 17px; }
 .empty-table .setup-controls { justify-content: center; width: min(560px, 100%); }
 .empty-table .pbn-import { width: min(440px, 100%); margin-top: 0; }
+/* The felt is bright at the centre, so the start-screen controls sit on dark panels to stay readable. */
+.empty-table .setup-controls, .empty-table .pbn-import { border-radius: 10px; padding: 12px 14px; background: rgba(8, 28, 24, .62); }
 
 /* ---------- Playing cards ---------- */
 .playing-card, .trick-card, .table-card { --w: calc(var(--h) * .7); position: relative; display: block; flex: none; width: var(--w); height: var(--h); overflow: hidden; border: 1px solid #b3aea2; border-radius: calc(var(--h) * .06); padding: 0; background: linear-gradient(165deg, #ffffff 0%, #fdfcf8 55%, #efebe1 100%); color: var(--card-black); box-shadow: 0 calc(var(--h) * .02) calc(var(--h) * .05) #0009, inset 0 0 0 1px #fff; font-family: var(--suit-font); user-select: none; }

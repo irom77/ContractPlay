@@ -25,6 +25,7 @@ import { createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
+import { createHandName, handNameFromId } from "./handNames.js";
 
 const seatNames: Record<Seat, string> = { north: "North", east: "East", south: "South", west: "West" };
 const biddingStrains = ["clubs", "diamonds", "hearts", "spades", "notrump"] as const;
@@ -113,6 +114,9 @@ function createHandId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const savedHandName = (hand: SavedHand): string => hand.name ?? handNameFromId(hand.id);
+const playedOn = (hand: SavedHand): string => new Date(hand.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
 function reviewState(hand: SavedHand, cursor: number): GameState {
   let state = hand.game;
   while (state.history.cursor > cursor) state = undoAction(state);
@@ -149,6 +153,12 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
   const [reviewHandId, setReviewHandId] = useState<string>();
   const [reviewCursor, setReviewCursor] = useState(0);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  // The hand the user has handed over: bots make every remaining call and play for it.
+  const [botsFinishHandId, setBotsFinishHandId] = useState<string>();
+  const botsFinishing = !!currentHandId && botsFinishHandId === currentHandId;
+  const botsFinishingRef = useRef(botsFinishing);
+  botsFinishingRef.current = botsFinishing;
   const auctionListRef = useRef<HTMLOListElement>(null);
   const trickTimerRef = useRef<number | undefined>(undefined);
   const previousTrickState = useRef({
@@ -181,7 +191,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
         trickTimerRef.current = window.setTimeout(() => {
           setTemporaryTrick(undefined);
           trickTimerRef.current = undefined;
-        }, 2000);
+        }, botsFinishingRef.current ? 800 : 2000);
       }
     } else if (game.currentTrick.length > 0) {
       setLastTrickOpen(false);
@@ -204,8 +214,10 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     if (!game || !currentHandId) return;
     let completedHands = soloData.completedHands;
     if (game.phase === "complete") {
+      const existing = completedHands.find((hand) => hand.id === currentHandId);
       const record: SavedHand = {
         id: currentHandId,
+        name: existing?.name ?? createHandName(new Set(completedHands.map(savedHandName))),
         game,
         savedAt: new Date().toISOString(),
         ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {})
@@ -228,7 +240,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     const dummyIsHumanControlled = !!game?.contract && game.phase === "play" &&
       (game.completedTricks.length > 0 || game.currentTrick.length > 0) &&
       samePartnership(userSeat, game.contract.declarer) && game.currentActor === partnerOf(game.contract.declarer);
-    if (!game || !playAgainstBots || temporaryTrick || game.phase === "complete" || game.phase === "passed-out" || game.currentActor === userSeat || dummyIsHumanControlled) return;
+    if (!game || temporaryTrick || game.phase === "complete" || game.phase === "passed-out") return;
+    if (!botsFinishing && (!playAgainstBots || game.currentActor === userSeat || dummyIsHumanControlled)) return;
     let cancelled = false;
     const turnState = game;
     const bot = createBot({ skill: botSkill, biddingStyle });
@@ -251,7 +264,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     };
     void decide();
     return () => { cancelled = true; };
-  }, [game, playAgainstBots, temporaryTrick, userSeat, biddingStyle, botSkill]);
+  }, [game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill]);
 
   const actor = game?.currentActor;
   const selectedHand = reviewHandId ? soloData.completedHands.find((hand) => hand.id === reviewHandId) : undefined;
@@ -264,7 +277,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     samePartnership(userSeat, shownGame.contract.declarer) && shownActor === dummySeat;
   const canShowHand = !isReviewing && !!game && !!actor &&
     (game.phase === "auction" || game.phase === "play") &&
-    (!playAgainstBots || actor === userSeat || userControlsDummy);
+    !botsFinishing && (!playAgainstBots || actor === userSeat || userControlsDummy);
   // Hints are worked out for the position the user is about to act in, and dropped as soon as the position changes.
   const hintGame = hintsOn && canShowHand ? game : undefined;
   const visibleBidHint = hintGame && bidHint?.game === hintGame ? bidHint : undefined;
@@ -409,6 +422,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
 
   function takeBack() {
     if (!game || game.history.cursor === 0) return;
+    setBotsFinishHandId(undefined);
     setGame(undoAction(game));
     setMessage("");
   }
@@ -475,7 +489,9 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       if (event.key === "f" || event.key === "F") {
         event.preventDefault();
         void toggleFullscreen();
-      } else if (event.key === "Escape" && isNativeClient()) {
+      } else if (event.key === "Escape") {
+        setAboutOpen(false);
+        if (!isNativeClient()) return;
         void setFullscreen(false).then(setFullscreenState).catch(() => undefined);
       }
     };
@@ -514,9 +530,9 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   </details>;
   const recentHandsPanel = <section className="recent-panel" aria-label="Recent hands">
     <div className="section-heading"><h2>Recent hands</h2><span className="auction-count">{soloData.completedHands.length}</span></div>
-    {soloData.completedHands.length ? <ul className="recent-list">{soloData.completedHands.map((hand, index) => <li key={hand.id}>
-      <button className="review-link" aria-label={`Review hand ${index + 1}`} onClick={() => openReview(hand)}><strong>Hand {soloData.completedHands.length - index}</strong><span>{new Date(hand.savedAt).toLocaleDateString()}</span></button>
-      <div className="recent-actions"><button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN hand ${index + 1}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete hand ${index + 1}`}>Delete</button></div>
+    {soloData.completedHands.length ? <ul className="recent-list">{soloData.completedHands.map((hand) => <li key={hand.id}>
+      <button className="review-link" aria-label={`Review ${savedHandName(hand)}, played ${playedOn(hand)}`} onClick={() => openReview(hand)}><strong>{savedHandName(hand)}</strong><span>Played {playedOn(hand)}</span></button>
+      <div className="recent-actions"><button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}
   </section>;
   const fullscreenButton = <button className="icon-button" type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} aria-pressed={fullscreen} title={`${fullscreen ? "Exit full screen" : "Full screen"} (F)`} onClick={() => { void toggleFullscreen(); }}>
@@ -525,6 +541,21 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}</svg>
   </button>;
   const version = <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>;
+  const closeMenu = (event: React.MouseEvent<HTMLElement>) => event.currentTarget.closest("details")?.removeAttribute("open");
+  const aboutDialog = aboutOpen ? <div className="about-backdrop" onClick={() => setAboutOpen(false)}>
+    <section className="about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-title" onClick={(event) => event.stopPropagation()}>
+      <span className="brand-mark" aria-hidden="true">C</span>
+      <h2 id="about-title">ContractPlay</h2>
+      <p className="about-version">Version {__CONTRACTPLAY_VERSION__}</p>
+      <p>Play, learn, and review contract bridge.</p>
+      <button className="primary-button" type="button" autoFocus onClick={() => setAboutOpen(false)}>Close</button>
+    </section>
+  </div> : null;
+  const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
+    <path d="M62 132c8-38 28-56 58-56s50 18 58 56" />
+    <path d="M56 138h128M74 138v20m92-20v20M98 138v-34m44 34v-34M120 138V76" />
+    <text x="120" y="50">♠</text><text x="212" y="132">♥</text><text x="120" y="214">♦</text><text x="28" y="132">♣</text>
+  </svg>;
 
   if (!shownGame) {
     return (
@@ -551,7 +582,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.
   const playFromDummy = canAct && phase === "play" && dummyVisible && actor === dummySeat && positionOf(actor) !== "bottom";
   const handIsInteractive = canAct && !playFromDummy;
-  const handSeat: Seat | undefined = handIsInteractive ? actor : playAgainstBots || isReviewing || playFromDummy ? bottomSeat : undefined;
+  const handSeat: Seat | undefined = handIsInteractive ? actor : playAgainstBots || isReviewing || playFromDummy || botsFinishing ? bottomSeat : undefined;
   const handCards = handSeat ? sortHand(shownGame.hands[handSeat]) : [];
   const handIsDummy = dummyVisible && handSeat === dummySeat;
   const showCalls = phase !== "play" || auctionShown;
@@ -560,7 +591,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const contractText = contract ? <>{contract.level}<span className={isRedSuit(contract.strain) ? "red-card" : ""}>{contract.strain === "notrump" ? "NT" : suitSymbols[contract.strain]}</span>{"X".repeat(contract.doubled)}</> : null;
   const statusText = isReviewing
     ? `Reviewing action ${reviewCursor} of ${handCount}`
-    : liveTurn ? `${playAgainstBots && shownActor !== userSeat && !userControlsDummy ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
+    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDummy) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
   const auctionList = shownGame.auction.length ? <ol className="sr-only" ref={auctionListRef} aria-label="Auction calls">{shownGame.auction.map(({ seat, bid }, index) => <li key={`${seat}-${index}`}><span>{seatNames[seat]}</span><strong>{callLabel(bid)}</strong></li>)}</ol> : null;
   const tableCard = (card: Card, className: string, label: string) => <span className={`${className} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={cardId(card)} role="img" aria-label={label}>{cardFace(card)}</span>;
 
@@ -569,6 +600,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       <div className={`game-layout ${phase === "auction" ? "auction-layout" : phase === "play" ? "play-layout" : ""}`}>
         <section className="table-panel" aria-label={isReviewing ? "Hand review" : "Bridge table"}>
           <div className={`table-surface ${phase === "play" && auctionShown ? "calls-shown" : ""}`}>
+            {tableWatermark}
             <div className="table-status">
               {contract ? <button className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${shownGame.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={() => setAuctionShown((shown) => !shown)}>
                 <strong>{contractText}</strong><span>{seatNames[contract.declarer][0]}</span>
@@ -585,10 +617,11 @@ export default function App({ solver }: { solver?: Solver } = {}) {
                   <summary className="icon-button" aria-label="Table menu" title="Table menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></summary>
                   <div className="table-menu-content">
                     {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
+                    {!isReviewing && liveTurn ? <button className="secondary-button menu-deal" type="button" aria-pressed={botsFinishing} onClick={(event) => { closeMenu(event); setBotsFinishHandId(botsFinishing ? undefined : currentHandId); }}>{botsFinishing ? "Take back control" : "Let bots finish this hand"}</button> : null}
                     {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section> : null}
                     {pbnImportForm}
                     {recentHandsPanel}
-                    {version}
+                    <button className="secondary-button menu-about" type="button" onClick={(event) => { closeMenu(event); setAboutOpen(true); }}>About ContractPlay</button>
                   </div>
                 </details>
                 {fullscreenButton}
@@ -630,7 +663,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
 
             <section className={phase === "auction" ? "auction-panel centered-auction" : "sr-only"} aria-label="Auction">
               {auctionList}
-              {!isReviewing && game?.phase === "auction" && (!playAgainstBots || game.currentActor === userSeat) ? <div className="bid-picker" aria-label="Choose a bid">
+              {!isReviewing && !botsFinishing && game?.phase === "auction" && (!playAgainstBots || game.currentActor === userSeat) ? <div className="bid-picker" aria-label="Choose a bid">
                 <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
                   {[1, 2, 3, 4, 5, 6, 7].map((level) => biddingStrains.map((strain) => {
                     const bid = `${level}${strain}` as Bid;
@@ -683,6 +716,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
           </div>
         </section>
       </div>
+      {aboutDialog}
     </main>
   );
 }

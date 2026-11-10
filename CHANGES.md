@@ -1,5 +1,12 @@
 # Changes
 
+## 0.1.8 - 2026-11-10
+
+- Added About ContractPlay to the table menu; it shows the app version.
+- Recent hands now have a generated name such as "Quiet Squeeze" and show the date and time played, in place of "Hand 1", "Hand 2". Hands saved earlier get a name too.
+- Added "Let bots finish this hand" to the table menu: bots make every remaining call and play for all four seats, at a manual table or against bots. "Take back control" in the menu, or Take back, returns the hand to you.
+- The table is now a vibrant green felt, bright emerald at the center and deeper green at the edges, with a faint watermark of the bridge mark and the four suits at the center. Start-screen settings sit on dark panels so they stay readable.
+
 ## 0.1.7 - 2026-11-10
 
 - Added a Hints switch (off by default, remembered on the device) in place of the Show hint button. With hints on, the auction shows your high-card points and highlights the suggested call in the bidding box with its meaning; clicking any call beside a seat explains what it shows; and card play highlights one suggested card with a one-line reason. Suggestions follow the Expert bot and the selected bidding style, and a host solver still takes precedence for card hints.

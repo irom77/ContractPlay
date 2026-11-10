@@ -70,6 +70,14 @@ describe("local solo store", () => {
     expect(loadSoloData(storage)).toEqual(data);
   });
 
+  it("keeps a saved hand's name and still loads hands saved without one", () => {
+    const storage = new MemoryStorage();
+    const data: SoloData = { ...emptyData, completedHands: [{ ...record, name: "Bold Finesse" }, { ...record, id: "hand-2" }] };
+    saveSoloData(storage, data);
+
+    expect(loadSoloData(storage).completedHands.map((hand) => hand.name)).toEqual(["Bold Finesse", undefined]);
+  });
+
   it("recovers from malformed saved JSON", () => {
     const storage = new MemoryStorage();
     storage.setItem("contractplay.solo", "{bad json");
