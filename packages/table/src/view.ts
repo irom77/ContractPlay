@@ -20,8 +20,12 @@ function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined
   if (!g) return undefined;
   const dummy = g.contract ? SEATS[(SEATS.indexOf(g.contract.declarer) + 2) % 4] : undefined;
   const dummyShown = g.completedTricks.length > 0 || g.currentTrick.length > 0;
+  const viewerInfo = state.seats[viewerSeat];
+  const declarerShownToHumanDummy = dummyShown && dummy === viewerSeat && g.contract !== undefined &&
+    state.seats[g.contract.declarer].kind === "bot" && viewerInfo.kind === "human" &&
+    (viewerInfo.standIn !== undefined || state.awaySince[viewerInfo.player] === undefined);
   const hands = Object.fromEntries(SEATS.map((seat) => [
-    seat, seat === viewerSeat || (dummyShown && seat === dummy) ? [...g.hands[seat]] : []
+    seat, seat === viewerSeat || (dummyShown && seat === dummy) || (declarerShownToHumanDummy && seat === g.contract!.declarer) ? [...g.hands[seat]] : []
   ])) as unknown as Deal;
   return {
     phase: g.phase, dealer: g.dealer, vulnerability: g.vulnerability, currentActor: g.currentActor,

@@ -1,3 +1,4 @@
+import { validatePlay } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import { botToAct, botWake, chooseBotAction } from "./hand.js";
@@ -96,17 +97,32 @@ describe("acting", () => {
 });
 
 describe("bots", () => {
-  it("acts for dummy when its declarer is a bot", async () => {
+  it("transfers both declaring-side plays to a human dummy when declarer is a bot", async () => {
     let t = sendOk(newTable(), "alice", { type: "sit", seat: "south" });
     for (const seat of ["north", "east", "west"] as const) t = sendOk(t, "alice", { type: "setBot", seat, skill: "advanced" });
     t = sendOk(t, "alice", { type: "deal" }, 1, seededRandom(7));
-    // put a bot declarer (north) with human dummy (south) at the opening-lead point by direct state edit
-    const game = { ...t.game!, phase: "play" as const, contract: { level: 1 as const, strain: "spades" as const, declarer: "north" as const, doubled: 0 as const }, currentActor: "south" as const };
-    const state: TableState = { ...t, game };
-    expect(botToAct(state)).toBe("south");
-    const action = await chooseBotAction(state);
-    expect(action?.seat).toBe("south");
-    expect(send(state, "alice", act(state, { type: "play", seat: "south", card: state.game!.hands.south[0]! })).refused).toBe("not-your-turn");
+    // Model both declaring-side turns after the opening lead.
+    const game = {
+      ...t.game!, phase: "play" as const,
+      contract: { level: 1 as const, strain: "spades" as const, declarer: "north" as const, doubled: 0 as const },
+      currentActor: "north" as const,
+      currentTrick: [
+        { seat: "east" as const, card: t.game!.hands.east[0]! },
+        { seat: "south" as const, card: t.game!.hands.south[0]! },
+        { seat: "west" as const, card: t.game!.hands.west[0]! }
+      ]
+    };
+    const declarerTurn: TableState = { ...t, game };
+    expect(botToAct(declarerTurn)).toBeUndefined();
+    const ledSuit = game.currentTrick[0]!.card.suit;
+    const declarerCard = game.hands.north.find((card) => validatePlay(game.hands.north, card, ledSuit).legal)!;
+    expect(send(declarerTurn, "alice", act(declarerTurn, { type: "play", seat: "north", card: declarerCard })).refused).toBeUndefined();
+
+    const dummyTurn: TableState = { ...t, game: { ...game, currentActor: "south", currentTrick: [game.currentTrick[0]!] } };
+    expect(botToAct(dummyTurn)).toBeUndefined();
+    const dummyLedSuit = dummyTurn.game!.currentTrick[0]!.card.suit;
+    const dummyCard = dummyTurn.game!.hands.south.find((card) => validatePlay(dummyTurn.game!.hands.south, card, dummyLedSuit).legal)!;
+    expect(send(dummyTurn, "alice", act(dummyTurn, { type: "play", seat: "south", card: dummyCard })).refused).toBeUndefined();
   });
 
   it("plays a full hand with one human and three bots and credits the side that scored", async () => {

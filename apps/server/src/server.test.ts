@@ -163,12 +163,19 @@ class Client {
 
 const dummyOf = (declarer: Seat): Seat => SEATS[(SEATS.indexOf(declarer) + 2) % 4]!;
 
-/** Whether the viewer decides the current turn: their own seat, or dummy when they are declarer. */
+/** Whether the viewer decides the current turn, including a human dummy controlling a bot declarer. */
 function viewerActs(view: TableView): boolean {
   const game = view.game;
   if (!game || (game.phase !== "auction" && game.phase !== "play") || !view.yourSeat) return false;
-  const decider = game.phase === "play" && game.contract && game.currentActor === dummyOf(game.contract.declarer)
-    ? game.contract.declarer : game.currentActor;
+  const declarer = game.contract?.declarer;
+  const dummy = declarer ? dummyOf(declarer) : undefined;
+  const dummyInfo = dummy ? view.seats[dummy] : undefined;
+  const humanDummyControls = game.phase === "play" && declarer !== undefined && dummyInfo?.kind === "human" &&
+    view.seats[declarer].kind === "bot" && (dummyInfo.standIn !== undefined || !dummyInfo.away);
+  const decider = humanDummyControls && (game.currentActor === declarer || game.currentActor === dummy)
+    ? dummy!
+    : game.phase === "play" && game.contract && game.currentActor === dummy
+      ? game.contract.declarer : game.currentActor;
   return decider === view.yourSeat && view.seats[view.yourSeat].kind === "human";
 }
 

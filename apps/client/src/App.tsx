@@ -28,7 +28,7 @@ import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
-import { compactCallLabel, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
+import { compactCallLabel, contractText, isCallAvailable, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
 import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
 import { serviceUrl } from "./online/connection.js";
@@ -174,11 +174,12 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   }, [game, currentHandId]);
 
   useEffect(() => {
-    const dummyIsHumanControlled = !!game?.contract && game.phase === "play" &&
+    const declaringSideIsHumanControlled = !!game?.contract && game.phase === "play" &&
       (game.completedTricks.length > 0 || game.currentTrick.length > 0) &&
-      samePartnership(userSeat, game.contract.declarer) && game.currentActor === partnerOf(game.contract.declarer);
+      samePartnership(userSeat, game.contract.declarer) &&
+      samePartnership(game.currentActor, game.contract.declarer);
     if (!game || temporaryTrick || game.phase === "complete" || game.phase === "passed-out") return;
-    if (!botsFinishing && (!playAgainstBots || game.currentActor === userSeat || dummyIsHumanControlled)) return;
+    if (!botsFinishing && (!playAgainstBots || game.currentActor === userSeat || declaringSideIsHumanControlled)) return;
     let cancelled = false;
     const turnState = game;
     const bot = createBot({ skill: botSkill, biddingStyle });
@@ -202,13 +203,13 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const shownGame = selectedHand ? reviewState(selectedHand, reviewCursor) : game;
   const isReviewing = !!selectedHand;
   const shownActor = shownGame?.currentActor;
-  const dummySeat = shownGame?.contract ? partnerOf(shownGame.contract.declarer) : undefined;
-  const userControlsDummy = !!shownGame?.contract &&
+  const userControlsDeclaringSide = !!shownGame?.contract &&
     (shownGame.completedTricks.length > 0 || shownGame.currentTrick.length > 0) &&
-    samePartnership(userSeat, shownGame.contract.declarer) && shownActor === dummySeat;
+    !!shownActor && samePartnership(userSeat, shownGame.contract.declarer) &&
+    samePartnership(shownActor, shownGame.contract.declarer);
   const canShowHand = !isReviewing && !!game && !!actor &&
     (game.phase === "auction" || game.phase === "play") &&
-    !botsFinishing && (!playAgainstBots || actor === userSeat || userControlsDummy);
+    !botsFinishing && (!playAgainstBots || actor === userSeat || userControlsDeclaringSide);
   // Hints are worked out for the position the user is about to act in, and dropped as soon as the position changes.
   const hintGame = hintsOn && canShowHand ? game : undefined;
   const visibleBidHint = hintGame && bidHint?.game === hintGame ? bidHint : undefined;
@@ -509,7 +510,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const showCalls = phase !== "play" || auctionShown;
   const statusText = isReviewing
     ? `Reviewing action ${reviewCursor} of ${handCount}`
-    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDummy) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
+    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
   const tableTools = <>
     <details className="table-menu">

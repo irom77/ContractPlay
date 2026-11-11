@@ -37,7 +37,12 @@ describe("viewFor", () => {
           }
           const own = SEATS[players.indexOf(viewer)]!;
           const allowed = new Set([...original[own].map(cardId), ...played]);
-          if (dummy && played.length > 0) original[dummy].forEach((c) => allowed.add(cardId(c)));
+          if (dummy && played.length > 0) {
+            original[dummy].forEach((c) => allowed.add(cardId(c)));
+            if (dummy === own && g.contract && s.seats[g.contract.declarer].kind === "bot") {
+              original[g.contract.declarer].forEach((c) => allowed.add(cardId(c)));
+            }
+          }
           for (const id of cards) expect(allowed.has(id)).toBe(true);
           expect("revealed" in view).toBe(false);
         }
@@ -64,6 +69,22 @@ describe("viewFor", () => {
     expect(viewFor(t, "alice").canDeal).toBe(true);
     expect(viewFor(t, "nobody").canDeal).toBe(false);
     expect(viewFor(t, undefined).canDeal).toBe(false);
+  });
+
+  it("reveals declarer to the human dummy only when a bot is declarer", () => {
+    let t = sendOk(newTable(), "alice", { type: "sit", seat: "south" });
+    for (const seat of ["north", "east", "west"] as const) t = sendOk(t, "alice", { type: "setBot", seat, skill: "advanced" });
+    t = sendOk(t, "alice", { type: "deal" }, 1, seededRandom(11));
+    const game = {
+      ...t.game!, phase: "play" as const,
+      contract: { level: 1 as const, strain: "spades" as const, declarer: "north" as const, doubled: 0 as const },
+      currentActor: "south" as const,
+      currentTrick: [{ seat: "east" as const, card: t.game!.hands.east[0]! }]
+    };
+    const state: TableState = { ...t, game };
+
+    expect(viewFor(state, "alice").game!.hands.north).toHaveLength(13);
+    expect(viewFor(state, "alice").game!.hands.south).toHaveLength(13);
   });
 
   it("marks away humans and shows stand-ins", () => {

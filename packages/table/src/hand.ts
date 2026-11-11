@@ -34,13 +34,23 @@ export function dealHand(state: TableState, player: PlayerId, at: number, random
   return accept(state, { handNumber, game, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
-/** The seat whose holder decides for `seat`: declarer's seat when `seat` is dummy during play, else `seat` itself. */
-export const deciderOf = (game: GameState | undefined, seat: Seat): Seat =>
-  game?.phase === "play" && seat === dummyOf(game) ? game.contract!.declarer : seat;
+/** The seat whose holder decides for `seat`, including a human dummy taking over for a bot declarer. */
+export function deciderOf(state: TableState, seat: Seat): Seat {
+  const game = state.game;
+  if (game?.phase !== "play" || !game.contract) return seat;
+  const declarer = game.contract.declarer;
+  const dummy = dummyOf(game)!;
+  const declarerState = state.seats[declarer];
+  const dummyState = state.seats[dummy];
+  const dummyCanTakeOver = declarerState.kind === "bot" && dummyState.kind === "human" &&
+    (dummyState.standIn !== undefined || state.awaySince[dummyState.player] === undefined);
+  if (dummyCanTakeOver && (seat === declarer || seat === dummy)) return dummy;
+  return seat === dummy ? declarer : seat;
+}
 
-/** Seat that a human player may act for: their own, or dummy when they are the human declarer. */
+/** Whether the seated human controls this play, including both declaring hands after a bot declares. */
 function controls(state: TableState, player: PlayerId, seat: Seat): boolean {
-  const actingSeat = deciderOf(state.game, seat);
+  const actingSeat = deciderOf(state, seat);
   const s = state.seats[actingSeat];
   return s.kind === "human" && s.player === player && s.standIn === undefined && actingSeat === seatOf(state, player);
 }
@@ -73,9 +83,9 @@ export function applyBotEvent(state: TableState, revision: number, action: GameA
   return record(state, action, at, false);
 }
 
-/** Skill of the bot that decides for a seat: the seat's own bot or stand-in, or declarer's when the seat is dummy. */
+/** Skill of the bot deciding for a seat: its own bot or stand-in, or its controller's bot for dummy. */
 function botSkill(state: TableState, seat: Seat): SkillLevel | undefined {
-  const s = state.seats[deciderOf(state.game, seat)];
+  const s = state.seats[deciderOf(state, seat)];
   if (s.kind === "bot") return s.skill;
   return s.kind === "human" ? s.standIn : undefined;
 }

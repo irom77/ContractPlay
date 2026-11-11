@@ -2,7 +2,7 @@ import { createBot } from "@contractplay/bots";
 import { SEATS, playContextFor } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import type { ClientMessage } from "@contractplay/protocol";
-import { chooseBotAction } from "./hand.js";
+import { chooseBotAction, deciderOf } from "./hand.js";
 import { reduce } from "./reduce.js";
 import { createTable, type Outcome, type PlayerId, type TableState } from "./state.js";
 
@@ -53,9 +53,7 @@ export async function playOut(start: TableState, onStep?: (state: TableState, ac
       const seat: Seat = game.currentActor;
       const bot = createBot({ skill: "advanced", biddingStyle: state.style });
       const sender = state.seats[seat];
-      const declarerSeat = game.contract?.declarer;
-      const dummy = declarerSeat ? SEATS[(SEATS.indexOf(declarerSeat) + 2) % 4] : undefined;
-      const owner = game.phase === "play" && seat === dummy && declarerSeat ? state.seats[declarerSeat] : sender;
+      const owner = game.phase === "play" ? state.seats[deciderOf(state, seat)] : sender;
       if (owner.kind !== "human") throw new Error("no controller");
       action = game.phase === "auction"
         ? { type: "bid", seat, bid: await bot.chooseBid(game.hands[seat], game.auction, seat) }

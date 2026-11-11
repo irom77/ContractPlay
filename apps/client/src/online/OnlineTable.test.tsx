@@ -317,11 +317,22 @@ describe("OnlineTable play", () => {
     expect(screen.queryByRole("region", { name: "West's hand" })).toBeNull();
   });
 
-  it("never lets dummy play", () => {
+  it("lets a human dummy play both hands when the bot partner declares", async () => {
+    const user = userEvent.setup();
     const service = setup();
-    const game = playCards(oneNoTrump(), 1);
-    service.push(inHand(game, ["south"], { yourSeat: "south", seats: { north: bot, east: bot, south: human("Bob"), west: bot } }));
-    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+    const seats = { north: bot, east: bot, south: human("Bob"), west: bot };
+    const dummyTurn = playCards(oneNoTrump(), 1);
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats, game: publicGame(dummyTurn, ["north", "south"]) }));
+    const dummyCard = within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / })[0]!;
+    await user.click(dummyCard);
+    expect(service.sent.at(-1)).toMatchObject({ type: "act", action: { type: "play", seat: "south" } });
+
+    const declarerTurn = playCards(oneNoTrump(), 3);
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "south", seats, game: publicGame(declarerTurn, ["north", "south"]) }));
+    const declarerHand = within(screen.getByRole("region", { name: "North's hand" }));
+    const declarerCard = declarerHand.getAllByRole("button", { name: /^Play / })[0]!;
+    await user.click(declarerCard);
+    expect(service.sent.at(-1)).toMatchObject({ type: "act", action: { type: "play", seat: "north" } });
   });
 
   it("shows names, Bot, away, and stand-ins beside the seats", () => {

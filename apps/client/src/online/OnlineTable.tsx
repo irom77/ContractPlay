@@ -30,10 +30,16 @@ function refusalText(reason: RefusalReason): string | undefined {
 
 const isLive = (game: PublicGame | undefined): boolean => game?.phase === "auction" || game?.phase === "play";
 
-/** The seat that decides the current turn: declarer when dummy is to play, otherwise the seat to act. */
-function deciderOf(game: PublicGame): Seat {
+/** The seat that decides the current turn, including a human dummy taking over for a bot declarer. */
+function deciderOf(game: PublicGame, seats: TableViewData["seats"]): Seat {
   const declarer = game.contract?.declarer;
-  return game.phase === "play" && declarer && game.currentActor === partnerOf(declarer) ? declarer : game.currentActor;
+  if (game.phase !== "play" || !declarer) return game.currentActor;
+  const dummy = partnerOf(declarer);
+  const dummyInfo = seats[dummy];
+  const humanDummyControls = seats[declarer].kind === "bot" && dummyInfo.kind === "human" &&
+    (dummyInfo.standIn !== undefined || !dummyInfo.away);
+  if (humanDummyControls && (game.currentActor === declarer || game.currentActor === dummy)) return dummy;
+  return game.currentActor === dummy ? declarer : game.currentActor;
 }
 
 /** Adds the finished hand to the device's hand history unless a hand with its id is already there. */
@@ -154,7 +160,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     if (game && game.currentTrick.length > 0) setLastTrickOpen(false);
 
     // The host's two-minute clock starts when this client first sees the turn, not when the service began it.
-    const key = game && isLive(game) ? `${view.handNumber}:${deciderOf(game)}:${game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length}` : undefined;
+    const key = game && isLive(game) ? `${view.handNumber}:${deciderOf(game, view.seats)}:${game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length}` : undefined;
     setTurn((known) => key === undefined ? undefined : known?.key === key ? known : { key, since: Date.now() });
 
     if (view.revealed && game?.phase === "complete") saveToHistory(storage, view);
@@ -178,7 +184,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     const seat = game.currentActor;
     const seatInfo = view.seats[view.yourSeat];
     const hasStandIn = seatInfo.kind === "human" && seatInfo.standIn !== undefined;
-    const canHint = !hasStandIn && deciderOf(game) === view.yourSeat;
+    const canHint = !hasStandIn && deciderOf(game, view.seats) === view.yourSeat;
     if (!canHint) return;
     let cancelled = false;
     const failed = () => { if (!cancelled) setNotice({ text: "Unable to get a hint. Please try again." }); };
@@ -244,7 +250,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     const live = isLive(game);
     const mine = view.seats[yourSeat];
     const standIn = mine.kind === "human" && mine.standIn !== undefined;
-    const decider = deciderOf(game);
+    const decider = deciderOf(game, view.seats);
     const actingSeat = live && !standIn && decider === yourSeat ? game.currentActor : undefined;
     const canHintNow = live && !standIn && decider === yourSeat;
     const visibleBidHint = hintsOn && canHintNow && game.phase === "auction" && bidHint?.view === view ? bidHint : undefined;
@@ -267,7 +273,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       ? hold.cards
       : game.currentTrick.length ? game.currentTrick : lastTrickOpen ? game.completedTricks.at(-1) ?? [] : [];
     const statusText = !live ? (game.phase === "complete" ? "Hand complete" : "Passed out")
-      : actingSeat ? (game.phase === "auction" ? "Your call" : actingSeat === yourSeat ? "Your play" : "Play from dummy")
+      : actingSeat ? (game.phase === "auction" ? "Your call" : actingSeat === yourSeat ? "Your play" : game.currentActor === game.contract?.declarer ? "Play declarer's hand" : "Play from dummy")
         : `${seatNames[game.currentActor]} to ${game.phase === "auction" ? "bid" : "play"}`;
 
     return (

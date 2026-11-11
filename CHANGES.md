@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- When the human and bot partner win the contract, the human now controls both declaring-side hands after the opening lead, including turns where the bot is nominally Declarer.
+- Online tables now transfer both declaring-side hands to a human in dummy when Declarer is a bot; the server authorizes those plays and reveals Declarer's cards only to that human after the opening lead.
 - Solo play now scores rubber bridge by default. Contract points go below the line and overtricks, undertricks, slam bonuses, the doubled insult, and honors go above it; part scores carry over until a side reaches 100, a side that has won a game is vulnerable, the dealer rotates each deal, and the rubber ends with a 700 or 500 bonus when a side wins two games. The scoresheet is shown after each hand and in the table menu, survives a reload, and "Start a new rubber" resets it. "Single deals" in the new Scoring setting keeps the previous behavior with a chosen dealer and vulnerability.
 - The hand result now says whether the contract made or went down, the tricks taken against the tricks needed, and the number of overtricks or undertricks, followed by the points.
 - Hints can also be switched on in the deal settings before a hand starts, as well as with the Hints switch at the table during bidding and play.

@@ -52,7 +52,7 @@ export function disconnect(state: TableState, player: PlayerId, at: number): Out
 /** Whether `seat`'s holder decides the turn now in progress (their own seat, or dummy as declarer). */
 function onTurn(state: TableState, seat: Seat): boolean {
   const game = state.game;
-  return game !== undefined && (game.phase === "auction" || game.phase === "play") && deciderOf(game, game.currentActor) === seat;
+  return game !== undefined && (game.phase === "auction" || game.phase === "play") && deciderOf(state, game.currentActor) === seat;
 }
 
 /** Puts a bot in for an away player (any other seated human), or for an idle player on turn (host only). */

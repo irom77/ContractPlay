@@ -926,6 +926,31 @@ describe("bridge table", () => {
     expect(within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
   });
 
+  it("lets the human dummy control the bot declarer's hand", async () => {
+    // North (bot) declares 1NT. East leads, then South and West play, leaving North to act.
+    let game = gameWithContract(["1notrump", "pass", "pass", "pass"]);
+    for (let count = 0; count < 3; count += 1) {
+      const seat = game.currentActor;
+      const ledSuit = game.currentTrick[0]?.card.suit;
+      const card = game.hands[seat].find((candidate) => validatePlay(game.hands[seat], candidate, ledSuit).legal)!;
+      const result = applyAction(game, { type: "play", seat, card });
+      if (!result.ok) throw new Error(result.error.message);
+      game = result.state;
+    }
+    storeCurrentGame(game);
+    const user = await playAsSouthAgainstBots();
+
+    expect(screen.getByText("North to play")).toBeTruthy();
+    const declarerHand = within(screen.getByRole("region", { name: "North's hand" }));
+    const declarerCards = declarerHand.getAllByRole("button", { name: /^Play / });
+    expect(declarerCards.length).toBeGreaterThan(0);
+    const legalCard = game.hands.north.find((card) => validatePlay(game.hands.north, card, game.currentTrick[0]?.card.suit).legal)!;
+    const cardLabel = playButtonLabel(legalCard);
+    await user.click(declarerHand.getByRole("button", { name: cardLabel }));
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: cardLabel! })).toBeNull());
+  });
+
   it("discards a queued bot decision when the user deals a replacement hand", async () => {
     vi.useFakeTimers();
     render(<App />);
