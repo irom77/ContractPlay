@@ -124,6 +124,18 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/table:
+    dependencies:
+      '@contractplay/bots':
+        specifier: workspace:*
+        version: link:../bots
+      '@contractplay/core':
+        specifier: workspace:*
+        version: link:../core
+      '@contractplay/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+
 packages:
 
   '@asamuzakjp/css-color@3.2.0':

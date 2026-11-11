@@ -1,0 +1,14 @@
+{
+  "name": "@contractplay/table",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "scripts": { "build": "tsc -p tsconfig.build.json", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@contractplay/bots": "workspace:*",
+    "@contractplay/core": "workspace:*",
+    "@contractplay/protocol": "workspace:*"
+  },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } }
+}
