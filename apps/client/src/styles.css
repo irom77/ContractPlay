@@ -320,7 +320,7 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-seat-label { display: flex; flex-wrap: wrap; align-items: center; gap: calc(.6 * var(--u)); max-width: max(140px, calc(30 * var(--u))); border-radius: 7px; padding: calc(.4 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; }
 .online-table { --u: min(1.25vh, .9vw); }
 .online-table .hand-panel { --step: min(calc(16 * var(--u)), calc((94vw - 18.2 * var(--u)) / 12)); }
-.online-table .pos-top .dummy-table-hand, .online-table .pos-bottom .dummy-table-hand { --step: min(calc(9 * var(--u)), calc((94vw - 42 * var(--u)) / 9)); }
+.online-table .pos-top .dummy-table-hand, .online-table .pos-bottom .dummy-table-hand { --step: max(calc(4.2 * var(--u)), calc((94vw - 42 * var(--u)) / 9)); }
 .online-table .table-surface.dummy-on-right .hint-controls { right: auto; left: calc(2 * var(--u)); align-items: flex-start; }
 .online-table .table-surface.dummy-on-right .hint-controls p { text-align: left; }
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
