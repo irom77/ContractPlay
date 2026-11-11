@@ -1,6 +1,6 @@
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { botToAct, chooseBotAction, nextWake } from "./hand.js";
+import { botToAct, botWake, chooseBotAction } from "./hand.js";
 import { viewFor } from "./view.js";
 import { reduce } from "./reduce.js";
 import { fourHumans, newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
@@ -135,10 +135,10 @@ describe("bots", () => {
     t = sendOk(t, "alice", { type: "deal" }, 100, seededRandom(1));
     // dealer north is the human; after alice's bid east (a bot) is to act
     expect(botToAct(t)).toBeUndefined();
-    expect(nextWake(t)).toBeUndefined();
+    expect(botWake(t)).toBeUndefined();
     t = sendOk(t, "alice", act(t, pass("north")), 500);
     expect(botToAct(t)).toBe("east");
-    expect(nextWake(t)).toBe(500 + 1000);
+    expect(botWake(t)).toBe(500 + 1000);
     // stale bot events are ignored
     const ignored = reduce(t, { type: "bot", revision: t.revision - 1, action: pass("east"), at: 600 }, seededRandom(1));
     expect(ignored.state).toBe(t);
@@ -153,9 +153,9 @@ describe("bots", () => {
     await playOut(t, (s, action) => {
       if (s.trickJustCompleted && botToAct(s)) {
         sawTrick = true;
-        expect(nextWake(s)).toBe(s.turnSince + 3000);
+        expect(botWake(s)).toBe(s.turnSince + 3000);
       } else if (action.type === "play" && botToAct(s) && !s.trickJustCompleted) {
-        expect(nextWake(s)).toBe(s.turnSince + 1000);
+        expect(botWake(s)).toBe(s.turnSince + 1000);
       }
     });
     expect(sawTrick).toBe(true);

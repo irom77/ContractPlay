@@ -34,10 +34,13 @@ export function dealHand(state: TableState, player: PlayerId, at: number, random
   return accept(state, { handNumber, game, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
+/** The seat whose holder decides for `seat`: declarer's seat when `seat` is dummy during play, else `seat` itself. */
+export const deciderOf = (game: GameState | undefined, seat: Seat): Seat =>
+  game?.phase === "play" && seat === dummyOf(game) ? game.contract!.declarer : seat;
+
 /** Seat that a human player may act for: their own, or dummy when they are the human declarer. */
 function controls(state: TableState, player: PlayerId, seat: Seat): boolean {
-  const game = state.game;
-  const actingSeat = game?.phase === "play" && seat === dummyOf(game) ? game.contract!.declarer : seat;
+  const actingSeat = deciderOf(state.game, seat);
   const s = state.seats[actingSeat];
   return s.kind === "human" && s.player === player && s.standIn === undefined && actingSeat === seatOf(state, player);
 }
@@ -72,9 +75,7 @@ export function applyBotEvent(state: TableState, revision: number, action: GameA
 
 /** Skill of the bot that decides for a seat: the seat's own bot or stand-in, or declarer's when the seat is dummy. */
 function botSkill(state: TableState, seat: Seat): SkillLevel | undefined {
-  const game = state.game;
-  const owner = game?.phase === "play" && seat === dummyOf(game) ? game.contract!.declarer : seat;
-  const s = state.seats[owner];
+  const s = state.seats[deciderOf(state.game, seat)];
   if (s.kind === "bot") return s.skill;
   return s.kind === "human" ? s.standIn : undefined;
 }
@@ -95,6 +96,7 @@ export async function chooseBotAction(state: TableState): Promise<GameAction | u
   return { type: "play", seat, card: await bot.chooseCard(playContextFor(game, seat)) };
 }
 
-export function nextWake(state: TableState): number | undefined {
+/** When the next bot decision is due, or undefined when no bot is to act. */
+export function botWake(state: TableState): number | undefined {
   return botToAct(state) === undefined ? undefined : state.turnSince + BOT_PAUSE_MS + (state.trickJustCompleted ? TRICK_PAUSE_MS : 0);
 }

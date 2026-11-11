@@ -1,14 +1,20 @@
 import { act, applyBotEvent, dealHand } from "./hand.js";
+import { connect, disconnect, handToBot, resume, tick } from "./presence.js";
 import { clearSeat, leave, setBot, sit } from "./seats.js";
 import type { Outcome, TableEvent, TableState } from "./state.js";
 
 /**
- * Applies one event. Presence events (connect, disconnect, tick, handToBot, resume) are not handled yet.
+ * Applies one event.
  * `random` shuffles the deck: production callers must supply a cryptographically secure source.
  */
 export function reduce(state: TableState, event: TableEvent, random: () => number): Outcome {
-  if (event.type === "bot") return applyBotEvent(state, event.revision, event.action, event.at);
-  if (event.type !== "message") return { state };
+  switch (event.type) {
+    case "bot": return applyBotEvent(state, event.revision, event.action, event.at);
+    case "connect": return connect(state, event.player, event.name, event.at);
+    case "disconnect": return disconnect(state, event.player, event.at);
+    case "tick": return tick(state, event.at);
+    case "message": break;
+  }
   const { player, message, at } = event;
   switch (message.type) {
     case "sit": return sit(state, player, state.names[player] ?? "Player", message.seat, at);
@@ -17,6 +23,7 @@ export function reduce(state: TableState, event: TableEvent, random: () => numbe
     case "clearSeat": return clearSeat(state, player, message.seat);
     case "deal": return dealHand(state, player, at, random);
     case "act": return act(state, player, message, at);
-    default: return { state };
+    case "handToBot": return handToBot(state, player, message.seat, at);
+    case "resume": return resume(state, player);
   }
 }
