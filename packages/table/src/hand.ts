@@ -46,13 +46,14 @@ function controls(state: TableState, player: PlayerId, seat: Seat): boolean {
 function record(state: TableState, action: GameAction, at: number, byHuman: boolean): Outcome {
   if (!state.game) return refuse(state, "illegal");
   const result = applyAction(state.game, action);
-  if (!result.ok) return refuse(state, "illegal");
+  if (!result.ok) return refuse(state, result.error.code === "wrong-actor" ? "not-your-turn" : "illegal");
   const game = result.state;
   const trickJustCompleted = action.type === "play" && game.phase === "play" && game.currentTrick.length === 0;
   let totals = state.totals;
   if (game.phase === "complete" && game.score && game.contract) {
-    const nsDeclares = SEATS.indexOf(game.contract.declarer) % 2 === 0;
-    totals = nsDeclares ? { ...totals, ns: totals.ns + game.score.score } : { ...totals, ew: totals.ew - game.score.score };
+    // score is signed from North-South's side: the side that scored plus is credited
+    const { score } = game.score;
+    totals = score >= 0 ? { ...totals, ns: totals.ns + score } : { ...totals, ew: totals.ew - score };
   }
   return accept(state, { game, totals, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
 }

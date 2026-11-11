@@ -3,17 +3,20 @@ import { describe, expect, it } from "vitest";
 import { botToAct, chooseBotAction, nextWake } from "./hand.js";
 import { viewFor } from "./view.js";
 import { reduce } from "./reduce.js";
-import { newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
+import { fourHumans, newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
 import type { TableState } from "./state.js";
 
 const act = (state: TableState, action: GameAction) =>
   ({ type: "act" as const, handNumber: state.handNumber, revision: state.revision, action });
 const pass = (seat: Seat): GameAction => ({ type: "bid", seat, bid: "pass" });
 
-function fourHumans(): TableState {
-  let t = newTable();
-  (["north", "east", "south", "west"] as const).forEach((seat, i) => { t = sendOk(t, `p${i}`, { type: "sit", seat }, i); });
-  return t;
+
+function expectTotals(done: TableState): void {
+  const game = done.game!;
+  if (game.phase === "passed-out") { expect(done.totals).toEqual({ ns: 0, ew: 0 }); return; }
+  expect(game.phase).toBe("complete");
+  const score = game.score!.score;
+  expect(done.totals).toEqual(score >= 0 ? { ns: score, ew: 0 } : { ns: 0, ew: -score });
 }
 
 describe("dealing", () => {
@@ -51,6 +54,7 @@ describe("dealing", () => {
     expect(send(t, "p0", { type: "deal" }).refused).toBe("not-ready");
     for (let k = 0; k < 4; k++) t = sendOk(t, `p${k}`, act(t, pass(t.game!.currentActor)));
     expect(t.game!.phase).toBe("passed-out");
+    expect(viewFor(t, "p1").canDeal).toBe(true);
     t = sendOk(t, "p1", { type: "deal" }, 1, seededRandom(3));
     expect(t.handNumber).toBe(2);
     expect(t.game!.dealer).toBe("east");
@@ -60,7 +64,7 @@ describe("dealing", () => {
 describe("acting", () => {
   it("checks turn, legality, and staleness", () => {
     const t = sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(4));
-    expect(send(t, "p1", act(t, pass("east"))).refused).toBe("illegal");
+    expect(send(t, "p1", act(t, pass("east"))).refused).toBe("not-your-turn");
     expect(send(t, "p1", act(t, pass("north"))).refused).toBe("not-your-turn");
     expect(send(t, "p0", { ...act(t, pass("north")), revision: 99 }).refused).toBe("stale");
     const opened = sendOk(t, "p0", act(t, { type: "bid", seat: "north", bid: "2hearts" }));
@@ -105,18 +109,25 @@ describe("bots", () => {
     expect(send(state, "alice", act(state, { type: "play", seat: "south", card: state.game!.hands.south[0]! })).refused).toBe("not-your-turn");
   });
 
-  it("plays a full hand with one human and three bots and scores the right side", async () => {
+  it("plays a full hand with one human and three bots and credits the side that scored", async () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
-      let t = tableWithBots();
-      t = sendOk(t, "alice", { type: "deal" }, 1, seededRandom(seed));
+      const t = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(seed));
       const done = await playOut(t);
-      const game = done.game!;
-      if (game.phase === "passed-out") { expect(done.totals).toEqual({ ns: 0, ew: 0 }); continue; }
-      expect(game.phase).toBe("complete");
-      const score = game.score!.score;
-      const nsDeclares = ["north", "south"].includes(game.contract!.declarer);
-      expect(done.totals).toEqual(nsDeclares ? { ns: score, ew: 0 } : { ns: 0, ew: -score });
+      expectTotals(done);
     }
+  });
+
+  it("credits totals correctly for north-south and east-west declarers, made and failed", async () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 40 && seen.size < 4; seed++) {
+      const done = await playOut(sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(seed)));
+      expectTotals(done);
+      const game = done.game!;
+      if (game.phase !== "complete") continue;
+      const ns = ["north", "south"].includes(game.contract!.declarer);
+      seen.add(`${ns ? "ns" : "ew"}-${game.score!.undertricks > 0 ? "failed" : "made"}`);
+    }
+    expect([...seen].sort()).toEqual(["ew-failed", "ew-made", "ns-failed", "ns-made"]);
   });
 
   it("schedules the next bot decision", async () => {
@@ -129,9 +140,9 @@ describe("bots", () => {
     expect(botToAct(t)).toBe("east");
     expect(nextWake(t)).toBe(500 + 1000);
     // stale bot events are ignored
-    const ignored = reduce(t, { type: "bot", revision: t.revision - 1, action: pass("east"), at: 600 });
+    const ignored = reduce(t, { type: "bot", revision: t.revision - 1, action: pass("east"), at: 600 }, seededRandom(1));
     expect(ignored.state).toBe(t);
-    expect(reduce(t, { type: "bot", revision: t.revision, action: pass("south"), at: 600 }).state).toBe(t);
+    expect(reduce(t, { type: "bot", revision: t.revision, action: pass("south"), at: 600 }, seededRandom(1)).state).toBe(t);
     const done = await playOut(t);
     expect(["complete", "passed-out"]).toContain(done.game!.phase);
   });

@@ -13,7 +13,7 @@ export type TableState = Readonly<{
   host?: PlayerId; seats: Readonly<Record<Seat, SeatState>>;
   connections: Readonly<Record<PlayerId, number>>;
   awaySince: Readonly<Record<PlayerId, number>>;
-  /** Display names learned on connect; a seated player's name falls back to their id. */
+  /** Display names learned on connect; a seated player with no known name is shown as "Player". */
   names: Readonly<Record<PlayerId, string>>;
   revision: number; handNumber: number;
   game?: GameState; totals: { ns: number; ew: number };

@@ -13,6 +13,12 @@ describe("seats", () => {
     expect(send(b, "bob", { type: "sit", seat: "west" }).refused).toBe("already-seated");
   });
 
+  it("never uses the player id as a display name", () => {
+    const named = { ...newTable(), names: { alice: "Alice" } };
+    expect(sendOk(named, "alice", { type: "sit", seat: "north" }).seats.north).toMatchObject({ name: "Alice" });
+    expect(sendOk(named, "secret-hash-id", { type: "sit", seat: "east" }).seats.east).toMatchObject({ name: "Player" });
+  });
+
   it("lets a seated player set and clear bots; unseated players cannot", () => {
     const a = sendOk(newTable(), "alice", { type: "sit", seat: "north" });
     const refused = send(a, "zed", { type: "setBot", seat: "east", skill: "expert" });

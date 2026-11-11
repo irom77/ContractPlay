@@ -18,12 +18,12 @@ export function seededRandom(seed: number): () => number {
 
 export const newTable = (): TableState => createTable({ id: "t", name: "Table", style: "SAYC", listed: true, at: 0 });
 
-export function send(state: TableState, player: PlayerId, message: Exclude<ClientMessage, { type: "hello" }>, at = 1, random?: () => number): Outcome {
+export function send(state: TableState, player: PlayerId, message: Exclude<ClientMessage, { type: "hello" }>, at = 1, random: () => number = seededRandom(1)): Outcome {
   return reduce(state, { type: "message", player, message, at }, random);
 }
 
 /** Like `send` but fails the test when the event is refused. */
-export function sendOk(state: TableState, player: PlayerId, message: Exclude<ClientMessage, { type: "hello" }>, at = 1, random?: () => number): TableState {
+export function sendOk(state: TableState, player: PlayerId, message: Exclude<ClientMessage, { type: "hello" }>, at = 1, random: () => number = seededRandom(1)): TableState {
   const out = send(state, player, message, at, random);
   if (out.refused) throw new Error(`unexpectedly refused: ${out.refused}`);
   return out.state;
@@ -48,22 +48,30 @@ export async function playOut(start: TableState, onStep?: (state: TableState, ac
     let action: GameAction;
     if (botAction) {
       action = botAction;
-      out = reduce(state, { type: "bot", revision: state.revision, action, at });
+      out = reduce(state, { type: "bot", revision: state.revision, action, at }, seededRandom(1));
     } else {
       const seat: Seat = game.currentActor;
       const bot = createBot({ skill: "advanced", biddingStyle: state.style });
       const sender = state.seats[seat];
       const declarerSeat = game.contract?.declarer;
-      const owner = sender.kind === "human" ? sender : declarerSeat ? state.seats[declarerSeat] : sender;
+      const dummy = declarerSeat ? SEATS[(SEATS.indexOf(declarerSeat) + 2) % 4] : undefined;
+      const owner = game.phase === "play" && seat === dummy && declarerSeat ? state.seats[declarerSeat] : sender;
       if (owner.kind !== "human") throw new Error("no controller");
       action = game.phase === "auction"
         ? { type: "bid", seat, bid: await bot.chooseBid(game.hands[seat], game.auction, seat) }
         : { type: "play", seat, card: await bot.chooseCard(playContextFor(game, seat)) };
-      out = reduce(state, { type: "message", player: owner.player, message: { type: "act", handNumber: state.handNumber, revision: state.revision, action }, at });
+      out = reduce(state, { type: "message", player: owner.player, message: { type: "act", handNumber: state.handNumber, revision: state.revision, action }, at }, seededRandom(1));
     }
     if (out.refused || out.state === state) throw new Error(`stuck: ${out.refused ?? "ignored"} ${JSON.stringify(action)}`);
     state = out.state;
     onStep?.(state, action);
   }
   return state;
+}
+
+/** Four humans (p0..p3) seated north, east, south, west. */
+export function fourHumans(): TableState {
+  let t = newTable();
+  SEATS.forEach((seat, i) => { t = sendOk(t, `p${i}`, { type: "sit", seat }, i); });
+  return t;
 }
