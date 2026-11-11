@@ -306,7 +306,7 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .lobby-panel .online-totals { justify-self: start; margin: 0; }
 .online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
 .online-resume { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: 50%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; border-radius: 10px; padding: 10px 14px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-m); transform: translateX(-50%); }
-.online-seats { display: grid; grid-template-areas: "north east south west"; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.online-seats { display: grid; grid-template-areas: ". north north north ." "west west . east east" ". south south south ."; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .online-seat { display: grid; align-content: start; gap: 6px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .online-seat-north { grid-area: north; } .online-seat-east { grid-area: east; } .online-seat-south { grid-area: south; } .online-seat-west { grid-area: west; }
 .online-seat-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; }
@@ -324,9 +324,6 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-hand-red > span:first-child { color: #ff6b62; }
 .online-copy-note { overflow-wrap: anywhere; }
 .lobby > .online-status { position: static; transform: none; }
-@media (max-width: 700px) {
-  .online-seats { grid-template-areas: "north east" "south west"; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
 @media (max-width: 520px) {
   .online-seating .start-bar .secondary-button { padding: 0 8px; font-size: 12px; }
 }
