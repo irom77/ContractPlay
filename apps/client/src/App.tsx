@@ -4,12 +4,17 @@ import {
   cardId,
   createGameState,
   deal,
+  emptyRubber,
+  nextRubberDeal,
+  recordRubberHand,
   redoAction,
+  summarizeRubber,
   playContextFor,
   requestHint,
   undoAction,
   type Bid,
   type GameState,
+  type Rubber,
   type Seat,
   type SkillLevel,
   type Solver,
@@ -25,10 +30,13 @@ import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
 import { compactCallLabel, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
+import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
 const hintsStorageKey = "contractplay.hints";
+const scoringStorageKey = "contractplay.scoring";
+type ScoringFormat = "rubber" | "single";
 
 function createHandId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -66,6 +74,10 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [hintsOn, setHintsOn] = useState(() => {
     try { return persistence.storage.getItem(hintsStorageKey) === "on"; } catch { return false; }
   });
+  const [scoring, setScoring] = useState<ScoringFormat>(() => {
+    try { return persistence.storage.getItem(scoringStorageKey) === "single" ? "single" : "rubber"; } catch { return "rubber"; }
+  });
+  const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
   const [bidHint, setBidHint] = useState<{ game: GameState; bid: Bid; reason: string }>();
   const [playHint, setPlayHint] = useState<{ game: GameState; cardIds: ReadonlySet<string>; reason: string }>();
   const [explainedCall, setExplainedCall] = useState<{ key: string; index: number }>();
@@ -148,12 +160,18 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       currentHandId,
       currentGame: game,
       ...(currentPbnMetadata ? { currentPbnMetadata } : {}),
-      completedHands
+      completedHands,
+      rubber
     };
     latestSoloData.current = nextData;
     saveSoloData(persistence.storage, nextData);
     setSoloData(nextData);
-  }, [game, currentHandId, currentPbnMetadata]);
+  }, [game, currentHandId, currentPbnMetadata, rubber]);
+
+  // A rubber hand is scored when it ends, and loses its score again if it is taken back from the end.
+  useEffect(() => {
+    if (game && currentHandId) setRubber((current) => recordRubberHand(current, currentHandId, game));
+  }, [game, currentHandId]);
 
   useEffect(() => {
     const dummyIsHumanControlled = !!game?.contract && game.phase === "play" &&
@@ -238,6 +256,11 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     setExplainedCall(undefined);
     try { persistence.storage.setItem(hintsStorageKey, next ? "on" : "off"); } catch { /* the choice just won't be remembered */ }
   }
+
+  function chooseScoring(next: ScoringFormat) {
+    setScoring(next);
+    try { persistence.storage.setItem(scoringStorageKey, next); } catch { /* the choice just won't be remembered */ }
+  }
   const phaseLabel = shownGame?.phase === "complete" ? "Hand complete" : "Passed out";
   const displayedTrick = !isReviewing && temporaryTrick?.handId === currentHandId
     ? temporaryTrick.cards
@@ -247,8 +270,17 @@ export default function App({ solver }: { solver?: Solver } = {}) {
 
   function startHand() {
     const id = createHandId();
+    let handDealer = dealer;
+    let handVulnerability = vulnerability;
+    if (scoring === "rubber") {
+      // Rubber deals rotate the dealer and take vulnerability from games won; a finished rubber starts a new one.
+      const next = nextRubberDeal(rubber, dealer);
+      setRubber({ ...next.rubber, activeHandId: id });
+      handDealer = next.dealer;
+      handVulnerability = next.vulnerability;
+    }
     setCurrentHandId(id);
-    setGame(createGameState({ deal: deal(), dealer, vulnerability }));
+    setGame(createGameState({ deal: deal(), dealer: handDealer, vulnerability: handVulnerability }));
     setCurrentPbnMetadata(undefined);
     setAuctionShown(false);
     setReviewHandId(undefined);
@@ -406,11 +438,15 @@ export default function App({ solver }: { solver?: Solver } = {}) {
 
   const online = serviceUrl() !== undefined;
   const goOnline = () => { location.hash = "#/online"; };
+  const rubberSummary = summarizeRubber(rubber);
+  const rubberUnderway = !!rubber.lastDealer && !rubberSummary.winner;
   const dealSettings = <>
-    <label>Dealer<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-    <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label>
+    <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => chooseScoring(event.target.value as ScoringFormat)}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
+    {scoring === "single" || !rubberUnderway ? <label>{scoring === "rubber" ? "First dealer" : "Dealer"}<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label> : null}
+    {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
     {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+    <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
   </>;
   const pbnImportForm = <details className="pbn-import">
     <summary>Import a PBN deal</summary>
@@ -482,6 +518,10 @@ export default function App({ solver }: { solver?: Solver } = {}) {
         {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
         {!isReviewing && liveTurn ? <button className="secondary-button menu-deal" type="button" aria-pressed={botsFinishing} onClick={(event) => { closeMenu(event); setBotsFinishHandId(botsFinishing ? undefined : currentHandId); }}>{botsFinishing ? "Take back control" : "Let bots finish this hand"}</button> : null}
         {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section> : null}
+        {!isReviewing && scoring === "rubber" ? <section className="rubber-menu" aria-label="Rubber">
+          <RubberScoresheet summary={rubberSummary} />
+          <button className="secondary-button" type="button" onClick={(event) => { closeMenu(event); setRubber(emptyRubber()); }}>Start a new rubber</button>
+        </section> : null}
         {/* Not named "Play …": the in-game tests and card buttons treat /^Play / as a playable card. */}
         {online ? <button className="secondary-button menu-deal" type="button" onClick={goOnline}>Online tables</button> : null}
         {pbnImportForm}
@@ -492,13 +532,19 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     {fullscreenButton}
   </>;
 
+  // The live hand counts towards the rubber when it was dealt for it, whatever the scoring choice for the next deal.
+  const inRubber = !isReviewing && !!currentHandId && rubber.activeHandId === currentHandId;
+  const rubberHand = inRubber ? rubber.hands.find((hand) => hand.handId === currentHandId) : undefined;
+  const duplicateScore = shownGame.score?.score ?? 0;
   const tableOverlay = <>
     {phase === "complete" && shownGame.score && contract ? <section className={`score-panel ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
       <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
-      <p>{shownGame.score.tricksTaken} tricks for {samePartnership(contract.declarer, "north") ? "NS" : "EW"} · {shownGame.score.score > 0 ? "+" : ""}{shownGame.score.score} NS</p>
-      {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}
+      <ContractOutcome score={shownGame.score} />
+      <p className="hand-points-line">{rubberHand ? rubberHandText(rubberHand) : `${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
+      {inRubber ? <RubberScoresheet summary={rubberSummary} /> : null}
+      {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>{inRubber && rubberSummary.winner ? "Deal a new rubber" : "Next deal"}</button> : null}
     </section> : null}
-    {phase === "passed-out" ? <div className="score-panel"><h2>Passed out</h2>{!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}</div> : null}
+    {phase === "passed-out" ? <div className="score-panel"><h2>Passed out</h2>{inRubber ? <RubberScoresheet summary={rubberSummary} /> : null}{!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}</div> : null}
 
     {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">
       <button className="secondary-button" aria-label="Previous action" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}><span aria-hidden="true">‹</span> Previous</button>

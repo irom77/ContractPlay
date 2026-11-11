@@ -14,6 +14,7 @@ A player learning at the table wants three things on request: what partner's or 
 - **Call meanings.** With hints on, each call chip beside a seat is clickable and shows a short meaning next to that seat. Esc, clicking elsewhere, or clicking the chip again closes it.
 - **Suggested card.** On the user's turn to play (including from dummy as declarer), one card is highlighted with a one-line reason.
 - **Hints off.** No points, highlights, or clickable calls.
+- **Online tables.** The same switch and hint behavior is available to a seated player during a live hand. The browser computes hints from that player's visible hand, public auction, current trick, and dummy when visible; the service protocol does not change and hidden hands are never used.
 
 ## Decisions made by the builder
 
@@ -33,4 +34,5 @@ A player learning at the table wants three things on request: what partner's or 
 
 - `packages/bots/src/hints.test.ts` covers meanings by situation, play reasons, and that every bot call in seeded auctions has a meaning and every suggested card is legal.
 - `apps/client/src/App.test.tsx` covers the switch default, persistence, points, the highlighted bid, call meanings, and card hints with and without a solver.
+- `apps/client/src/online/OnlineTable.test.tsx` covers default-off and remembered toggle state, online bid/call hints, and legal card hints from the visible hand.
 - Screenshots at 1280×720, 1024×768, and 390×844 confirm nothing scrolls or leaves the window with hints and a meaning open.

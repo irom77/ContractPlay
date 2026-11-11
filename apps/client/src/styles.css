@@ -244,6 +244,23 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .score-panel h2 .red-card { color: #ff6b62; }
 .score-panel p { margin: 0; color: #d6e0d8; font-size: var(--text-l); }
 .score-panel-hidden { visibility: hidden; }
+.score-panel .contract-outcome { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: calc(.6 * var(--u)) calc(1.4 * var(--u)); }
+.contract-outcome strong { border-radius: 999px; padding: calc(.3 * var(--u)) calc(1.4 * var(--u)); font-size: var(--text-l); }
+.outcome-made strong { background: var(--gold); color: var(--deep); }
+.outcome-down strong { background: #b8423b; color: #fdfcf8; }
+.score-panel .hand-points-line { font-size: var(--text-m); }
+.rubber-sheet { border-collapse: collapse; min-width: calc(30 * var(--u)); color: #d6e0d8; font-size: var(--text-m); font-variant-numeric: tabular-nums; }
+.rubber-sheet caption { padding-bottom: calc(.6 * var(--u)); color: var(--gold); font-weight: 700; }
+.rubber-sheet th, .rubber-sheet td { padding: calc(.3 * var(--u)) calc(1.2 * var(--u)); text-align: right; }
+.rubber-sheet th[scope="row"] { text-align: left; font-weight: 600; }
+.rubber-sheet thead th { border-bottom: 1px solid rgba(255, 255, 255, .2); }
+.rubber-sheet .first-game th, .rubber-sheet .first-game td { border-top: 2px solid rgba(255, 255, 255, .55); }
+.rubber-sheet .game-winner { color: var(--gold); font-weight: 800; }
+.rubber-sheet tfoot th, .rubber-sheet tfoot td { border-top: 1px solid rgba(255, 255, 255, .2); font-weight: 800; }
+.menu-settings .setup-check, .setup-controls .setup-check { display: flex; flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px; }
+.setup-check input { width: auto; margin: 0; }
+.contract-outcome span + span::before { content: "· "; color: #8fa59a; }
+.rubber-menu { display: grid; gap: var(--u); justify-items: start; margin-top: 6px; border-top: 1px solid rgba(255, 255, 255, .12); padding-top: 10px; }
 
 .error-message { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: calc(2 * var(--u)); max-width: min(420px, calc(100% - 4 * var(--u))); margin: 0; border-left: 3px solid #ff8a78; border-radius: 6px; padding: 9px 13px; background: rgba(60, 16, 14, .94); color: #ffd9d0; font-size: var(--text-m); box-shadow: 0 6px 18px #0008; }
 .app-shell > .error-message { bottom: 16px; left: 16px; }

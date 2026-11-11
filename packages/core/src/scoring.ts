@@ -12,15 +12,16 @@ export type ContractScore = Readonly<{
   vulnerable: boolean;
 }>;
 
-const partnership = (seat: Seat): "NS" | "EW" =>
+export const partnership = (seat: Seat): "NS" | "EW" =>
   seat === "north" || seat === "south" ? "NS" : "EW";
 
-function isVulnerable(seat: Seat, vulnerability: Vulnerability): boolean {
+export function isVulnerable(seat: Seat, vulnerability: Vulnerability): boolean {
   const side = partnership(seat);
   return vulnerability === "Both" || vulnerability === side;
 }
 
-function contractTrickPoints(contract: Contract): number {
+/** Points below the line for a made contract, including the doubling multiplier. */
+export function contractTrickPoints(contract: Contract): number {
   const undoubled = contract.strain === "clubs" || contract.strain === "diamonds"
     ? contract.level * 20
     : contract.strain === "notrump"
@@ -29,7 +30,8 @@ function contractTrickPoints(contract: Contract): number {
   return undoubled * (contract.doubled === 0 ? 1 : contract.doubled === 1 ? 2 : 4);
 }
 
-function undertrickPenalty(count: number, vulnerable: boolean, doubled: 0 | 1 | 2): number {
+/** Penalty for going down, the same in rubber and duplicate scoring. */
+export function undertrickPenalty(count: number, vulnerable: boolean, doubled: 0 | 1 | 2): number {
   if (doubled === 0) return count * (vulnerable ? 100 : 50);
   let penalty = 0;
   for (let under = 1; under <= count; under++) {

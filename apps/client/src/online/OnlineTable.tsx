@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { GameAction, Seat, TrickCard } from "@contractplay/core";
+import { cardId, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
+import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createHandName, handNameFromId } from "../handNames.js";
 import { TableView } from "../table/TableView.js";
-import { partnerOf, seatNames } from "../table/labels.js";
+import { compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
@@ -16,6 +17,7 @@ const IDLE_MS = 120_000;
 const TRICK_HOLD_MS = 2000;
 const NOTICE_MS = 5000;
 const HISTORY_LIMIT = 25;
+const HINTS_STORAGE_KEY = "contractplay.hints";
 
 export type OnlineTableProps = { baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect };
 
@@ -65,6 +67,26 @@ function receive(previous: Received, view: TableViewData): Received {
   return previous.hold ? { view, hold: previous.hold } : { view };
 }
 
+function publicPlayContext(game: PublicGame): PlayContext {
+  const seat = game.currentActor;
+  const contract = game.contract;
+  const visibleSeat = contract
+    ? seat === partnerOf(contract.declarer) ? contract.declarer : partnerOf(contract.declarer)
+    : undefined;
+  const dummyVisible = game.currentTrick.length > 0 || game.completedTricks.length > 0;
+  const visibleHand = dummyVisible && visibleSeat && game.hands[visibleSeat].length ? game.hands[visibleSeat] : undefined;
+  return {
+    seat,
+    hand: game.hands[seat],
+    currentTrick: game.currentTrick,
+    ...(game.currentTrick[0] ? { ledSuit: game.currentTrick[0].card.suit } : {}),
+    ...(contract?.strain !== "notrump" && contract ? { trump: contract.strain } : {}),
+    ...(contract ? { declarer: contract.declarer } : {}),
+    ...(visibleHand ? { visibleHand } : {}),
+    played: game.completedTricks.flatMap((trick) => trick.map(({ card }) => card))
+  };
+}
+
 export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
   if (!identity) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
@@ -82,6 +104,12 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const [turn, setTurn] = useState<{ key: string; since: number }>();
   const [idleTurn, setIdleTurn] = useState<string>();
   const [copyNote, setCopyNote] = useState<string>();
+  const [hintsOn, setHintsOn] = useState(() => {
+    try { return storage.getItem(HINTS_STORAGE_KEY) === "on"; } catch { return false; }
+  });
+  const [bidHint, setBidHint] = useState<{ view: TableViewData; bid: Bid; reason: string }>();
+  const [playHint, setPlayHint] = useState<{ view: TableViewData; cardIds: ReadonlySet<string>; reason: string }>();
+  const [explainedCall, setExplainedCall] = useState<{ handNumber: number; auctionLength: number; index: number }>();
   const connection = useRef<TableConnection | undefined>(undefined);
   const previousHand = useRef<number | undefined>(undefined);
 
@@ -138,6 +166,48 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     return () => clearTimeout(timer);
   }, [turn]);
 
+  const toggleHints = () => setHintsOn((current) => {
+    const next = !current;
+    try { storage.setItem(HINTS_STORAGE_KEY, next ? "on" : "off"); } catch { /* Hints remain available for this visit. */ }
+    return next;
+  });
+
+  useEffect(() => {
+    if (!view?.game || !view.yourSeat || !hintsOn || !isLive(view.game)) return;
+    const game = view.game;
+    const seat = game.currentActor;
+    const seatInfo = view.seats[view.yourSeat];
+    const hasStandIn = seatInfo.kind === "human" && seatInfo.standIn !== undefined;
+    const canHint = !hasStandIn && deciderOf(game) === view.yourSeat;
+    if (!canHint) return;
+    let cancelled = false;
+    const failed = () => { if (!cancelled) setNotice({ text: "Unable to get a hint. Please try again." }); };
+    if (game.phase === "auction") {
+      suggestBid(game.hands[seat], game.auction, seat, view.style).then((suggestion) => {
+        if (!cancelled && isCallAvailable(game, suggestion.bid)) setBidHint({ view, ...suggestion });
+      }).catch(failed);
+    } else {
+      suggestPlay(publicPlayContext(game)).then(({ card, reason }) => {
+        if (!cancelled) setPlayHint({ view, cardIds: new Set([cardId(card)]), reason });
+      }).catch(failed);
+    }
+    return () => { cancelled = true; };
+  }, [view, hintsOn]);
+
+  useEffect(() => {
+    setExplainedCall((shown) => shown && (shown.handNumber !== view?.handNumber || shown.auctionLength !== view?.game?.auction.length) ? undefined : shown);
+  }, [view?.handNumber, view?.game?.auction.length]);
+
+  useEffect(() => {
+    if (explainedCall === undefined) return;
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !(event.target as HTMLElement | null)?.closest?.(".seat-auction-call, .call-meaning")) setExplainedCall(undefined);
+    };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", close);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", close); };
+  }, [explainedCall]);
+
   const send = (message: Outgoing) => {
     setNotice(undefined);
     connection.current?.send(message);
@@ -176,6 +246,12 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     const standIn = mine.kind === "human" && mine.standIn !== undefined;
     const decider = deciderOf(game);
     const actingSeat = live && !standIn && decider === yourSeat ? game.currentActor : undefined;
+    const canHintNow = live && !standIn && decider === yourSeat;
+    const visibleBidHint = hintsOn && canHintNow && game.phase === "auction" && bidHint?.view === view ? bidHint : undefined;
+    const visiblePlayHint = hintsOn && canHintNow && game.phase === "play" && playHint?.view === view ? playHint : undefined;
+    const shownExplanation = explainedCall?.handNumber === view.handNumber && explainedCall.auctionLength === game.auction.length
+      ? explainedCall.index
+      : undefined;
     const inputDisabled = waiting || status !== "open" || holding;
     const act = (action: GameAction) => {
       if (inputDisabled) return;
@@ -215,8 +291,26 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
               onHandToBot={canHandToBot(seat) ? () => send({ type: "handToBot", seat }) : undefined} seat={seat} />}
             onBid={(bid) => act({ type: "bid", seat: game.currentActor, bid })}
             onPlay={(seat, card) => act({ type: "play", seat, card })}
+            hintedBid={visibleBidHint?.bid}
+            hintedCards={visiblePlayHint?.cardIds}
+            explainCall={hintsOn ? {
+              shown: shownExplanation,
+              onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { handNumber: view.handNumber, auctionLength: game.auction.length, index }),
+              text: (index) => {
+                const callSeat = game.auction[index]!.seat;
+                const info = view.seats[callSeat];
+                const skill = info.kind === "bot" ? info.skill : info.kind === "human" && info.standIn ? info.standIn : "expert";
+                return explainBid(game.auction, index, view.style, skill);
+              }
+            } : undefined}
             tools={<><span className="online-totals">{totals}</span>{backButton}</>}
             overlay={<>
+              {live ? <div className="hint-controls">
+                {hintsOn && actingSeat && game.phase === "auction" ? <strong className="hand-points" aria-label={`${highCardPoints(game.hands[game.currentActor])} high-card points`}>{highCardPoints(game.hands[game.currentActor])} HCP</strong> : null}
+                {visibleBidHint && game.phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
+                {visiblePlayHint && game.phase === "play" ? <p role="status">{visiblePlayHint.reason}</p> : null}
+                <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
+              </div> : null}
               {standIn ? <div className="online-resume" role="group" aria-label="A bot is playing for you">
                 <span>A bot is playing for you.</span>
                 <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>Take my seat back</button>

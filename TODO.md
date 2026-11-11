@@ -12,9 +12,15 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 
 - [ ] Validate signed installers and an iPhone/iPad device or App Store build when platform certificates, developer accounts, and devices are available.
 
+## Scoring
+
+- [x] Score solo play as rubber bridge by default, with single deals as an option.
+- [ ] Decide whether online tables should also score rubbers; they keep running duplicate totals for now.
+
 ## Online multiplayer
 
 - [x] Deploy the online tables to Cloudflare: live at https://contractplay.niuk.workers.dev; the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set, so pushes to `main` deploy automatically.
+- [x] Add solo-style bidding, card-play, and call-meaning hints to online tables; suggestions use only the viewer's visible cards and public play.
 - [ ] Repeat the two-window check on the deployed address and confirm the Workers free-plan CPU limit holds for bot decisions (if not, the paid Workers plan is the owner's decision), then switch GitHub Pages to a redirect.
 - [ ] Offer online play in the desktop and iOS builds (allow the service address in the app's content security policy and add cross-origin access on the service).
 - [ ] Set up `bridge.romaniuk.us` as the public address for online multiplayer. A CNAME at Squarespace will not work; a Workers custom domain needs the zone on Cloudflare. Steps for the owner: add `romaniuk.us` to Cloudflare (Free plan) and check the imported records, especially email (MX, TXT); switch the name servers in Squarespace Domains to the two Cloudflare gives (registration stays at Squarespace); once active, add `bridge.romaniuk.us` under Workers & Pages → `contractplay` → Settings → Domains & Routes → Custom domain. Then record the custom domain in `apps/server` wrangler configuration so deploys keep it, and point the GitHub Pages redirect at it.

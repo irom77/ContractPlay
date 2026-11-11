@@ -45,14 +45,11 @@ The CI simulator build does not require Apple signing credentials. Device instal
 
 ## Online tables on Cloudflare
 
-Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). Nothing is deployed yet: the web app is still served from GitHub Pages, whose build is made with `VITE_ONLINE_URL=none` and so has no online entry, until the project owner deploys to Cloudflare and confirms it works. After that, GitHub Pages is to become a redirect to the new address (a planned follow-up).
+Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). The service is live at https://contractplay.niuk.workers.dev. The GitHub Pages build uses `VITE_ONLINE_URL=none` and has no online entry; switching Pages to a redirect is a planned follow-up.
 
-### First deployment
+### Deployment
 
-1. Create a free Cloudflare account.
-2. From the repository root, run `pnpm --filter @contractplay/server exec wrangler login` and approve access in the browser.
-3. Run `pnpm run deploy` (plain `pnpm deploy` is a different, built-in pnpm command). It runs `pnpm web:verify` and then `wrangler deploy` in `apps/server`. Wrangler prints the address, of the form `https://contractplay.<account-subdomain>.workers.dev`.
-4. Open the address in two browser windows and play a table to confirm it works.
+Pushes to `main` trigger the Cloudflare workflow. It installs dependencies, verifies and builds the web app, then deploys the Worker. The repository's GitHub Actions secrets provide the Cloudflare credentials; keep them out of source control. For a manual deployment, run `pnpm run deploy` from the repository root (plain `pnpm deploy` is a different, built-in pnpm command).
 
 Use `wrangler deploy --dry-run` in `apps/server` (after `pnpm build`) to check that the configuration bundles without deploying.
 

@@ -326,7 +326,8 @@ describe("bridge table", () => {
     const menu = screen.getByLabelText("Table menu").closest("details");
     expect(menu).toBeTruthy();
     await user.click(screen.getByLabelText("Table menu"));
-    expect(within(menu!).getByLabelText("Dealer")).toBeTruthy();
+    expect(within(menu!).getByLabelText("Scoring")).toBeTruthy();
+    expect(within(menu!).getByRole("table", { name: "Rubber score" })).toBeTruthy();
     expect(within(menu!).getByText("Import a PBN deal")).toBeTruthy();
     expect(within(menu!).getByRole("region", { name: "Recent hands" })).toBeTruthy();
     await user.click(within(menu!).getByText("Import a PBN deal"));
@@ -719,7 +720,11 @@ describe("bridge table", () => {
     }
 
     expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "Hand result" }).textContent).toContain("tricks for NS");
+    const result = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(result.getByText(/^(Made|Down \d+)$/)).toBeTruthy();
+    expect(result.getByText(/^\d+ of 7 tricks needed$/)).toBeTruthy();
+    expect(result.getByText(/^(\d+ (over|under)tricks?|exactly)$/)).toBeTruthy();
+    expect(result.getByRole("table", { name: "Rubber score" })).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Table menu"));
     expect(screen.getByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toBeTruthy();
     expect(loadSoloData(window.localStorage).completedHands[0]!.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
@@ -729,6 +734,7 @@ describe("bridge table", () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
+    await user.selectOptions(screen.getByLabelText("Scoring"), "single");
     await user.selectOptions(screen.getByLabelText("Dealer"), "south");
     await user.selectOptions(screen.getByLabelText("Vulnerability"), "Both");
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
@@ -818,9 +824,112 @@ describe("bridge table", () => {
     await waitFor(() => expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card")).toHaveLength(3));
   });
 
+  function storeRubber(rubber: object, game: GameState | null = null) {
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({
+      version: 1, currentHandId: game ? "test-hand" : null, currentGame: game, completedHands: [], rubber
+    }));
+  }
+
+  it("scores rubber bridge by default, rotating the dealer and making a side vulnerable once it wins a game", async () => {
+    const user = userEvent.setup();
+    storeRubber({ hands: [{ handId: "h1", below: { NS: 120, EW: 0 }, above: { NS: 0, EW: 0 } }], lastDealer: "north" });
+    const { container } = render(<App />);
+
+    expect((screen.getByLabelText("Scoring") as HTMLSelectElement).value).toBe("rubber");
+    expect(screen.queryByLabelText("Vulnerability")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+
+    expect(container.querySelector(".seat-east.dealer-seat")).toBeTruthy();
+    expect([...container.querySelectorAll(".vulnerable-seat")].map((seat) => [...seat.classList].find((name) => name.startsWith("seat-")))).toEqual(["seat-north", "seat-south"]);
+    await user.click(screen.getByLabelText("Table menu"));
+    expect(screen.getByRole("table", { name: "Rubber score" }).textContent).toContain("Games NS 1 · EW 0 · NS vulnerable");
+  });
+
+  it("adds a finished rubber hand to the scoresheet and keeps it after a reload", () => {
+    const finished = completedGame();
+    storeRubber({ hands: [], lastDealer: "north", activeHandId: "test-hand" }, finished);
+    render(<App />);
+
+    const result = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(document.querySelector(".hand-points-line")?.textContent).toMatch(/the line$/);
+    expect(result.getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    expect(loadSoloData(window.localStorage).rubber?.hands.map((hand) => hand.handId)).toEqual(["test-hand"]);
+  });
+
+  it("offers a new rubber once a side has won two games and starts it unvulnerable", async () => {
+    const user = userEvent.setup();
+    const finished = completedGame();
+    storeRubber({ hands: [
+      { handId: "h1", below: { NS: 0, EW: 120 }, above: { NS: 0, EW: 0 } },
+      { handId: "h2", below: { NS: 0, EW: 100 }, above: { NS: 0, EW: 0 } }
+    ], lastDealer: "north", activeHandId: "test-hand" }, finished);
+    const { container } = render(<App />);
+
+    // The stored rubber was already over, so this hand's score is ignored and the panel offers a fresh rubber.
+    expect(within(screen.getByRole("region", { name: "Hand result" })).getByRole("table", { name: "Rubber score" }).textContent).toContain("EW win the rubber 2–0 (+700 bonus)");
+    await user.click(screen.getByRole("button", { name: "Deal a new rubber" }));
+
+    expect(container.querySelectorAll(".vulnerable-seat")).toHaveLength(0);
+    expect(container.querySelector(".seat-north.dealer-seat")).toBeTruthy();
+    expect(loadSoloData(window.localStorage).rubber?.hands).toEqual([]);
+  });
+
+  it("switches hints on from the deal settings before a hand starts", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("checkbox", { name: "Show hints while bidding and playing" }));
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+
+    expect(screen.getByRole("switch", { name: "Hints" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  function gameWithContract(calls: readonly string[]) {
+    let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+    for (const bid of calls) {
+      const result = applyAction(game, { type: "bid", seat: game.currentActor, bid: bid as never });
+      if (!result.ok) throw new Error(result.error.message);
+      game = result.state;
+    }
+    return game;
+  }
+
+  async function playAsSouthAgainstBots() {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByLabelText("Table menu"));
+    await user.selectOptions(screen.getByLabelText("Opponents"), "bots");
+    await user.selectOptions(screen.getByLabelText("Your seat"), "south");
+    return user;
+  }
+
+  it("lets the human declarer play both their own hand and the bot dummy's hand", async () => {
+    // South declares 1NT; West (bot) leads, then North is dummy.
+    storeCurrentGame(gameWithContract(["pass", "pass", "1notrump", "pass", "pass", "pass"]));
+    const user = await playAsSouthAgainstBots();
+
+    await waitFor(() => expect(screen.getByText("North to play")).toBeTruthy());
+    const dummyButtons = within(screen.getByRole("region", { name: "North's dummy hand" })).getAllByRole("button", { name: /^Play / });
+    const ledSuit = Object.entries({ "♠": "spades", "♥": "hearts", "♦": "diamonds", "♣": "clubs" })
+      .find(([symbol]) => screen.getByRole("region", { name: "Current trick" }).textContent?.includes(symbol))?.[1];
+    await user.click(dummyButtons.find((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`)) ?? dummyButtons[0]!);
+
+    await waitFor(() => expect(screen.getByText("South to play")).toBeTruthy());
+    expect(within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / }).length).toBe(13);
+  });
+
+  it("lets the human play their own cards when the bot partner declares", async () => {
+    // North (bot partner) declares 1NT, so South is dummy; East (bot) leads.
+    storeCurrentGame(gameWithContract(["1notrump", "pass", "pass", "pass"]));
+    await playAsSouthAgainstBots();
+
+    await waitFor(() => expect(screen.getByText("South to play")).toBeTruthy());
+    expect(within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
+  });
+
   it("discards a queued bot decision when the user deals a replacement hand", async () => {
     vi.useFakeTimers();
     render(<App />);
+    fireEvent.change(screen.getByLabelText("Scoring"), { target: { value: "single" } });
     fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
     fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));

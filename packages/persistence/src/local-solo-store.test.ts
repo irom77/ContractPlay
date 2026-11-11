@@ -78,6 +78,16 @@ describe("local solo store", () => {
     expect(loadSoloData(storage).completedHands.map((hand) => hand.name)).toEqual(["Bold Finesse", undefined]);
   });
 
+  it("keeps the rubber in progress and drops a malformed one", () => {
+    const storage = new MemoryStorage();
+    const rubber = { hands: [{ handId: "h1", below: { NS: 60, EW: 0 }, above: { NS: 30, EW: 0 } }], lastDealer: "east" as const, activeHandId: "h2" };
+    saveSoloData(storage, { version: 1, currentHandId: null, currentGame: null, completedHands: [], rubber });
+    expect(loadSoloData(storage).rubber).toEqual(rubber);
+
+    storage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: null, currentGame: null, completedHands: [], rubber: { hands: [{ handId: "h1", below: 60 }] } }));
+    expect(loadSoloData(storage).rubber).toBeUndefined();
+  });
+
   it("recovers from malformed saved JSON", () => {
     const storage = new MemoryStorage();
     storage.setItem("contractplay.solo", "{bad json");

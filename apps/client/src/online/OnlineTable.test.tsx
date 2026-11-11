@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Profiler } from "react";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { applyAction, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
 import { loadSoloData, type StorageLike } from "@contractplay/persistence";
@@ -97,8 +97,8 @@ function frameNow(): Frame {
   };
 }
 
-function setup(options: { named?: boolean } = {}) {
-  const storage = memoryStorage();
+function setup(options: { named?: boolean; storage?: StorageLike } = {}) {
+  const storage = options.storage ?? memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const service = fakeService();
   const onLeave = vi.fn();
@@ -204,6 +204,50 @@ describe("OnlineTable seating", () => {
     expect(screen.queryByRole("region", { name: "Current trick" })).toBeNull();
     expect(screen.queryAllByRole("img", { name: / of (spades|hearts|diamonds|clubs)$/ })).toHaveLength(0);
   });
+
+  it("keeps online hints off by default and shows points, a suggested call, and call meanings when enabled", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const game = newGame();
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "north", seats: seatedNorth, game: publicGame(game, ["north"]) }));
+
+    const toggle = screen.getByRole("switch", { name: "Hints" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(document.querySelector(".hinted-bid, .hand-points, .call-meaning")).toBeNull();
+    await user.click(toggle);
+
+    await screen.findByText(/Suggested:/);
+    expect(document.querySelectorAll(".hinted-bid")).toHaveLength(1);
+    expect(screen.getByLabelText(/high-card points/)).toBeTruthy();
+    const afterCall = apply(game, { type: "bid", seat: "north", bid: "1clubs" });
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "north", seats: seatedNorth, game: publicGame(afterCall, ["north"]) }));
+    const explainedCall = screen.getByRole("button", { name: "Explain North's 1 clubs" });
+    await user.click(explainedCall);
+    expect(document.querySelector(".call-meaning")?.textContent).toContain("Opening bid");
+    expect(service.storage.getItem("contractplay.hints")).toBe("on");
+    service.unmount();
+    const reloaded = setup({ storage: service.storage });
+    reloaded.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "north", seats: seatedNorth, game: publicGame(afterCall, ["north"]) }));
+    expect(screen.getByRole("switch", { name: "Hints" }).getAttribute("aria-checked")).toBe("true");
+    reloaded.unmount();
+  });
+
+  it("highlights a suggested legal card on the seated player's lead", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const game = apply(createGameState({ deal: deal(createDeck()), dealer: "west", vulnerability: "None" }),
+      { type: "bid", seat: "west", bid: "1notrump" },
+      { type: "bid", seat: "north", bid: "pass" },
+      { type: "bid", seat: "east", bid: "pass" },
+      { type: "bid", seat: "south", bid: "pass" });
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "north", seats: seatedNorth, game: publicGame(game, ["north"]) }));
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
+
+    await waitFor(() => expect(document.querySelectorAll(".hinted-card")).toHaveLength(1));
+    const suggested = document.querySelector(".hinted-card");
+    expect(suggested?.getAttribute("aria-label")).toMatch(/^Play /);
+    expect(document.querySelector(".hint-controls [role=status]")?.textContent).toBeTruthy();
+  });
 });
 
 describe("OnlineTable play", () => {
@@ -257,6 +301,20 @@ describe("OnlineTable play", () => {
     expect(buttons).toHaveLength(13);
     await user.click(dummy.getByRole("button", { name: `Play ${cardLabel(card)}` }));
     expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 12, action: { type: "play", seat: "south", card } }]);
+  });
+
+  it("shows the suggested dummy card to declarer without exposing another hand", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const game = playCards(oneNoTrump(), 1);
+    service.push(inHand(game, ["north", "south"]));
+    await user.click(screen.getByRole("switch", { name: "Hints" }));
+
+    await waitFor(() => expect(document.querySelectorAll(".hinted-card")).toHaveLength(1));
+    const dummy = within(screen.getByRole("region", { name: "South's dummy hand" }));
+    expect(dummy.getAllByRole("button", { name: /^Play / }).find((button) => button.classList.contains("hinted-card"))?.getAttribute("aria-label")).toMatch(/^Play /);
+    expect(screen.queryByRole("region", { name: "East's hand" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "West's hand" })).toBeNull();
   });
 
   it("never lets dummy play", () => {

@@ -1,4 +1,4 @@
-import { isValidDeal, RANKS, SEATS, SUITS, type Deal, type GameState, type Seat, type Suit } from "@contractplay/core";
+import { isValidDeal, RANKS, SEATS, SUITS, type Deal, type GameState, type Rubber, type Seat, type Suit } from "@contractplay/core";
 
 const storageKey = "contractplay.solo";
 const legacyStorageKey = "bridgelab.solo";
@@ -23,6 +23,8 @@ export type SoloData = Readonly<{
   currentGame: GameState | null;
   currentPbnMetadata?: PbnMetadata;
   completedHands: readonly SavedHand[];
+  /** The rubber being played in rubber-bridge scoring; absent until the first rubber deal. */
+  rubber?: Rubber;
 }>;
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -84,6 +86,17 @@ function isSavedHand(value: unknown): value is SavedHand {
     (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata));
 }
 
+function isSidePoints(value: unknown): boolean {
+  return isRecord(value) && Number.isFinite(value.NS) && Number.isFinite(value.EW);
+}
+
+function isRubber(value: unknown): value is Rubber {
+  return isRecord(value) && Array.isArray(value.hands) &&
+    value.hands.every((hand) => isRecord(hand) && typeof hand.handId === "string" && isSidePoints(hand.below) && isSidePoints(hand.above)) &&
+    (value.lastDealer === undefined || isSeat(value.lastDealer)) &&
+    (value.activeHandId === undefined || typeof value.activeHandId === "string");
+}
+
 function normalize(value: unknown): SoloData {
   if (!isRecord(value)) return emptyData();
   if (value.version === 0) {
@@ -96,7 +109,8 @@ function normalize(value: unknown): SoloData {
     currentHandId: currentGame && typeof value.currentHandId === "string" ? value.currentHandId : null,
     currentGame,
     ...(isPbnMetadata(value.currentPbnMetadata) ? { currentPbnMetadata: value.currentPbnMetadata } : {}),
-    completedHands: Array.isArray(value.completedHands) ? value.completedHands.filter(isSavedHand) : []
+    completedHands: Array.isArray(value.completedHands) ? value.completedHands.filter(isSavedHand) : [],
+    ...(isRubber(value.rubber) ? { rubber: value.rubber } : {})
   };
 }
 
