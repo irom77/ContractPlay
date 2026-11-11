@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import type { ClientMessage, RefusalReason, ServerMessage, TableStyle, TableSummary, TableView } from "@contractplay/protocol";
+import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone";
@@ -8,10 +9,14 @@ export type TableConnection = { send(message: Exclude<ClientMessage, { type: "he
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000];
 const SOCKET_OPEN = 1;
 
-/** The online service origin: the build-time setting ("none" turns online play off), else the page origin when served over http(s). */
+/**
+ * The online service origin: undefined when the build setting is "none" or the app runs in the native (Tauri) shell
+ * (desktop and iOS builds do not offer online play yet), else the build-time setting, else the page origin when served over http(s).
+ */
 export function serviceUrl(): string | undefined {
   const configured = import.meta.env.VITE_ONLINE_URL;
   if (configured === "none") return undefined;
+  if (isNativeClient()) return undefined;
   if (configured) return configured;
   return location.protocol === "http:" || location.protocol === "https:" ? location.origin : undefined;
 }

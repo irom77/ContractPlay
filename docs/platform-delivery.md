@@ -67,13 +67,15 @@ To enable it:
 
 Cloudflare also publishes an official `cloudflare/wrangler-action`; this workflow runs `wrangler deploy` directly with the two environment variables instead, which Cloudflare's CI documentation describes.
 
-### Desktop and iOS builds
+### Service address; desktop and iOS builds
 
-The Cloudflare deployment serves the app and the tables from one address, so the web app uses its own origin as the service address. The GitHub Pages build (`deploy-web.yml`) sets `VITE_ONLINE_URL=none`, which hides "Play online" and "Online tables" because Pages has no service. Desktop and iOS builds have no http(s) origin, so set `VITE_ONLINE_URL` to the Cloudflare address (for example `https://contractplay.<account-subdomain>.workers.dev`) when building them; without it they have no service address and hide the same entries.
+The Cloudflare deployment serves the app and the tables from one address, so the web app uses its own origin as the service address. The GitHub Pages build (`deploy-web.yml`) sets `VITE_ONLINE_URL=none`, which hides "Play online" and "Online tables" because Pages has no service.
+
+Online play is available in the web app only for now; desktop and iOS builds do not show it. The app recognizes the native shell and hides the online entries there whatever `VITE_ONLINE_URL` says (on Windows the shell serves the app from an http address, `http://tauri.localhost`, which is not the service). Enabling it needs the service address allowed in the app's content security policy (`connect-src` in `apps/client/src-tauri/tauri.conf.json`) and cross-origin access on the service, which is planned.
 
 ### Free-plan limits
 
-The Worker uses SQLite-backed Durable Objects, the only kind available on the Workers Free plan. Cloudflare's published free-plan limits include 100,000 Worker requests per day, 100,000 Durable Object requests per day, 100,000 SQL rows written per day, and 10 ms of CPU time per Worker invocation. Check Cloudflare's pricing and limits pages for current values. The 10 ms CPU limit must be confirmed on the first real deployment against bot decisions, which are measured in the [design](superpowers/specs/2026-11-10-online-tables-design.md) under "Risks to check early" (about 7 ms for the first decision after a cold start in Node, about 0.05 ms on average). The service also applies its own limits: at most 100 listed and 400 unlisted tables, 10 table creations per network address per hour, and 32 identified and 8 total connections per address per table.
+The Worker uses SQLite-backed Durable Objects, the only kind available on the Workers Free plan. Cloudflare's published free-plan limits include 100,000 Worker requests per day, 100,000 Durable Object requests per day, 100,000 SQL rows written per day, and 10 ms of CPU time per Worker invocation. Check Cloudflare's pricing and limits pages for current values. The 10 ms CPU limit must be confirmed on the first real deployment against bot decisions, which are measured in the [design](superpowers/specs/2026-11-10-online-tables-design.md) under "Risks to check early" (about 7 ms for the first decision after a cold start in Node, about 0.05 ms on average). The service also applies its own limits: at most 100 listed and 400 unlisted tables, 10 table creations per network address per hour, at most 32 identified connections per table, at most 8 connections per network address per table, and at most 16 unidentified connections per table and 2 per address, each closed after 10 seconds.
 
 ### Attaching bridge.romaniuk.us later
 

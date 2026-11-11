@@ -15,6 +15,7 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 ## Online multiplayer
 
 - [ ] Deploy the online tables to Cloudflare (owner account and `wrangler login`; `pnpm run deploy`), confirm the Workers free-plan CPU limit against bot decisions and repeat the two-window check on the deployed address, add the repository secrets for the deploy workflow, then switch GitHub Pages to a redirect.
+- [ ] Offer online play in the desktop and iOS builds (allow the service address in the app's content security policy and add cross-origin access on the service).
 - [ ] Set up `bridge.romaniuk.us` as the public address for online multiplayer (domain managed by the project owner; it must use Cloudflare name servers to be a Workers custom domain).
 - [ ] Add sign-in (authentication) so a seat and hand history follow a person across devices.
 - [ ] Add permissions (authorization) beyond the current host and seated-player rules.

@@ -173,7 +173,7 @@ describe("connectTable", () => {
 });
 
 describe("serviceUrl", () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 
   it("prefers VITE_ONLINE_URL", () => {
     vi.stubEnv("VITE_ONLINE_URL", "https://play.example.org");
@@ -194,7 +194,19 @@ describe("serviceUrl", () => {
     vi.stubEnv("VITE_ONLINE_URL", "");
     vi.stubGlobal("location", { protocol: "tauri:", origin: "tauri://localhost" });
     expect(serviceUrl()).toBeUndefined();
-    vi.unstubAllGlobals();
+  });
+
+  it("is undefined in the native shell even though it serves the page over http", () => {
+    vi.stubEnv("VITE_ONLINE_URL", "");
+    vi.stubGlobal("isTauri", true);
+    vi.stubGlobal("location", { protocol: "http:", origin: "http://tauri.localhost" });
+    expect(serviceUrl()).toBeUndefined();
+  });
+
+  it("is undefined in the native shell even with a configured URL", () => {
+    vi.stubEnv("VITE_ONLINE_URL", "https://play.example.org");
+    vi.stubGlobal("isTauri", true);
+    expect(serviceUrl()).toBeUndefined();
   });
 });
 
