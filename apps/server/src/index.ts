@@ -9,6 +9,13 @@ export { TableObject } from "./table-object.js";
 const TABLE_ID = new RegExp(`^([${ID_ALPHABET}]{${LISTED_ID_LENGTH}}|[${ID_ALPHABET}]{${UNLISTED_ID_LENGTH}})$`);
 const STYLES: readonly unknown[] = ["SAYC", "2/1"] satisfies TableStyle[];
 
+/** SHA-256 hex of the client's IP (or of "unknown"), so the lobby's rate record never holds a raw IP. */
+async function clientKey(request: Request): Promise<string> {
+  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function createTable(request: Request, env: Env): Promise<Response> {
   const bad = () => Response.json({ error: "bad-request" }, { status: 400 });
   const text = await request.text();
@@ -19,7 +26,7 @@ async function createTable(request: Request, env: Env): Promise<Response> {
   const { name: rawName, style, listed } = body as Record<string, unknown>;
   const name = cleanName(rawName, MAX_TABLE_NAME);
   if (name === undefined || !STYLES.includes(style) || typeof listed !== "boolean") return bad();
-  const result = await lobbyOf(env).createTable({ name, style: style as TableStyle, listed });
+  const result = await lobbyOf(env).createTable({ name, style: style as TableStyle, listed }, await clientKey(request));
   return "error" in result ? Response.json(result, { status: 429 }) : Response.json(result, { status: 201 });
 }
 

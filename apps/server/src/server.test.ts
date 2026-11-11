@@ -14,9 +14,16 @@ const SECRET_B = "b".repeat(40);
 const LISTED_ID = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
 const UNLISTED_ID = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{12}$/;
 
-async function createTable(body: unknown): Promise<Response> {
-  return SELF.fetch("https://x/api/tables", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
+let ipCounter = 0;
+/** A fresh client IP, so per-IP limits do not couple unrelated tests. */
+const freshIp = () => { ipCounter += 1; return `10.${ipCounter >> 8}.${ipCounter & 255}.1`; };
+
+async function createTable(body: unknown, ip = freshIp()): Promise<Response> {
+  return SELF.fetch("https://x/api/tables", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", "CF-Connecting-IP": ip } });
 }
+
+const upgrade = (id: string, ip?: string) =>
+  SELF.fetch(`https://x/api/tables/${id}/ws`, { headers: { Upgrade: "websocket", ...(ip ? { "CF-Connecting-IP": ip } : {}) } });
 
 async function newTableId(listed = true, name = "Test table"): Promise<string> {
   const response = await createTable({ name, style: "SAYC", listed });
@@ -85,16 +92,16 @@ class Client {
     ws.addEventListener("close", () => { this.closed = true; this.wake?.(); });
   }
 
-  static async open(id: string): Promise<Client> {
-    const response = await SELF.fetch(`https://x/api/tables/${id}/ws`, { headers: { Upgrade: "websocket" } });
+  static async open(id: string, ip?: string): Promise<Client> {
+    const response = await upgrade(id, ip);
     expect(response.status).toBe(101);
     const ws = response.webSocket!;
     ws.accept();
     return new Client(ws);
   }
 
-  static async join(id: string, secret: string, name: string): Promise<{ client: Client; view: TableView }> {
-    const client = await Client.open(id);
+  static async join(id: string, secret: string, name: string, ip?: string): Promise<{ client: Client; view: TableView }> {
+    const client = await Client.open(id, ip);
     client.send({ type: "hello", version: 1, secret, name });
     const first = await client.next();
     if (first.type !== "view") throw new Error(`expected a view, got ${first.type}`);
@@ -260,28 +267,75 @@ describe("ids and limits", () => {
     }
   });
 
-  it("refuses a 33rd socket to one table with 429", async () => {
+  it("refuses a 33rd greeted socket to one table with 429", async () => {
     const id = await newTableId(false);
-    const open = await Promise.all(Array.from({ length: 32 }, () => Client.open(id)));
-    expect(open).toHaveLength(32);
-    const refused = await SELF.fetch(`https://x/api/tables/${id}/ws`, { headers: { Upgrade: "websocket" } });
-    expect(refused.status).toBe(429);
+    const ips = ["10.200.0.1", "10.200.0.2", "10.200.0.3", "10.200.0.4"];
+    for (let i = 0; i < 32; i++) await Client.join(id, SECRET_A, "Alice", ips[i % 4]);
+    expect((await upgrade(id, "10.200.0.5")).status).toBe(429);
   });
 
-  it("caps all tables, listed and unlisted, with too-many-tables", async () => {
+  it("refuses a 9th socket that has not sent hello with 429", async () => {
+    const id = await newTableId(false);
+    for (let i = 1; i <= 8; i++) await Client.open(id, `10.201.0.${i}`);
+    expect((await upgrade(id, "10.201.0.9")).status).toBe(429);
+  });
+
+  it("refuses a 9th socket from one IP while another IP still connects", async () => {
+    const id = await newTableId(false);
+    for (let i = 0; i < 8; i++) await Client.join(id, SECRET_A, "Alice", "10.202.0.1");
+    expect((await upgrade(id, "10.202.0.1")).status).toBe(429);
+    const { view } = await Client.join(id, SECRET_B, "Bob", "10.202.0.2");
+    expect(view.yourSeat).toBeUndefined();
+  });
+
+  it("closes a socket that has not sent hello within 10 s, but not a greeted one", async () => {
+    fakeClock();
+    const id = await newTableId(false);
+    const { client: greeted } = await Client.join(id, SECRET_A, "Alice");
+    const pending = await Client.open(id, "10.203.0.1");
+    vi.setSystemTime(Date.now() + 9_999);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect(pending.closed).toBe(false);
+    vi.setSystemTime(Date.now() + 1);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    await pending.waitClosed();
+    greeted.send({ type: "sit", seat: "north" });
+    expect((await greeted.viewAfter(0)).yourSeat).toBe("north");
+  });
+
+  it("caps listed and unlisted tables separately", async () => {
     const lobby = env.LOBBY.get(env.LOBBY.idFromName("lobby"));
     await runInDurableObject(lobby, async (instance: LobbyObject, state) => {
-      expect(instance.limits).toEqual({ listed: 100, total: 500 });
-      const total = (await state.storage.list({ prefix: "listed:" })).size + (await state.storage.list({ prefix: "unlisted:" })).size;
-      instance.limits = { listed: 100, total: total + 1 };
+      expect(instance.limits).toEqual({ listed: 100, unlisted: 400 });
+      const listed = (await state.storage.list({ prefix: "listed:" })).size;
+      const unlisted = (await state.storage.list({ prefix: "unlisted:" })).size;
+      const make = (listedTable: boolean) => instance.createTable({ name: "Capped", style: "SAYC", listed: listedTable }, `client-${freshIp()}`);
       try {
-        expect(await instance.createTable({ name: "Last one", style: "SAYC", listed: false })).toHaveProperty("id");
-        expect(await instance.createTable({ name: "Over", style: "SAYC", listed: false })).toEqual({ error: "too-many-tables" });
-        expect(await instance.createTable({ name: "Over", style: "SAYC", listed: true })).toEqual({ error: "too-many-tables" });
+        // unlisted full: unlisted refused, listed still created
+        instance.limits = { listed: listed + 1, unlisted };
+        expect(await make(false)).toEqual({ error: "too-many-tables" });
+        expect(await make(true)).toHaveProperty("id");
+        // listed full: listed refused, unlisted still created
+        instance.limits = { listed: listed + 1, unlisted: unlisted + 1 };
+        expect(await make(true)).toEqual({ error: "too-many-tables" });
+        expect(await make(false)).toHaveProperty("id");
       } finally {
-        instance.limits = { listed: 100, total: 500 };
+        instance.limits = { listed: 100, unlisted: 400 };
       }
     });
+  });
+
+  it("limits creation to 10 tables per client IP per rolling hour", async () => {
+    fakeClock();
+    const body = { name: "Mine", style: "SAYC", listed: false };
+    expect((await createTable({ name: "  ", style: "SAYC", listed: false }, "10.204.0.1")).status).toBe(400);
+    for (let i = 0; i < 10; i++) expect((await createTable(body, "10.204.0.1")).status).toBe(201);
+    const refused = await createTable(body, "10.204.0.1");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({ error: "too-many-requests" });
+    expect((await createTable(body, "10.204.0.2")).status).toBe(201);
+    vi.setSystemTime(Date.now() + 3_600_000);
+    expect((await createTable(body, "10.204.0.1")).status).toBe(201);
   });
 });
 
@@ -451,6 +505,18 @@ describe("a hand at an online table", () => {
 });
 
 describe("expiry", () => {
+  it("removes a table nobody ever connected to after 10 minutes", async () => {
+    fakeClock();
+    const id = await newTableId();
+    vi.setSystemTime(Date.now() + 599_999);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await listTables()).map((t) => t.id)).toContain(id);
+    vi.setSystemTime(Date.now() + 1);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await listTables()).map((t) => t.id)).not.toContain(id);
+    expect(await storedState(id)).toBeUndefined();
+  });
+
   it("deletes a table with nobody connected for 24 hours and removes it from the lobby", async () => {
     const id = await newTableId();
     const stub = stubFor(id);

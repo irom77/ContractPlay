@@ -6,16 +6,27 @@ import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/ta
 import { lobbyOf } from "./lobby-object.js";
 
 const STATE_KEY = "state";
-/** Most open sockets one table accepts. */
+/** Most open sockets one table accepts that have completed `hello`. */
 export const MAX_SOCKETS_PER_TABLE = 32;
+/** Most open sockets one table holds that have not completed `hello` yet. */
+export const MAX_PENDING_SOCKETS = 8;
+/** Most open sockets one table accepts from one client IP, pending and identified together. */
+export const MAX_SOCKETS_PER_IP = 8;
+/** A socket that has not completed `hello` this long after it was accepted is closed. */
+export const HELLO_TIMEOUT_MS = 10_000;
 /**
  * While connections are counted, the alarm fires at least this often, so counts left by sockets
  * lost in a restart are reconciled (and the table can expire) even if no client comes back.
  */
 const RECONCILE_MS = 3_600_000;
 
-/** Kept on each socket so the player survives hibernation; absent until the socket's `hello`. */
-type Attachment = { player: PlayerId; name: string };
+/**
+ * Kept on each socket so it survives hibernation: the client IP (used only for the per-IP cap; it
+ * never reaches the table state, a client, the lobby, or a log), when the socket was accepted, and,
+ * once `hello` completed, the player and name.
+ */
+type Attachment = { ip: string; acceptedAt: number; player?: PlayerId; name?: string };
+type Identity = { player: PlayerId; name: string };
 
 /** A float in [0, 1) from the platform's cryptographic source; deals must not be predictable. */
 function secureRandom(): number {
@@ -29,6 +40,12 @@ async function playerIdOf(secret: string): Promise<PlayerId> {
 }
 
 const attachmentOf = (ws: WebSocket): Attachment | undefined => (ws.deserializeAttachment() as Attachment | null) ?? undefined;
+
+/** The socket's player once `hello` completed. */
+function identityOf(ws: WebSocket): Identity | undefined {
+  const attachment = attachmentOf(ws);
+  return attachment?.player === undefined ? undefined : { player: attachment.player, name: attachment.name ?? "" };
+}
 
 function send(ws: WebSocket, message: ServerMessage): void {
   try { ws.send(JSON.stringify(message)); } catch { /* socket already closing */ }
@@ -61,16 +78,24 @@ export class TableObject extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
-    if (this.ctx.getWebSockets().length >= MAX_SOCKETS_PER_TABLE) return Response.json({ error: "too-many-connections" }, { status: 429 });
+    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const open = this.openSockets();
+    const pending = open.filter((ws) => !identityOf(ws)).length;
+    const fromIp = open.filter((ws) => attachmentOf(ws)?.ip === ip).length;
+    if (pending >= MAX_PENDING_SOCKETS || open.length - pending >= MAX_SOCKETS_PER_TABLE || fromIp >= MAX_SOCKETS_PER_IP) {
+      return Response.json({ error: "too-many-connections" }, { status: 429 });
+    }
     const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
     this.ctx.acceptWebSocket(server);
+    server.serializeAttachment({ ip, acceptedAt: Date.now() } satisfies Attachment);
+    await this.arm(await this.load());
     return new Response(null, { status: 101, webSocket: client });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") return this.closeSocket(ws, 1003, "text frames only");
     if (new TextEncoder().encode(message).length > MAX_MESSAGE_BYTES) return this.closeSocket(ws, 1009, "message too big");
-    const me = attachmentOf(ws);
+    const me = identityOf(ws);
     if (!me) return this.hello(ws, message);
     const state = await this.load();
     if (!state) return this.gone(ws);
@@ -89,23 +114,32 @@ export class TableObject extends DurableObject<Env> {
   }
 
   /**
-   * Reconciles connection counts, makes at most one bot decision, and only once it is due (to stay
-   * within the per-invocation CPU limit), then a tick, then re-arms.
+   * Closes sockets past their hello deadline, reconciles connection counts, makes at most one bot
+   * decision, and only once it is due (to stay within the per-invocation CPU limit), then a tick,
+   * then re-arms.
    */
   async alarm(): Promise<void> {
-    if (!(await this.load())) return;
-    await this.reconcile();
-    const state = await this.load();
-    if (!state) return;
-    const due = botWake(state);
-    if (botToAct(state) !== undefined && due !== undefined && Date.now() >= due) {
-      const action = await chooseBotAction(state);
-      if (action) await this.dispatch({ type: "bot", revision: state.revision, action, at: Date.now() });
+    const now = Date.now();
+    for (const ws of this.openSockets()) {
+      const attachment = attachmentOf(ws);
+      if (attachment && attachment.player === undefined && now >= attachment.acceptedAt + HELLO_TIMEOUT_MS) ws.close(1008, "hello timeout");
     }
-    if (!(await this.load())) return;
-    await this.dispatch({ type: "tick", at: Date.now() });
-    const after = await this.load();
-    if (after) await this.arm(after);
+    const state = await this.load();
+    if (state) {
+      await this.reconcile();
+      const current = await this.load();
+      const due = current ? botWake(current) : undefined;
+      if (current && botToAct(current) !== undefined && due !== undefined && Date.now() >= due) {
+        const action = await chooseBotAction(current);
+        if (action) await this.dispatch({ type: "bot", revision: current.revision, action, at: Date.now() });
+      }
+      if (await this.load()) await this.dispatch({ type: "tick", at: Date.now() });
+    }
+    await this.arm(await this.load());
+  }
+
+  private openSockets(): WebSocket[] {
+    return this.ctx.getWebSockets().filter((ws) => ws.readyState === WebSocket.READY_STATE_OPEN);
   }
 
   /** The first frame on a socket: version check, table check, then identify the player and connect. */
@@ -120,8 +154,12 @@ export class TableObject extends DurableObject<Env> {
     if (!state) return this.gone(ws);
     const parsed = parseClientMessage(message);
     if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: viewFor(state, undefined) });
+    if (this.openSockets().filter((other) => other !== ws && identityOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
+      ws.close(1013, "too many connections");
+      return;
+    }
     const player = await playerIdOf(parsed.secret);
-    ws.serializeAttachment({ player, name: parsed.name } satisfies Attachment);
+    ws.serializeAttachment({ ...attachmentOf(ws)!, player, name: parsed.name } satisfies Attachment);
     await this.dispatch({ type: "connect", player, name: parsed.name, at: Date.now() });
   }
 
@@ -144,7 +182,7 @@ export class TableObject extends DurableObject<Env> {
     if (!state) return;
     const open = new Map<PlayerId, number>();
     for (const ws of this.ctx.getWebSockets()) {
-      const me = attachmentOf(ws);
+      const me = identityOf(ws);
       if (ws === closing || ws.readyState !== WebSocket.READY_STATE_OPEN || !me) continue;
       open.set(me.player, (open.get(me.player) ?? 0) + 1);
     }
@@ -170,14 +208,19 @@ export class TableObject extends DurableObject<Env> {
   }
 
   /**
-   * Sets the alarm for the state's next wake, never sooner than one bot pause from now (no busy loop
-   * on a past wake), and no later than RECONCILE_MS from now while connections are counted.
+   * Sets the alarm for the earliest of: the state's next wake, never sooner than one bot pause from
+   * now (no busy loop on a past wake); RECONCILE_MS from now while connections are counted; and the
+   * earliest hello deadline of a pending socket (the alarm closes overdue ones, so it cannot loop).
    */
-  private async arm(state: TableState): Promise<void> {
+  private async arm(state: TableState | null): Promise<void> {
     const now = Date.now();
-    const wake = nextWake(state);
-    const backstop = Object.keys(state.connections).length > 0 ? now + RECONCILE_MS : undefined;
-    const at = Math.min(wake === undefined ? Infinity : Math.max(wake, now + BOT_PAUSE_MS), backstop ?? Infinity);
+    const wake = state ? nextWake(state) : undefined;
+    const backstop = state && Object.keys(state.connections).length > 0 ? now + RECONCILE_MS : Infinity;
+    const hello = Math.min(...this.openSockets().flatMap((ws) => {
+      const attachment = attachmentOf(ws);
+      return attachment && attachment.player === undefined ? [Math.max(attachment.acceptedAt + HELLO_TIMEOUT_MS, now)] : [];
+    }));
+    const at = Math.min(wake === undefined ? Infinity : Math.max(wake, now + BOT_PAUSE_MS), backstop, hello);
     if (at === Infinity) await this.ctx.storage.deleteAlarm();
     else await this.ctx.storage.setAlarm(at);
   }
@@ -193,7 +236,7 @@ export class TableObject extends DurableObject<Env> {
     if (out.state === state) return out;
     await this.save(out.state);
     for (const ws of this.ctx.getWebSockets()) {
-      const me = attachmentOf(ws);
+      const me = identityOf(ws);
       if (me) send(ws, { type: "view", view: viewFor(out.state, me.player) });
     }
     const summary = summaryOf(out.state);

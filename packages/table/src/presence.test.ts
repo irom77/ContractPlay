@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { botToAct, chooseBotAction } from "./hand.js";
 import { nextWake } from "./presence.js";
 import { reduce } from "./reduce.js";
-import { EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, type TableEvent, type TableState } from "./state.js";
+import { EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, UNVISITED_TABLE_MS, type TableEvent, type TableState } from "./state.js";
 import { fourHumans, newTable, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
 
 const random = seededRandom(1);
@@ -223,8 +223,31 @@ describe("tick", () => {
     expect(apply(t, { type: "tick", at: 20 + EMPTY_TABLE_MS }).expired).toBe(true);
   });
 
-  it("wakes a new empty table at its expiry, and for a bot turn before that", () => {
-    expect(nextWake(newTable())).toBe(EMPTY_TABLE_MS);
+  it("expires a table nobody ever connected to after UNVISITED_TABLE_MS", () => {
+    const t = newTable();
+    expect(t.unvisited).toBe(true);
+    expect(nextWake(t)).toBe(UNVISITED_TABLE_MS);
+    expect(apply(t, { type: "tick", at: UNVISITED_TABLE_MS - 1 }).expired).toBeUndefined();
+    expect(apply(t, { type: "tick", at: UNVISITED_TABLE_MS }).expired).toBe(true);
+  });
+
+  it("gives a visited-then-empty table the full EMPTY_TABLE_MS", () => {
+    const t = disconnect(connect(newTable(), "zed", 5), "zed", 6);
+    expect(t).not.toHaveProperty("unvisited");
+    expect(nextWake(t)).toBe(6 + EMPTY_TABLE_MS);
+    expect(apply(t, { type: "tick", at: 6 + UNVISITED_TABLE_MS }).expired).toBeUndefined();
+    expect(apply(t, { type: "tick", at: 6 + EMPTY_TABLE_MS - 1 }).expired).toBeUndefined();
+    expect(apply(t, { type: "tick", at: 6 + EMPTY_TABLE_MS }).expired).toBe(true);
+  });
+
+  it("treats a state stored without the unvisited field as visited", () => {
+    const legacy = Object.fromEntries(Object.entries(newTable()).filter(([key]) => key !== "unvisited")) as TableState;
+    expect(nextWake(legacy)).toBe(EMPTY_TABLE_MS);
+    expect(apply(legacy, { type: "tick", at: UNVISITED_TABLE_MS }).expired).toBeUndefined();
+    expect(apply(legacy, { type: "tick", at: EMPTY_TABLE_MS }).expired).toBe(true);
+  });
+
+  it("wakes for a bot turn before the expiry", () => {
     let t = sendOk(tableWithBots(), "alice", { type: "deal" }, 100, seededRandom(1));
     t = sendOk(t, "alice", act(t, pass("north")), 500);
     expect(nextWake(t)).toBe(1500);

@@ -2,7 +2,7 @@ import type { Seat } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
 import { botWake, deciderOf } from "./hand.js";
 import {
-  EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, accept, refuse, seatOf, without,
+  EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, UNVISITED_TABLE_MS, accept, refuse, seatOf, without,
   type Outcome, type PlayerId, type SeatState, type TableState
 } from "./state.js";
 
@@ -19,9 +19,10 @@ const withoutStandIn = (seat: Human): Human =>
 export function connect(state: TableState, player: PlayerId, name: string, at: number): Outcome {
   const seat = seatOf(state, player);
   const seats = seat ? { ...state.seats, [seat]: { ...withoutStandIn(state.seats[seat] as Human), name } } : state.seats;
+  const visited = Object.fromEntries(Object.entries(state).filter(([key]) => key !== "unvisited")) as TableState;
   return {
     state: {
-      ...state, seats,
+      ...visited, seats,
       connections: { ...state.connections, [player]: (state.connections[player] ?? 0) + 1 },
       awaySince: without(state.awaySince, player),
       names: { ...state.names, [player]: name },
@@ -91,12 +92,13 @@ function hostDeadline(state: TableState): number | undefined {
   return since === undefined || earliestPresent(state, host!) === undefined ? undefined : since + HOST_AWAY_MS;
 }
 
-/** When the table expires, if nobody is connected. */
+/** When the table expires, if nobody is connected: sooner when no human has ever connected. */
 function expiryDeadline(state: TableState): number | undefined {
-  return Object.keys(state.connections).length === 0 ? state.lastHumanAt + EMPTY_TABLE_MS : undefined;
+  if (Object.keys(state.connections).length > 0) return undefined;
+  return state.lastHumanAt + (state.unvisited ? UNVISITED_TABLE_MS : EMPTY_TABLE_MS);
 }
 
-/** Passes host on after HOST_AWAY_MS away, and reports expiry after EMPTY_TABLE_MS with nobody connected. */
+/** Passes host on after HOST_AWAY_MS away, and reports expiry after EMPTY_TABLE_MS with nobody connected (UNVISITED_TABLE_MS if nobody ever was). */
 export function tick(state: TableState, at: number): Outcome {
   const deadline = hostDeadline(state);
   const next = deadline !== undefined && at >= deadline ? { ...state, host: earliestPresent(state, state.host!)! } : state;

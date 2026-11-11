@@ -19,6 +19,8 @@ export type TableState = Readonly<{
   revision: number; handNumber: number;
   game?: GameState; totals: { ns: number; ew: number };
   turnSince: number; lastHumanAt: number; trickJustCompleted: boolean;
+  /** Present (true) until a human first connects. A state without it counts as visited. */
+  unvisited?: true;
 }>;
 
 export type TableEvent =
@@ -31,13 +33,15 @@ export type TableEvent =
 export type Outcome = { state: TableState; refused?: RefusalReason; expired?: true };
 
 export const BOT_PAUSE_MS = 1000, TRICK_PAUSE_MS = 2000, IDLE_MS = 120_000, HOST_AWAY_MS = 600_000, EMPTY_TABLE_MS = 86_400_000;
+/** A table no human has ever connected to expires this long after it was created. */
+export const UNVISITED_TABLE_MS = 600_000;
 
 export function createTable(input: { id: string; name: string; style: TableStyle; listed: boolean; at: number }): TableState {
   return {
     id: input.id, name: input.name, style: input.style, listed: input.listed,
     seats: { north: { kind: "empty" }, east: { kind: "empty" }, south: { kind: "empty" }, west: { kind: "empty" } },
     connections: {}, awaySince: {}, names: {}, revision: 0, handNumber: 0, totals: { ns: 0, ew: 0 },
-    turnSince: input.at, lastHumanAt: input.at, trickJustCompleted: false
+    turnSince: input.at, lastHumanAt: input.at, trickJustCompleted: false, unvisited: true
   };
 }
 
