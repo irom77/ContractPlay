@@ -258,3 +258,17 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
   .auction-layout .pos-left, .auction-layout .pos-right { top: 24%; }
   .pos-left.has-dummy, .pos-right.has-dummy { top: max(190px, calc(40 * var(--u))); }
 }
+
+/* ---------- Online lobby ---------- */
+.lobby { justify-content: flex-start; }
+.lobby-panel { display: grid; gap: 12px; width: min(560px, 100%); border-radius: 10px; padding: 14px 16px; background: rgba(8, 28, 24, .62); text-align: left; }
+.lobby-panel label { display: grid; gap: 5px; color: #cfdbd1; font-size: 12px; font-weight: 600; }
+.lobby-panel input:not([type="checkbox"]), .lobby-panel select { min-width: 0; height: 38px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 10px; background: #21483e; color: var(--ink); font-size: 14px; }
+.lobby-panel .lobby-check { display: flex; align-items: center; gap: 8px; }
+.lobby-tables, .lobby-seats { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.lobby-table { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
+.lobby-table-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.lobby-playing { color: var(--gold); font-size: 11px; font-weight: 700; }
+.lobby-seats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); font-size: 13px; }
+.lobby-table .secondary-button { justify-self: start; }
+.lobby > .error-message { position: static; }

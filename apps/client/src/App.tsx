@@ -25,6 +25,7 @@ import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
 import { compactCallLabel, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
+import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
 const hintsStorageKey = "contractplay.hints";
@@ -403,6 +404,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     }
   }
 
+  const online = serviceUrl() !== undefined;
+  const goOnline = () => { location.hash = "#/online"; };
   const dealSettings = <>
     <label>Dealer<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
     <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label>
@@ -450,6 +453,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
           <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span><span className="table-tools-row">{version}{fullscreenButton}</span></div>
           <div className="setup-controls">{dealSettings}</div>
           <button className="primary-button" onClick={startHand}>Start a new hand</button>
+          {online ? <button className="secondary-button" type="button" onClick={goOnline}>Play online</button> : null}
           {pbnImportForm}
         </section>
         {message ? <p className="error-message" role="alert">{message}</p> : null}
@@ -478,6 +482,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
         {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
         {!isReviewing && liveTurn ? <button className="secondary-button menu-deal" type="button" aria-pressed={botsFinishing} onClick={(event) => { closeMenu(event); setBotsFinishHandId(botsFinishing ? undefined : currentHandId); }}>{botsFinishing ? "Take back control" : "Let bots finish this hand"}</button> : null}
         {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section> : null}
+        {/* Not named "Play …": the in-game tests and card buttons treat /^Play / as a playable card. */}
+        {online ? <button className="secondary-button menu-deal" type="button" onClick={goOnline}>Online tables</button> : null}
         {pbnImportForm}
         {recentHandsPanel}
         <button className="secondary-button menu-about" type="button" onClick={(event) => { closeMenu(event); setAboutOpen(true); }}>About ContractPlay</button>
