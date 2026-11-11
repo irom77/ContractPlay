@@ -84,6 +84,12 @@ importers:
       '@contractplay/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@contractplay/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@contractplay/table':
+        specifier: workspace:*
+        version: link:../../packages/table
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.7.0

@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@contractplay/bots": "workspace:*",
-    "@contractplay/core": "workspace:*"
+    "@contractplay/core": "workspace:*",
+    "@contractplay/protocol": "workspace:*",
+    "@contractplay/table": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.7.0",
