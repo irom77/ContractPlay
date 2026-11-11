@@ -123,4 +123,50 @@ describe("Lobby", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(20000); });
     expect(list).toHaveBeenCalledTimes(2);
   });
+
+  it("disables Continue for an empty or whitespace-only name", async () => {
+    const user = userEvent.setup();
+    setup({ named: false });
+    const button = screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    await user.type(screen.getByLabelText("Your name"), "   ");
+    expect(button.disabled).toBe(true);
+    await user.type(screen.getByLabelText("Your name"), "x");
+    expect(button.disabled).toBe(false);
+  });
+
+  it.each([
+    ["too-many-requests", "You've created a lot of tables. Try again in a while."],
+    ["network", "Couldn't create the table. Try again."]
+  ])("shows copy for the %s creation error", async (error, copy) => {
+    const user = userEvent.setup();
+    setup({ create: () => Promise.resolve({ error }) });
+    await user.click(await screen.findByRole("button", { name: "New table" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(copy);
+  });
+
+  it("shows the generic error when createTable rejects and re-enables the form", async () => {
+    const user = userEvent.setup();
+    setup({ create: () => Promise.reject(new Error("boom")) });
+    await user.click(await screen.findByRole("button", { name: "New table" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Couldn't create the table. Try again.");
+    expect((screen.getByRole("button", { name: "New table" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("clears a creation error when the form is edited", async () => {
+    const user = userEvent.setup();
+    setup({ create: () => Promise.resolve({ error: "too-many-tables" }) });
+    await user.click(await screen.findByRole("button", { name: "New table" }));
+    await screen.findByRole("alert");
+    await user.type(screen.getByLabelText("Table name"), "!");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("creates only one table on a double submit", async () => {
+    const user = userEvent.setup();
+    const { createTable } = setup({ create: () => new Promise(() => {}) });
+    const name = await screen.findByLabelText("Table name");
+    await user.type(name, "{Enter}{Enter}");
+    expect(createTable).toHaveBeenCalledTimes(1);
+  });
 });

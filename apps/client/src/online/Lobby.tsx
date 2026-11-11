@@ -73,7 +73,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
   const [listed, setListed] = useState(true);
   const [creating, setCreating] = useState(false);
   const inFlight = useRef(false);
-  const latestRequest = useRef(0);
+  const creatingNow = useRef(false);
   const mounted = useRef(true);
   const apiRef = useRef(api);
   apiRef.current = api;
@@ -81,12 +81,11 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
   const refresh = useCallback(async () => {
     if (inFlight.current) return;
     inFlight.current = true;
-    const request = ++latestRequest.current;
     try {
       const result = await apiRef.current.listTables(baseUrl);
-      if (mounted.current && request === latestRequest.current) { setTables(result); setListError(false); }
+      if (mounted.current) { setTables(result); setListError(false); }
     } catch {
-      if (mounted.current && request === latestRequest.current) setListError(true);
+      if (mounted.current) { setListError(true); setCreateError(undefined); }
     } finally {
       inFlight.current = false;
     }
@@ -103,16 +102,24 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
 
   async function create() {
     const name = effectiveName.trim();
-    if (name === "" || creating) return;
+    if (name === "" || creatingNow.current) return;
+    creatingNow.current = true;
     setCreating(true);
     setCreateError(undefined);
-    const result = await api.createTable(baseUrl, { name, style, listed });
+    let result: { id: string } | { error: string };
+    try {
+      result = await api.createTable(baseUrl, { name, style, listed });
+    } catch {
+      result = { error: "failed" };
+    }
+    creatingNow.current = false;
     if (!mounted.current) return;
     setCreating(false);
     if ("id" in result) onOpenTable(result.id);
-    else setCreateError(createErrorText(result.error));
+    else { setListError(false); setCreateError(createErrorText(result.error)); }
   }
 
+  // Whichever failed most recently wins: each failure clears the other.
   const alert = createError ?? (listError ? "Can't reach the tables right now." : undefined);
 
   return (
@@ -150,9 +157,9 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
           </ul>
         </div>
         <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); void create(); }}>
-          <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => setTableName(event.target.value)} /></label>
-          <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => setStyle(event.target.value as TableStyle)}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
-          <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => setListed(event.target.checked)} />Show in lobby</label>
+          <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
+          <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+          <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
           <button className="primary-button" type="submit" disabled={creating || effectiveName.trim() === ""}>New table</button>
         </form>
         {alert ? <p className="error-message" role="alert">{alert}</p> : null}

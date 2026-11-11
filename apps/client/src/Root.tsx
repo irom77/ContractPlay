@@ -4,12 +4,6 @@ import { serviceUrl } from "./online/connection.js";
 import { Lobby } from "./online/Lobby.js";
 import { parseRoute, routeHash, type Route } from "./online/route.js";
 
-function navigate(route: Route) {
-  const hash = routeHash(route);
-  if (hash === "") history.replaceState(null, "", location.pathname + location.search);
-  location.hash = hash;
-}
-
 export default function Root() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
   const storage = useMemo(() => window.localStorage, []);
@@ -18,6 +12,14 @@ export default function Root() {
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  // Sets the route directly so navigation never depends on a hashchange event firing.
+  const navigate = (next: Route) => {
+    const hash = routeHash(next);
+    if (hash === "") history.replaceState(null, "", location.pathname + location.search);
+    else location.hash = hash;
+    setRoute(next);
+  };
 
   const baseUrl = serviceUrl();
   if (baseUrl === undefined || route.screen === "solo") return <App />;
