@@ -213,6 +213,7 @@ button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max
 /* ---------- Dummy ---------- */
 .dummy-table-hand { display: flex; gap: calc(.8 * var(--u)); --h: calc(14 * var(--u)); --step: calc(4.2 * var(--u)); }
 .fixed-seat-hand { position: relative; z-index: 4; }
+.fixed-dummy-tag { align-self: center; border-radius: 999px; padding: calc(.4 * var(--u)) calc(1 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-s); font-weight: 900; letter-spacing: .06em; }
 .pos-left .dummy-table-hand, .pos-right .dummy-table-hand { flex-direction: column; gap: calc(.5 * var(--u)); --h: calc(8.2 * var(--u)); --step: calc(2.7 * var(--u)); }
 .pos-right .dummy-table-hand { align-items: flex-end; }
 .dummy-suit-row { display: flex; }

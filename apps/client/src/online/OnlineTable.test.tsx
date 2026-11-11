@@ -324,14 +324,19 @@ describe("OnlineTable play", () => {
     const seats = { north: bot, east: bot, south: human("Bob"), west: bot };
     const dummyTurn = playCards(oneNoTrump(), 1);
     service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats, game: publicGame(dummyTurn, ["north", "south"]) }));
+    expect(screen.getByText("DUMMY")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll('[role="img"]')).toHaveLength(1);
     const dummyCard = within(screen.getByRole("region", { name: "South's dummy hand" })).getAllByRole("button", { name: /^Play / })[0]!;
     await user.click(dummyCard);
     expect(service.sent.at(-1)).toMatchObject({ type: "act", action: { type: "play", seat: "south" } });
 
     const declarerTurn = playCards(oneNoTrump(), 3);
     service.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "south", seats, game: publicGame(declarerTurn, ["north", "south"]) }));
+    expect(screen.getByText("DUMMY")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll('[role="img"]')).toHaveLength(3);
     const declarerHand = within(screen.getByRole("region", { name: "North's hand" }));
     const declarerCard = declarerHand.getAllByRole("button", { name: /^Play / })[0]!;
+    expect((declarerCard as HTMLButtonElement).disabled).toBe(false);
     await user.click(declarerCard);
     expect(service.sent.at(-1)).toMatchObject({ type: "act", action: { type: "play", seat: "north" } });
   });
