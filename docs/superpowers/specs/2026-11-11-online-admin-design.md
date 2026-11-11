@@ -25,7 +25,7 @@ Provide a development-phase `/admin` page for managing online tables. The owner 
 
 ## Design
 
-- Detect `/admin` by pathname in the client root and render a standalone admin page; keep existing hash-based solo and online-table routing unchanged.
+- Route `/admin` through the Worker to the client index asset, then detect its pathname in the client root and render a standalone admin page; keep existing hash-based solo and online-table routing unchanged.
 - Add a dedicated admin API to list every table summary (listed and unlisted) and delete a validated table ID. Admin summaries include a `listed` flag; the existing `TableSummary` remains unchanged for the public lobby.
 - Route deletion through the table Durable Object so connected sockets are closed and stored state and alarms are cleared consistently with table expiry; remove the lobby row as part of the operation.
 - Keep the admin API under its own route prefix, without authorization for now. Later RBAC can guard this boundary without changing table lifecycle behavior.

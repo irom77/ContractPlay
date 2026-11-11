@@ -71,6 +71,9 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
+    if (path === "/admin" && (request.method === "GET" || request.method === "HEAD")) {
+      return env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method, headers: request.headers }));
+    }
     if (path === "/api/admin/tables") {
       if (request.method === "GET") return Response.json({ tables: await lobbyOf(env).listAll() });
       return new Response("method not allowed", { status: 405 });

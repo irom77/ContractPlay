@@ -32,6 +32,7 @@
 - Modify: `apps/server/src/lobby-object.ts`
 - Modify: `apps/server/src/table-object.ts`
 - Modify: `apps/server/src/index.ts`
+- Modify: `apps/server/wrangler.jsonc`
 
 **Interfaces:**
 - `LobbyObject.listAll(): Promise<(TableSummary & { listed: boolean })[]>` returns summaries from both `listed:` and `unlisted:` storage entries, with a visibility flag.
@@ -42,6 +43,7 @@
 - [x] Add `listAll()` and cover both lobby prefixes while leaving the existing public `list()` behavior unchanged.
 - [x] Add an explicit Durable Object deletion method that closes sockets and uses the existing lobby-first expiry cleanup.
 - [x] Add the admin API routes, validate table IDs with the existing ID rules, and invoke deletion through the corresponding table stub.
+- [x] Route `/admin` through the Worker to the client index asset so direct navigation works with the current static asset setup.
 - [x] Run `pnpm --filter @contractplay/server typecheck`.
 
 ### Task 2: `/admin` page
