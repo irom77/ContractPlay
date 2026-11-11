@@ -274,10 +274,22 @@ describe("ids and limits", () => {
     expect((await upgrade(id, "10.200.0.5")).status).toBe(429);
   });
 
-  it("refuses a 9th socket that has not sent hello with 429", async () => {
+  it("refuses a 17th socket that has not sent hello with 429", async () => {
     const id = await newTableId(false);
-    for (let i = 1; i <= 8; i++) await Client.open(id, `10.201.0.${i}`);
-    expect((await upgrade(id, "10.201.0.9")).status).toBe(429);
+    for (let i = 1; i <= 16; i++) await Client.open(id, `10.201.0.${i}`);
+    expect((await upgrade(id, "10.201.0.17")).status).toBe(429);
+  });
+
+  it("refuses a 3rd socket without hello from one IP while another IP can still open one", async () => {
+    const id = await newTableId(false);
+    await Client.open(id, "10.205.0.1");
+    await Client.open(id, "10.205.0.1");
+    expect((await upgrade(id, "10.205.0.1")).status).toBe(429);
+    await Client.open(id, "10.205.0.2");
+    // once a pending socket completes hello, that IP may open another
+    const { client } = await Client.join(id, SECRET_A, "Alice", "10.205.0.3");
+    client.send({ type: "sit", seat: "north" });
+    await client.viewAfter(0);
   });
 
   it("refuses a 9th socket from one IP while another IP still connects", async () => {
@@ -376,6 +388,30 @@ describe("presence on the server", () => {
     expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
     expect(await storedState(id)).toBeUndefined();
     expect((await listTables()).map((t) => t.id)).not.toContain(id);
+  });
+
+  it("does not delay a due bot when a new socket connects", async () => {
+    fakeClock();
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    a.send({ type: "sit", seat: "south" });
+    let view = await a.viewAfter(0);
+    for (const seat of ["north", "east", "west"] as const) {
+      a.send({ type: "setBot", seat, skill: "advanced" });
+      view = await a.viewAfter(view.revision);
+    }
+    a.send({ type: "deal" });
+    view = await a.viewAfter(view.revision);
+    expect(view.game!.currentActor).toBe("north");
+    const dealt = (await storedState(id))!;
+    const due = dealt.turnSince + BOT_PAUSE_MS;
+    const alarmAt = () => runInDurableObject(stubFor(id), (_instance, state) => state.storage.getAlarm());
+    expect(await alarmAt()).toBe(due);
+    vi.setSystemTime(due);
+    await Client.open(id, "10.206.0.1");
+    expect(await alarmAt()).toBe(due);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await storedState(id))!.revision).toBe(dealt.revision + 1);
   });
 
   it("does not let a bot act before its pause is over, even when the alarm fires early", async () => {

@@ -9,7 +9,9 @@ const STATE_KEY = "state";
 /** Most open sockets one table accepts that have completed `hello`. */
 export const MAX_SOCKETS_PER_TABLE = 32;
 /** Most open sockets one table holds that have not completed `hello` yet. */
-export const MAX_PENDING_SOCKETS = 8;
+export const MAX_PENDING_SOCKETS = 16;
+/** Most sockets one client IP may hold on one table that have not completed `hello` yet. */
+export const MAX_PENDING_PER_IP = 2;
 /** Most open sockets one table accepts from one client IP, pending and identified together. */
 export const MAX_SOCKETS_PER_IP = 8;
 /** A socket that has not completed `hello` this long after it was accepted is closed. */
@@ -80,15 +82,21 @@ export class TableObject extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
     const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
     const open = this.openSockets();
-    const pending = open.filter((ws) => !identityOf(ws)).length;
+    const pending = open.filter((ws) => !identityOf(ws));
     const fromIp = open.filter((ws) => attachmentOf(ws)?.ip === ip).length;
-    if (pending >= MAX_PENDING_SOCKETS || open.length - pending >= MAX_SOCKETS_PER_TABLE || fromIp >= MAX_SOCKETS_PER_IP) {
+    const pendingFromIp = pending.filter((ws) => attachmentOf(ws)?.ip === ip).length;
+    if (pending.length >= MAX_PENDING_SOCKETS || open.length - pending.length >= MAX_SOCKETS_PER_TABLE
+      || fromIp >= MAX_SOCKETS_PER_IP || pendingFromIp >= MAX_PENDING_PER_IP) {
       return Response.json({ error: "too-many-connections" }, { status: 429 });
     }
     const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ ip, acceptedAt: Date.now() } satisfies Attachment);
-    await this.arm(await this.load());
+    const acceptedAt = Date.now();
+    server.serializeAttachment({ ip, acceptedAt } satisfies Attachment);
+    // only ever bring the alarm earlier for the new hello deadline, so a connection never delays a due wake
+    const deadline = acceptedAt + HELLO_TIMEOUT_MS;
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || deadline < current) await this.ctx.storage.setAlarm(deadline);
     return new Response(null, { status: 101, webSocket: client });
   }
 
