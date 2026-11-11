@@ -45,6 +45,17 @@ describe("seats", () => {
     expect(send(t, "alice", { type: "clearSeat", seat: "west" }).refused).toBe("not-allowed");
   });
 
+  it("forgets an away player's name when their seat is cleared, but keeps a connected player's name when they leave", () => {
+    let t = sendOk({ ...newTable(), names: { alice: "Alice", cy: "Cy" }, connections: { alice: 1 } }, "alice", { type: "sit", seat: "north" }, 1);
+    t = sendOk(t, "cy", { type: "sit", seat: "south" }, 2);
+    const away = { ...t, awaySince: { cy: 9 } };
+    const cleared = sendOk(away, "alice", { type: "clearSeat", seat: "south" });
+    expect(cleared.names).toEqual({ alice: "Alice" });
+    expect(cleared.awaySince).toEqual({});
+    const left = sendOk(t, "alice", { type: "leave" });
+    expect(left.names).toEqual({ alice: "Alice", cy: "Cy" });
+  });
+
   it("passes host to the earliest sitter when the host leaves", () => {
     let t = sendOk(newTable(), "alice", { type: "sit", seat: "north" }, 10);
     t = sendOk(t, "cy", { type: "sit", seat: "south" }, 30);

@@ -38,8 +38,9 @@ export function clearSeat(state: TableState, player: PlayerId, seat: Seat): Outc
   return allowed ? vacate(state, seat, target.player) : refuse(state, "not-allowed");
 }
 
-/** Empties a human's seat, drops their away mark, and passes host on if needed. */
+/** Empties a human's seat, drops their away mark (and their name if they have no open connection), and passes host on if needed. */
 function vacate(state: TableState, seat: Seat, player: PlayerId): Outcome {
   const seats = withSeat(state, seat, { kind: "empty" });
-  return accept({ ...withoutHost(state), seats, awaySince: without(state.awaySince, player) }, hostAfter(state, seats));
+  const names = (state.connections[player] ?? 0) > 0 ? state.names : without(state.names, player);
+  return accept({ ...withoutHost(state), seats, names, awaySince: without(state.awaySince, player) }, hostAfter(state, seats));
 }

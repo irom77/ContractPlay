@@ -79,4 +79,19 @@ describe("cleanName", () => {
     expect(cleanName("x".repeat(20), 20)).toBe("x".repeat(20));
     expect(cleanName(5, 20)).toBeUndefined();
   });
+  it("removes zero-width and bidirectional format characters", () => {
+    expect(cleanName("An\u200Bn \u202Eevil", 20)).toBe("Ann evil");
+    expect(cleanName("\u200B\u202E\u2066\uFEFF", 20)).toBeUndefined();
+    expect(cleanName(" \u200B \u202E ", 20)).toBeUndefined();
+  });
+  it("rejects lone surrogates", () => {
+    expect(cleanName("Ann\uD83D", 20)).toBeUndefined();
+    expect(cleanName("\uDE00Ann", 20)).toBeUndefined();
+  });
+  it("keeps non-Latin names and emoji; a zero-width joiner sequence loses its joiner", () => {
+    expect(cleanName("Zoë Łukasz", 20)).toBe("Zoë Łukasz");
+    expect(cleanName("Андрей 山田 أحمد", 20)).toBe("Андрей 山田 أحمد");
+    expect(cleanName("Ann \u{1F642}\u{1F0CF}", 20)).toBe("Ann \u{1F642}\u{1F0CF}");
+    expect(cleanName("\u{1F469}\u200D\u{1F4BB}", 20)).toBe("\u{1F469}\u{1F4BB}");
+  });
 });
