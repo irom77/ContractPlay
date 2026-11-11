@@ -9,24 +9,43 @@ export { TableObject } from "./table-object.js";
 const TABLE_ID = new RegExp(`^([${ID_ALPHABET}]{${LISTED_ID_LENGTH}}|[${ID_ALPHABET}]{${UNLISTED_ID_LENGTH}})$`);
 const STYLES: readonly unknown[] = ["SAYC", "2/1"] satisfies TableStyle[];
 
-/** SHA-256 hex of the client's IP (or of "unknown"), so the lobby's rate record never holds a raw IP. */
-async function clientKey(request: Request): Promise<string> {
-  const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+/** The request body as text, or undefined once it is over `limit` bytes; never buffers more than `limit` bytes plus one chunk. */
+async function readLimited(request: Request, limit: number): Promise<string | undefined> {
+  const declared = request.headers.get("Content-Length");
+  if (declared !== null && !(Number(declared) <= limit)) return undefined;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => undefined);
+      return undefined;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return new TextDecoder().decode(bytes);
 }
 
 async function createTable(request: Request, env: Env): Promise<Response> {
   const bad = () => Response.json({ error: "bad-request" }, { status: 400 });
-  const text = await request.text();
-  if (new TextEncoder().encode(text).length > MAX_MESSAGE_BYTES) return bad();
+  const text = await readLimited(request, MAX_MESSAGE_BYTES);
+  if (text === undefined) return bad();
   let body: unknown;
   try { body = JSON.parse(text); } catch { return bad(); }
   if (typeof body !== "object" || body === null) return bad();
   const { name: rawName, style, listed } = body as Record<string, unknown>;
   const name = cleanName(rawName, MAX_TABLE_NAME);
   if (name === undefined || !STYLES.includes(style) || typeof listed !== "boolean") return bad();
-  const result = await lobbyOf(env).createTable({ name, style: style as TableStyle, listed }, await clientKey(request));
+  // the raw address goes over the internal binding only; the lobby keeps just a salted hash of it
+  const address = request.headers.get("CF-Connecting-IP") ?? "unknown";
+  const result = await lobbyOf(env).createTable({ name, style: style as TableStyle, listed }, address);
   return "error" in result ? Response.json(result, { status: 429 }) : Response.json(result, { status: 201 });
 }
 

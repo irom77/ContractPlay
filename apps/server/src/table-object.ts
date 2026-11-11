@@ -143,7 +143,9 @@ export class TableObject extends DurableObject<Env> {
       }
       if (await this.load()) await this.dispatch({ type: "tick", at: Date.now() });
     }
-    await this.arm(await this.load());
+    // the only place the bot-pause floor applies: a wake still in the past here (a refused or
+    // undecided bot action) must not fire the alarm again at once
+    await this.arm(await this.load(), BOT_PAUSE_MS);
   }
 
   private openSockets(): WebSocket[] {
@@ -216,11 +218,13 @@ export class TableObject extends DurableObject<Env> {
   }
 
   /**
-   * Sets the alarm for the earliest of: the state's next wake, never sooner than one bot pause from
-   * now (no busy loop on a past wake); RECONCILE_MS from now while connections are counted; and the
-   * earliest hello deadline of a pending socket (the alarm closes overdue ones, so it cannot loop).
+   * Sets the alarm for the earliest of: the state's next wake (a wake already past: `floorMs` from now);
+   * RECONCILE_MS from now while connections are counted; and the earliest hello deadline of a pending
+   * socket (the alarm closes overdue ones, so it cannot loop). Only `alarm()` passes a floor (one bot
+   * pause, so a past wake it could not act on cannot busy-loop); any other event arms for the wake
+   * itself, or now if it is past, so connection churn never moves a due or pending wake later.
    */
-  private async arm(state: TableState | null): Promise<void> {
+  private async arm(state: TableState | null, floorMs = 0): Promise<void> {
     const now = Date.now();
     const wake = state ? nextWake(state) : undefined;
     const backstop = state && Object.keys(state.connections).length > 0 ? now + RECONCILE_MS : Infinity;
@@ -228,7 +232,7 @@ export class TableObject extends DurableObject<Env> {
       const attachment = attachmentOf(ws);
       return attachment && attachment.player === undefined ? [Math.max(attachment.acceptedAt + HELLO_TIMEOUT_MS, now)] : [];
     }));
-    const at = Math.min(wake === undefined ? Infinity : Math.max(wake, now + BOT_PAUSE_MS), backstop, hello);
+    const at = Math.min(wake === undefined ? Infinity : (wake > now ? wake : now + floorMs), backstop, hello);
     if (at === Infinity) await this.ctx.storage.deleteAlarm();
     else await this.ctx.storage.setAlarm(at);
   }
@@ -248,7 +252,14 @@ export class TableObject extends DurableObject<Env> {
       if (me) send(ws, { type: "view", view: viewFor(out.state, me.player) });
     }
     const summary = summaryOf(out.state);
-    if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state))) await this.lobby().update(summary);
+    if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state))) {
+      // the change is already stored and sent; a missed lobby update is repaired by the next change
+      try {
+        await this.lobby().update(summary);
+      } catch {
+        console.warn("table: lobby update failed; the next change will repair it");
+      }
+    }
     return out;
   }
 

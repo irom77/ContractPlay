@@ -200,6 +200,26 @@ describe("lobby", () => {
     expect((await SELF.fetch("https://x/api/tables", { method: "POST", body: "{not json" })).status).toBe(400);
   });
 
+  it("refuses an oversized creation body, whether its length is declared or streamed", async () => {
+    const padded = { name: "Big", style: "SAYC", listed: true, padding: "x".repeat(5000) };
+    expect((await createTable(padded)).status).toBe(400);
+    const chunk = new TextEncoder().encode(" ".repeat(1024));
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        // an endless body: the server must stop reading at the limit
+        sent += 1;
+        controller.enqueue(chunk);
+        if (sent > 10_000) controller.close();
+      }
+    });
+    const streamed = await SELF.fetch("https://x/api/tables", { method: "POST", body: stream, headers: { "CF-Connecting-IP": freshIp() } });
+    expect(streamed.status).toBe(400);
+    expect(sent).toBeLessThan(100);
+    // a body within the limit is still accepted
+    expect((await createTable({ name: "Small", style: "SAYC", listed: false, padding: "x".repeat(3000) })).status).toBe(201);
+  });
+
 });
 
 describe("connections", () => {
@@ -351,6 +371,24 @@ describe("ids and limits", () => {
   });
 });
 
+describe("creation-rate record", () => {
+  it("keys each client by a salted hash, never the raw or plainly hashed address", async () => {
+    const ip = "10.208.0.1";
+    expect((await createTable({ name: "Salted", style: "SAYC", listed: false }, ip)).status).toBe(201);
+    const plain = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip)))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    await runInDurableObject(env.LOBBY.get(env.LOBBY.idFromName("lobby")), async (_instance, state) => {
+      const salt = await state.storage.get<Uint8Array>("salt");
+      expect(salt).toBeInstanceOf(Uint8Array);
+      expect(salt!.length).toBe(32);
+      const keys = [...(await state.storage.list({ prefix: "rate:" })).keys()];
+      expect(keys.length).toBeGreaterThan(0);
+      for (const key of keys) expect(key).toMatch(/^rate:[0-9a-f]{64}$/);
+      expect(keys).not.toContain(`rate:${plain}`);
+      expect(keys.some((key) => key.includes(ip))).toBe(false);
+    });
+  });
+});
+
 describe("presence on the server", () => {
   it("a socket closing before hello changes no presence", async () => {
     const id = await newTableId();
@@ -412,6 +450,103 @@ describe("presence on the server", () => {
     expect(await alarmAt()).toBe(due);
     expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
     expect((await storedState(id))!.revision).toBe(dealt.revision + 1);
+  });
+
+  it("does not delay a due bot when players connect and disconnect before it is due", async () => {
+    fakeClock();
+    // the runtime fires alarms by the real clock (while handlers see the faked one); an hour ahead,
+    // no alarm comes due for real while this test moves the clock, so only the test runs the alarm
+    vi.setSystemTime(Date.now() + 3_600_000);
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    a.send({ type: "sit", seat: "south" });
+    let view = await a.viewAfter(0);
+    for (const seat of ["north", "east", "west"] as const) {
+      a.send({ type: "setBot", seat, skill: "advanced" });
+      view = await a.viewAfter(view.revision);
+    }
+    a.send({ type: "deal" });
+    view = await a.viewAfter(view.revision);
+    expect(view.game!.currentActor).toBe("north");
+    const dealt = (await storedState(id))!;
+    const due = dealt.turnSince + BOT_PAUSE_MS;
+    const alarmAt = () => runInDurableObject(stubFor(id), (_instance, state) => state.storage.getAlarm());
+    const connections = async () => Object.keys((await storedState(id))!.connections).length;
+    // a completed hello (a connect event) 100 ms before the bot is due leaves the alarm alone
+    vi.setSystemTime(due - 100);
+    const { client: b } = await Client.join(id, SECRET_B, "Bob", "10.207.0.1");
+    expect(await connections()).toBe(2);
+    expect(await alarmAt()).toBe(due);
+    // repeated connects and disconnects before the bot is due do not postpone it either
+    b.close();
+    for (let i = 0; i < 100 && await connections() !== 1; i++) await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await alarmAt()).toBe(due);
+    for (let round = 0; round < 3; round++) {
+      vi.setSystemTime(due - 50 + round * 10);
+      const { client } = await Client.join(id, SECRET_B, "Bob", `10.207.1.${round}`);
+      expect(await alarmAt()).toBe(due);
+      client.close();
+      for (let i = 0; i < 100 && await connections() !== 1; i++) await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(await connections()).toBe(1);
+      expect(await alarmAt()).toBe(due);
+    }
+    // the bot then acts on time
+    vi.setSystemTime(due);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await storedState(id))!.revision).toBe(dealt.revision + 1);
+  });
+
+  it("re-arms one bot pause later, not at once, when a due bot's action is refused", async () => {
+    fakeClock();
+    vi.setSystemTime(Date.now() + 3_600_000);
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    a.send({ type: "sit", seat: "south" });
+    let view = await a.viewAfter(0);
+    for (const seat of ["north", "east", "west"] as const) {
+      a.send({ type: "setBot", seat, skill: "advanced" });
+      view = await a.viewAfter(view.revision);
+    }
+    a.send({ type: "deal" });
+    await a.viewAfter(view.revision);
+    const dealt = (await storedState(id))!;
+    type Dispatch = (event: { type: string }) => Promise<{ state: TableState; refused?: string }>;
+    await runInDurableObject(stubFor(id), (instance) => {
+      const target = instance as unknown as { dispatch: Dispatch };
+      const original = target.dispatch.bind(instance);
+      target.dispatch = async (event) => event.type === "bot" ? { state: (await storedState(id))!, refused: "stale" } : original(event);
+    });
+    const alarmAt = () => runInDurableObject(stubFor(id), (_instance, state) => state.storage.getAlarm());
+    for (let round = 0; round < 3; round++) {
+      vi.setSystemTime(dealt.turnSince + BOT_PAUSE_MS + round * 5_000);
+      expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+      expect((await storedState(id))!.revision).toBe(dealt.revision);
+      expect(await alarmAt()).toBe(Date.now() + BOT_PAUSE_MS);
+    }
+    await runInDurableObject(stubFor(id), (instance) => { delete (instance as unknown as { dispatch?: Dispatch }).dispatch; });
+  });
+
+  it("keeps a stored and sent change when the lobby update fails, and the next change repairs the lobby row", async () => {
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    type Patched = { lobby?: () => { update(): Promise<void> } };
+    await runInDurableObject(stubFor(id), (instance) => {
+      (instance as unknown as Patched).lobby = () => ({ update: () => Promise.reject(new Error("lobby unavailable")) });
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    onTestFinished(() => { warn.mockRestore(); });
+    a.send({ type: "sit", seat: "north" });
+    const seated = await a.viewAfter(0);
+    expect(seated.yourSeat).toBe("north");
+    expect((await storedState(id))!.seats.north.kind).toBe("human");
+    expect(warn).toHaveBeenCalledWith("table: lobby update failed; the next change will repair it");
+    expect((await listTables()).find((t) => t.id === id)!.seats.north).toEqual({ kind: "empty" });
+    await runInDurableObject(stubFor(id), (instance) => { delete (instance as unknown as Patched).lobby; });
+    a.send({ type: "setBot", seat: "east", skill: "advanced" });
+    await a.viewAfter(seated.revision);
+    const row = (await listTables()).find((t) => t.id === id)!;
+    expect(row.seats.north.kind).toBe("human");
+    expect(row.seats.east.kind).toBe("bot");
   });
 
   it("does not let a bot act before its pause is over, even when the alarm fires early", async () => {

@@ -11,8 +11,10 @@ export const ID_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export const LISTED_ID_LENGTH = 6, UNLISTED_ID_LENGTH = 12;
 const LISTED = "listed:";
 const UNLISTED = "unlisted:";
-/** `rate:<sha-256 of the client IP>` → times of that client's creations in the last hour. */
+/** `rate:<salted sha-256 of the client IP>` → times of that client's creations in the last hour. */
 const RATE = "rate:";
+/** 32 random bytes, made on first use and kept, mixed into every client-address hash. */
+const SALT = "salt";
 /** Most keys one storage.delete call accepts. */
 const DELETE_BATCH = 128;
 
@@ -37,8 +39,12 @@ export class LobbyObject extends DurableObject<Env> {
     return [...entries.values()].flatMap((entry) => (entry.summary ? [entry.summary] : []));
   }
 
-  /** `client` is a SHA-256 hash of the client's IP; the raw IP never reaches the lobby. */
-  async createTable(input: NewTable, client: string): Promise<{ id: string } | { error: "too-many-tables" | "too-many-requests" }> {
+  /**
+   * `address` is the client's IP (or "unknown"); it is only hashed with this deployment's salt and is
+   * never stored, logged, or sent anywhere.
+   */
+  async createTable(input: NewTable, address: string): Promise<{ id: string } | { error: "too-many-tables" | "too-many-requests" }> {
+    const client = await this.clientKey(address);
     const now = Date.now();
     const recent = await this.recentCreations(client, now);
     if (recent.length >= MAX_CREATES_PER_HOUR) return { error: "too-many-requests" };
@@ -68,6 +74,26 @@ export class LobbyObject extends DurableObject<Env> {
       return { id };
     }
     throw new Error("could not allocate a table id");
+  }
+
+  /** Lowercase hex SHA-256 of the salt followed by the address. */
+  private async clientKey(address: string): Promise<string> {
+    const salt = await this.salt();
+    const text = new TextEncoder().encode(address);
+    const data = new Uint8Array(salt.length + text.length);
+    data.set(salt);
+    data.set(text, salt.length);
+    const digest = await crypto.subtle.digest("SHA-256", data);
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /** This deployment's salt, generated and stored on first use. */
+  private async salt(): Promise<Uint8Array> {
+    const stored = await this.ctx.storage.get<Uint8Array>(SALT);
+    if (stored) return stored;
+    const salt = crypto.getRandomValues(new Uint8Array(32));
+    await this.ctx.storage.put(SALT, salt);
+    return salt;
   }
 
   /** The client's creation times within the last hour; drops every client's record that is older. */
