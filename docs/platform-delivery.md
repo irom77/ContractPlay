@@ -11,7 +11,7 @@ Install the workspace dependencies with `pnpm install --frozen-lockfile`.
 - Start development with `pnpm web:dev`.
 - Build and verify the static package with `pnpm web:verify`.
 - The output is `apps/client/dist`; relative asset paths allow hosting at a domain root, a repository subpath, or in Tauri.
-- The web workflow deploys `main` to GitHub Pages. The repository's Pages source is set to GitHub Actions and the site is live at https://irom77.github.io/ContractPlay/; a fork needs **Settings → Pages → Build and deployment → GitHub Actions** selected once before its first deployment. To use another static host, deploy `apps/client/dist`.
+- GitHub Pages is no longer deployed by this repository. Its existing static copy at https://irom77.github.io/ContractPlay/ has no online entry and is not updated. To use another static host, deploy `apps/client/dist`.
 
 ### Windows and macOS
 
@@ -45,7 +45,7 @@ The CI simulator build does not require Apple signing credentials. Device instal
 
 ## Online tables on Cloudflare
 
-Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). The service is live at https://contractplay.niuk.workers.dev. The GitHub Pages build uses `VITE_ONLINE_URL=none` and has no online entry; switching Pages to a redirect is a planned follow-up.
+Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). The service is live at https://contractplay.niuk.workers.dev. Cloudflare is the only maintained web deployment.
 
 ### Deployment
 
@@ -66,7 +66,7 @@ Cloudflare also publishes an official `cloudflare/wrangler-action`; this workflo
 
 ### Service address; desktop and iOS builds
 
-The Cloudflare deployment serves the app and the tables from one address, so the web app uses its own origin as the service address. The GitHub Pages build (`deploy-web.yml`) sets `VITE_ONLINE_URL=none`, which hides "Play online" and "Online tables" because Pages has no service.
+The Cloudflare deployment serves the app and the tables from one address, so the web app uses its own origin as the service address. The old GitHub Pages copy has no online entry because it was built with `VITE_ONLINE_URL=none`.
 
 Online play is available in the web app only for now; desktop and iOS builds do not show it. The app recognizes the native shell and hides the online entries there whatever `VITE_ONLINE_URL` says (on Windows the shell serves the app from an http address, `http://tauri.localhost`, which is not the service). Enabling it needs the service address allowed in the app's content security policy (`connect-src` in `apps/client/src-tauri/tauri.conf.json`) and cross-origin access on the service, which is planned.
 
@@ -81,7 +81,6 @@ Cloudflare's documentation says Workers Custom Domains support only domains that
 ## CI and release workflows
 
 - `.github/workflows/ci.yml` runs workspace checks, builds Windows and macOS installers, and builds and launches the app in an iPad simulator for pushes and pull requests.
-- `.github/workflows/deploy-web.yml` deploys the static browser client to GitHub Pages on pushes to `main` or by manual dispatch.
 - `.github/workflows/deploy-cloudflare.yml` deploys the Worker and web client to Cloudflare on pushes to `main` or by manual dispatch from `main` once the repository secrets exist; without them it skips the deploy. See [Online tables on Cloudflare](#online-tables-on-cloudflare).
 - `.github/workflows/release.yml` builds Windows and macOS assets for `v*.*.*` tags and creates a draft GitHub release. Review installers before publishing them. Windows artifacts are unsigned. macOS uses an ad-hoc signature; it is suitable for build validation but still prompts users to allow the app and does not replace Developer ID signing and notarization.
 - The first GitHub Actions run passed the workspace checks, Windows and macOS installer builds, and iPad simulator build/install/launch. See the [run summary](https://github.com/irom77/ContractPlay/actions/runs/40745554895). This checkout is Linux/WSL and cannot run those platform builds locally.
@@ -102,7 +101,7 @@ TestFlight and App Store distribution require an Apple Developer account, an app
 
 ### Web
 
-GitHub Pages deployment requires the repository's Pages source to be set to GitHub Actions and the workflow token to have Pages deployment permission. No server, database, or account credentials are needed for the static client. Online play needs the Cloudflare deployment described above.
+The repository has no GitHub Pages deployment workflow. Static builds can be hosted elsewhere from `apps/client/dist`; online play needs the Cloudflare deployment described above.
 
 ## Upstream platform references
 

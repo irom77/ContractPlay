@@ -369,13 +369,14 @@ Behaviour:
 - [ ] **Step 4:** Run `pnpm build && pnpm web:verify && pnpm test && pnpm typecheck && pnpm lint`; commit `feat: deploy online tables to Cloudflare`.
 - [ ] **Step 5 (owner):** Ask the owner to create the Cloudflare account and run `wrangler login`; then run `pnpm deploy` and report the address. Repeat the two-window manual check from Task 8 against the deployed address.
 
-### Task 10: Retire GitHub Pages (only after the owner confirms the Cloudflare address works)
+### Task 10: Remove GitHub Pages deployments
+
+**Decision:** Cloudflare is the only maintained web deployment. Keep the existing Pages copy as-is, without updating or redirecting it.
 
 **Files:**
-- Modify: `.github/workflows/deploy-web.yml`, `README.md`, `docs/platform-delivery.md`, `CHANGES.md`
-- Create: `scripts/pages-redirect/index.html`
+- Delete: `.github/workflows/deploy-web.yml`
+- Modify: `README.md`, `docs/platform-delivery.md`, `TODO.md`, `CHANGES.md`
 
-- [ ] **Step 1:** Confirm with the owner that the deployed address works for them and that Pages should become a redirect. Do not proceed without that.
-- [ ] **Step 2:** `index.html`: a minimal page titled "ContractPlay has moved" with a link and an immediate redirect (`<meta http-equiv="refresh">` plus `location.replace`) to the Cloudflare address, preserving the hash. Change `deploy-web.yml` to upload `scripts/pages-redirect` instead of the client build.
-- [ ] **Step 3:** Replace the Pages address in `README.md`, `docs/platform-delivery.md`, and add a `CHANGES.md` line that the web app moved.
-- [ ] **Step 4:** Commit `chore: redirect GitHub Pages to the Cloudflare deployment`. Pushing is the owner's call.
+- [x] **Step 1:** Owner confirmed GitHub Pages should not receive future deployments.
+- [x] **Step 2:** Remove the Pages workflow; retain the existing published copy without maintaining it.
+- [x] **Step 3:** Update project and delivery docs to describe Cloudflare as the sole maintained web deployment and remove the planned redirect.

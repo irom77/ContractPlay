@@ -99,7 +99,7 @@ Display names and table names are length-limited and stripped of control charact
 - **App:** a "Play online" entry beside solo play, a lobby screen, and a table screen. The table screen should reuse the existing table presentation; `apps/client/src/App.tsx` is one large component today, so the table rendering needs to be separated from solo state first. Routing uses the URL hash so it works with the relative asset paths and inside the desktop and iOS shells.
 - **Where the app finds the service:** same origin in the browser; a build-time setting gives the desktop and iOS builds the service address. Solo play must not depend on it. *(Deferred: desktop and iOS builds do not offer online play in the first release, because the app's content security policy and the service's cross-origin access do not allow it yet; the app hides online play in the native shell.)*
 - **Deployment:** `wrangler` configuration in `apps/server`, a `pnpm` script to deploy, and a GitHub Actions workflow that deploys on pushes to `main` using a Cloudflare API token stored as a repository secret. The owner creates the free Cloudflare account and the token; the first deploy can be done from the owner's machine after `wrangler login`.
-- **GitHub Pages:** once the Cloudflare address is live and checked, the Pages workflow is replaced by one that publishes a single page redirecting to the new address, and the README and platform guide are updated. This step is done last and only after the owner confirms the new address works.
+- **GitHub Pages:** Cloudflare is the only maintained web deployment. The existing Pages copy remains as-is and the Pages workflow is removed; no redirect is planned.
 
 ## Room for later
 
@@ -116,7 +116,7 @@ Not built now, but the design should not block them:
 - Protocol: malformed, oversized, and wrong-version messages are refused.
 - Service: an integration test that runs the Worker locally with two or more WebSocket clients through create, sit, add bots, play a full hand, disconnect and reconnect mid-hand, and restart recovery.
 - App: component tests for the lobby and the online table against a fake connection, and existing solo tests unchanged and passing.
-- A manual check in two browser windows against the local service, then against the deployed address, before the Pages redirect.
+- A manual check in two browser windows against the local service, then against the deployed address.
 
 ## Baseline
 

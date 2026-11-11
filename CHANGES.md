@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Removed automatic GitHub Pages deployments; Cloudflare is the only maintained web deployment.
 - In online play, Dummy's hand is face-up at its seat for everyone after the opening lead; each visible hand stays in its fixed seat as players interact with their own hand and Dummy.
 - When the human and bot partner win the contract, the human now controls both declaring-side hands after the opening lead, including turns where the bot is nominally Declarer.
 - Online tables now transfer both declaring-side hands to a human in dummy when Declarer is a bot; the server authorizes those plays and reveals Declarer's cards only to that human after the opening lead.
