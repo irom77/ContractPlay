@@ -72,6 +72,7 @@ export function TableView({
   const liveTurn = phase === "auction" || phase === "play";
   const shownActor = game.currentActor;
   const dummySeat = contract ? partnerOf(contract.declarer) : undefined;
+  const dummyPosition = dummySeat ? tablePositions[(seats.indexOf(dummySeat) - seats.indexOf(bottomSeat) + 4) % 4]! : undefined;
   const dummyVisible = !!contract && (game.currentTrick.length > 0 || game.completedTricks.length > 0 || phase === "complete");
   const fixedPlayHands = fixedSeatHands && phase === "play" && dummyVisible;
   const completedNsTricks = contract
@@ -94,7 +95,7 @@ export function TableView({
 
   return (
     <section className="table-panel" aria-label={ariaLabel}>
-      <div className={`table-surface ${phase === "play" && showCalls ? "calls-shown" : ""}`}>
+      <div className={`table-surface ${phase === "play" && showCalls ? "calls-shown" : ""} ${fixedPlayHands && dummyPosition === "right" ? "dummy-on-right" : ""}`}>
         {tableWatermark}
         <div className="table-status">
           {contract ? <button className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${game.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={onToggleCalls}>
