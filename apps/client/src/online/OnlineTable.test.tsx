@@ -472,6 +472,8 @@ describe("OnlineTable play", () => {
     expect(hands[0]!.game.completedTricks).toEqual(finished.completedTricks);
     const result = screen.getByRole("region", { name: "Hand result" });
     expect(result.textContent).toContain("by North");
+    expect(result.textContent).toContain(`${finished.score!.tricksTaken} of ${finished.score!.tricksRequired} required tricks`);
+    expect(result.textContent).toContain(finished.score!.undertricks > 0 ? `${finished.score!.undertricks} short` : finished.score!.overtricks > 0 ? `${finished.score!.overtricks} over` : "made exactly");
     expect(within(result).getByRole("group", { name: "West's hand" }).textContent).toContain("♠");
     expect((screen.getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
   });

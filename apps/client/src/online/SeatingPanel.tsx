@@ -75,7 +75,7 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
               </div>;
             })}
           </div>
-          {yourSeat ? <button className="primary-button" type="button" disabled={!view.canDeal} onClick={() => send({ type: "deal" })}>Deal</button> : null}
+          {yourSeat ? <button className="primary-button online-deal" type="button" disabled={!view.canDeal} onClick={() => send({ type: "deal" })}>Deal</button> : null}
         </div>
         {statusLine}
       </section>
@@ -85,10 +85,15 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
 
 function HandResult({ game, revealed }: { game: PublicGame; revealed: NonNullable<TableViewData["revealed"]> }) {
   const contract = game.contract;
+  const score = game.score;
+  const declaringSide = contract ? samePartnership(contract.declarer, "north") ? "NS" : "EW" : undefined;
+  const result = score
+    ? score.undertricks > 0 ? `${score.undertricks} short` : score.overtricks > 0 ? `${score.overtricks} over` : "made exactly"
+    : undefined;
   return (
     <section className="online-result" aria-label="Hand result">
       <h2>{contract ? <>{contractText(contract)} by {seatNames[contract.declarer]}</> : "Passed out"}</h2>
-      {contract && game.score ? <p>{game.score.tricksTaken} tricks for {samePartnership(contract.declarer, "north") ? "NS" : "EW"} · {game.score.score > 0 ? "+" : ""}{game.score.score} NS</p> : null}
+      {contract && score && declaringSide && result ? <p>{declaringSide} took {score.tricksTaken} of {score.tricksRequired} required tricks — {result} · {score.score > 0 ? "+" : ""}{score.score} NS</p> : null}
       <div className="online-hands">
         {seats.map((seat) => {
           const hand = sortHand(revealed[seat]);
