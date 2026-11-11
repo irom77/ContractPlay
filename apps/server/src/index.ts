@@ -71,6 +71,18 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
+    if (path === "/api/admin/tables") {
+      if (request.method === "GET") return Response.json({ tables: await lobbyOf(env).listAll() });
+      return new Response("method not allowed", { status: 405 });
+    }
+    const adminTable = /^\/api\/admin\/tables\/([^/]+)$/.exec(path);
+    if (adminTable) {
+      if (request.method !== "DELETE") return new Response("method not allowed", { status: 405 });
+      const rawId = adminTable[1]!.toUpperCase();
+      if (!TABLE_ID.test(rawId)) return Response.json({ error: "bad-request" }, { status: 400 });
+      const response = await env.TABLES.get(env.TABLES.idFromName(rawId)).fetch("https://table/_admin/delete", { method: "DELETE" });
+      return response.status === 204 ? response : Response.json({ error: "not-found" }, { status: 404 });
+    }
     if (path === "/api/tables") {
       if (request.method === "GET") return Response.json(await lobbyOf(env).list());
       if (request.method === "POST") return createTable(request, env);

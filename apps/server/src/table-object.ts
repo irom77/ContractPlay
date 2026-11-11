@@ -79,6 +79,10 @@ export class TableObject extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
+    if (new URL(request.url).pathname === "/_admin/delete") {
+      if (request.method !== "DELETE") return new Response("method not allowed", { status: 405 });
+      return await this.deleteAdmin() ? new Response(null, { status: 204 }) : new Response(null, { status: 404 });
+    }
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
     const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
     const open = this.openSockets();
@@ -263,12 +267,23 @@ export class TableObject extends DurableObject<Env> {
     return out;
   }
 
+  /** Removes a table at an admin's request, including its lobby entry, alarm, storage, and sockets. */
+  private async deleteAdmin(): Promise<boolean> {
+    const state = await this.load();
+    if (!state) return false;
+    await this.expire(state, true);
+    return true;
+  }
+
   /** Removes the lobby entry first, so a failed removal leaves the table for the alarm's retry instead of a stale lobby row. */
-  private async expire(state: TableState): Promise<void> {
+  private async expire(state: TableState, closeSockets = false): Promise<void> {
     await this.lobby().remove(state.id);
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.state = null;
+    if (closeSockets) {
+      for (const ws of this.openSockets()) this.gone(ws);
+    }
   }
 
   private lobby() {

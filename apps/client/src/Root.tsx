@@ -4,6 +4,7 @@ import { serviceUrl } from "./online/connection.js";
 import { Lobby } from "./online/Lobby.js";
 import { OnlineTable } from "./online/OnlineTable.js";
 import { parseRoute, routeHash, type Route } from "./online/route.js";
+import { Admin } from "./admin/Admin.js";
 
 export default function Root() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
@@ -23,6 +24,10 @@ export default function Root() {
   };
 
   const baseUrl = serviceUrl();
+  if (location.pathname === "/admin") {
+    if (baseUrl !== undefined) return <Admin baseUrl={baseUrl} />;
+    return <main className="app-shell"><section className="empty-table lobby admin-page"><div className="lobby-panel">Online table administration is unavailable in this build.</div></section></main>;
+  }
   if (baseUrl === undefined || route.screen === "solo") return <App />;
   if (route.screen === "lobby") {
     return <Lobby baseUrl={baseUrl} storage={storage} onOpenTable={(id) => navigate({ screen: "table", id })} onSolo={() => navigate({ screen: "solo" })} />;

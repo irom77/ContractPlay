@@ -39,6 +39,17 @@ export class LobbyObject extends DurableObject<Env> {
     return [...entries.values()].flatMap((entry) => (entry.summary ? [entry.summary] : []));
   }
 
+  /** All live tables for administration, including unlisted tables. */
+  async listAll(): Promise<(TableSummary & { listed: boolean })[]> {
+    const entries = await Promise.all([
+      this.ctx.storage.list<Entry>({ prefix: LISTED }),
+      this.ctx.storage.list<Entry>({ prefix: UNLISTED })
+    ]);
+    return entries.flatMap((group) => [...group.values()].flatMap((entry) =>
+      entry.summary ? [{ ...entry.summary, listed: entry.listed }] : []
+    ));
+  }
+
   /**
    * `address` is the client's IP (or "unknown"); it is only hashed with this deployment's salt and is
    * never stored, logged, or sent anywhere.
