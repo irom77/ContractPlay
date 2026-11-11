@@ -30,17 +30,19 @@ export function connect(state: TableState, player: PlayerId, name: string, at: n
   };
 }
 
-/** A closed connection: a seated player whose last connection closed is away from `at`. */
+/** A closed connection: a seated player whose last connection closed is away from `at`; an unseated one is forgotten. */
 export function disconnect(state: TableState, player: PlayerId, at: number): Outcome {
   const count = state.connections[player] ?? 0;
   if (count === 0) return { state };
   const remaining = count - 1;
-  const away = remaining === 0 && seatOf(state, player) !== undefined;
+  const seated = seatOf(state, player) !== undefined;
+  const away = remaining === 0 && seated;
   return {
     state: {
       ...state,
       connections: remaining > 0 ? { ...state.connections, [player]: remaining } : without(state.connections, player),
       awaySince: away ? { ...state.awaySince, [player]: at } : state.awaySince,
+      names: remaining === 0 && !seated ? without(state.names, player) : state.names,
       lastHumanAt: at
     }
   };

@@ -63,6 +63,16 @@ describe("connections", () => {
     expect(t.connections).toEqual({});
     expect(apply(t, { type: "disconnect", player: "zed", at: 6 }).state).toBe(t);
   });
+
+  it("forgets an unseated player's name on their last disconnect and keeps a seated player's", () => {
+    let t = connect(connect(newTable(), "zed", 1, "Zed"), "zed", 2, "Zed");
+    t = connect(t, "alice", 3, "Alice");
+    t = sendOk(t, "alice", { type: "sit", seat: "north" });
+    t = disconnect(t, "zed", 4);
+    expect(t.names.zed).toBe("Zed");
+    t = disconnect(disconnect(t, "zed", 5), "alice", 6);
+    expect(t.names).toEqual({ alice: "Alice" });
+  });
 });
 
 describe("stand-ins", () => {

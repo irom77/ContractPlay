@@ -1,12 +1,12 @@
 import { MAX_MESSAGE_BYTES, MAX_TABLE_NAME, PROTOCOL_VERSION, cleanName } from "@contractplay/protocol";
 import type { TableStyle } from "@contractplay/protocol";
-import { lobbyOf } from "./lobby-object.js";
+import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 
 // The entry module may only export handlers and Durable Object classes.
 export { LobbyObject } from "./lobby-object.js";
 export { TableObject } from "./table-object.js";
 
-const TABLE_ID = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+const TABLE_ID = new RegExp(`^([${ID_ALPHABET}]{${LISTED_ID_LENGTH}}|[${ID_ALPHABET}]{${UNLISTED_ID_LENGTH}})$`);
 const STYLES: readonly unknown[] = ["SAYC", "2/1"] satisfies TableStyle[];
 
 async function createTable(request: Request, env: Env): Promise<Response> {
@@ -34,6 +34,8 @@ function goneSocket(): Response {
 
 function connectTable(request: Request, env: Env, id: string): Response | Promise<Response> {
   if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
+  // ids are matched case-insensitively: a link typed in lower case still finds the table
+  id = id.toUpperCase();
   if (!TABLE_ID.test(id)) return goneSocket();
   return env.TABLES.get(env.TABLES.idFromName(id)).fetch(request);
 }

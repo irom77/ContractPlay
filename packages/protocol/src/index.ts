@@ -18,6 +18,7 @@ export type TableSummary = { id: string; name: string; style: TableStyle; seats:
 export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader">;
 
 export type TableView = TableSummary & {
+  /** `revision` is the staleness token to send with `act`, not a change counter: views can differ at the same revision, so never dedupe views by it. */
   listed: boolean; revision: number; handNumber: number;
   totals: { ns: number; ew: number };
   host?: Seat; yourSeat?: Seat; canDeal: boolean;

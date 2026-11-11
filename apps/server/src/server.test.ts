@@ -4,12 +4,15 @@ import { SEATS, playContextFor } from "@contractplay/core";
 import type { GameAction, GameState, Seat } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import type { ClientMessage, ServerMessage, TableSummary, TableView } from "@contractplay/protocol";
+import { BOT_PAUSE_MS, EMPTY_TABLE_MS, TRICK_PAUSE_MS } from "@contractplay/table";
 import type { TableState } from "@contractplay/table";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import type { LobbyObject } from "./lobby-object.js";
 
 const SECRET_A = "a".repeat(40);
 const SECRET_B = "b".repeat(40);
-const ID = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+const LISTED_ID = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/;
+const UNLISTED_ID = /^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{12}$/;
 
 async function createTable(body: unknown): Promise<Response> {
   return SELF.fetch("https://x/api/tables", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
@@ -19,7 +22,7 @@ async function newTableId(listed = true, name = "Test table"): Promise<string> {
   const response = await createTable({ name, style: "SAYC", listed });
   expect(response.status).toBe(201);
   const { id } = await response.json<{ id: string }>();
-  expect(id).toMatch(ID);
+  expect(id).toMatch(listed ? LISTED_ID : UNLISTED_ID);
   return id;
 }
 
@@ -30,6 +33,33 @@ async function listTables(): Promise<TableSummary[]> {
 }
 
 const stubFor = (id: string) => env.TABLES.get(env.TABLES.idFromName(id));
+
+/** Fakes Date for this test only; the Worker shares the test's isolate, so the table sees the same clock. */
+function fakeClock(): void {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  onTestFinished(() => { vi.useRealTimers(); });
+}
+
+/** Waits until the table holds exactly `count` sockets. */
+async function socketsSettle(id: string, count: number): Promise<void> {
+  for (let i = 0; i < 100; i++) {
+    if (await runInDurableObject(stubFor(id), (_instance, state) => state.getWebSockets().length) === count) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("sockets did not settle");
+}
+
+/** Reads the table's stored state. */
+const storedState = (id: string) => runInDurableObject(stubFor(id), (_instance, state) => state.storage.get<TableState>("state"));
+
+/**
+ * Moves the clock (Date is faked; the Worker shares the test's isolate) past any bot pause, then
+ * runs the table's alarm, as the runtime would once the pause is over.
+ */
+async function runAlarmWhenDue(id: string): Promise<boolean> {
+  vi.setSystemTime(Date.now() + BOT_PAUSE_MS + TRICK_PAUSE_MS);
+  return runDurableObjectAlarm(stubFor(id));
+}
 
 /** Evicts the table's object; touching it first makes sure an instance is running to evict. */
 async function evict(id: string, webSockets: "hibernate" | "close"): Promise<void> {
@@ -221,10 +251,110 @@ describe("connections", () => {
   });
 });
 
+describe("ids and limits", () => {
+  it("gives unlisted tables 12-character ids and matches ids case-insensitively", async () => {
+    for (const listed of [true, false]) {
+      const id = await newTableId(listed);
+      const { view } = await Client.join(id.toLowerCase(), SECRET_A, "Alice");
+      expect(view).toMatchObject({ id, listed });
+    }
+  });
+
+  it("refuses a 33rd socket to one table with 429", async () => {
+    const id = await newTableId(false);
+    const open = await Promise.all(Array.from({ length: 32 }, () => Client.open(id)));
+    expect(open).toHaveLength(32);
+    const refused = await SELF.fetch(`https://x/api/tables/${id}/ws`, { headers: { Upgrade: "websocket" } });
+    expect(refused.status).toBe(429);
+  });
+
+  it("caps all tables, listed and unlisted, with too-many-tables", async () => {
+    const lobby = env.LOBBY.get(env.LOBBY.idFromName("lobby"));
+    await runInDurableObject(lobby, async (instance: LobbyObject, state) => {
+      expect(instance.limits).toEqual({ listed: 100, total: 500 });
+      const total = (await state.storage.list({ prefix: "listed:" })).size + (await state.storage.list({ prefix: "unlisted:" })).size;
+      instance.limits = { listed: 100, total: total + 1 };
+      try {
+        expect(await instance.createTable({ name: "Last one", style: "SAYC", listed: false })).toHaveProperty("id");
+        expect(await instance.createTable({ name: "Over", style: "SAYC", listed: false })).toEqual({ error: "too-many-tables" });
+        expect(await instance.createTable({ name: "Over", style: "SAYC", listed: true })).toEqual({ error: "too-many-tables" });
+      } finally {
+        instance.limits = { listed: 100, total: 500 };
+      }
+    });
+  });
+});
+
+describe("presence on the server", () => {
+  it("a socket closing before hello changes no presence", async () => {
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    a.send({ type: "sit", seat: "north" });
+    await a.viewAfter(0);
+    const before = await storedState(id);
+    const stranger = await Client.open(id);
+    await socketsSettle(id, 2);
+    stranger.close();
+    await socketsSettle(id, 1);
+    const after = await storedState(id);
+    expect(after!.connections).toEqual(before!.connections);
+    expect(Object.values(after!.connections)).toEqual([1]);
+    expect(after!.awaySince).toEqual({});
+    expect(after!.revision).toBe(before!.revision);
+  });
+
+  it("reconciles sockets lost in a restart from the alarm alone, then expires and leaves the lobby", async () => {
+    fakeClock();
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    a.send({ type: "sit", seat: "north" });
+    await a.viewAfter(0);
+    await evict(id, "close");
+    await a.waitClosed();
+    // nobody comes back: only the backstop alarm can notice
+    expect(Object.values((await storedState(id))!.connections)).toEqual([1]);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    const reconciled = (await storedState(id))!;
+    expect(reconciled.connections).toEqual({});
+    expect(Object.keys(reconciled.awaySince)).toHaveLength(1);
+    expect((await listTables()).find((t) => t.id === id)!.seats.north).toMatchObject({ away: true });
+    vi.setSystemTime(Date.now() + EMPTY_TABLE_MS);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect(await storedState(id)).toBeUndefined();
+    expect((await listTables()).map((t) => t.id)).not.toContain(id);
+  });
+
+  it("does not let a bot act before its pause is over, even when the alarm fires early", async () => {
+    fakeClock();
+    const id = await newTableId();
+    const { client: a } = await Client.join(id, SECRET_A, "Alice");
+    a.send({ type: "sit", seat: "south" });
+    let view = await a.viewAfter(0);
+    for (const seat of ["north", "east", "west"] as const) {
+      a.send({ type: "setBot", seat, skill: "advanced" });
+      view = await a.viewAfter(view.revision);
+    }
+    a.send({ type: "deal" });
+    view = await a.viewAfter(view.revision);
+    expect(view.game!.currentActor).toBe("north");
+    const dealt = (await storedState(id))!.revision;
+    // early: the alarm runs, the bot does not act, and the alarm is set again
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await storedState(id))!.revision).toBe(dealt);
+    vi.setSystemTime(Date.now() + BOT_PAUSE_MS - 1);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await storedState(id))!.revision).toBe(dealt);
+    // due: the bot acts once
+    vi.setSystemTime(Date.now() + 1);
+    expect(await runDurableObjectAlarm(stubFor(id))).toBe(true);
+    expect((await storedState(id))!.revision).toBe(dealt + 1);
+  });
+});
+
 describe("a hand at an online table", () => {
   it("deals, plays to the end, survives a reconnect, hibernation, and a restart, and never shows hidden cards", { timeout: 120_000 }, async () => {
+    fakeClock();
     const id = await newTableId();
-    const stub = stubFor(id);
     let { client: a } = await Client.join(id, SECRET_A, "Alice");
     const { client: b, view: bFirst } = await Client.join(id, SECRET_B, "Bob");
     expect(bFirst.yourSeat).toBeUndefined();
@@ -293,10 +423,10 @@ describe("a hand at an online table", () => {
           expect(view.game).toEqual(before.game);
           expect(view.totals).toEqual(before.totals);
           // the sockets lost in the restart were reconciled away: only A's new connection is counted
-          const stored = await runInDurableObject(stub, (_instance, state) => state.storage.get<TableState>("state"));
+          const stored = await storedState(id);
           expect(Object.values(stored!.connections)).toEqual([1]);
         } else {
-          await runDurableObjectAlarm(stub);
+          await runAlarmWhenDue(id);
           view = await a.viewAfter(view.revision);
         }
       }

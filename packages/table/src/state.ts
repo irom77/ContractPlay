@@ -15,6 +15,7 @@ export type TableState = Readonly<{
   awaySince: Readonly<Record<PlayerId, number>>;
   /** Display names learned on connect; a seated player with no known name is shown as "Player". */
   names: Readonly<Record<PlayerId, string>>;
+  /** The staleness token for `act`, bumped by game and seat changes only; presence changes keep it, so it is not a change counter. */
   revision: number; handNumber: number;
   game?: GameState; totals: { ns: number; ew: number };
   turnSince: number; lastHumanAt: number; trickJustCompleted: boolean;

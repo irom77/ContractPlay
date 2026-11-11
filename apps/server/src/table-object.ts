@@ -1,11 +1,18 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, parseClientMessage } from "@contractplay/protocol";
 import type { ServerMessage, TableStyle, TableSummary } from "@contractplay/protocol";
-import { BOT_PAUSE_MS, botToAct, chooseBotAction, createTable, nextWake, reduce, summaryOf, viewFor } from "@contractplay/table";
+import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, createTable, nextWake, reduce, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
 
 const STATE_KEY = "state";
+/** Most open sockets one table accepts. */
+export const MAX_SOCKETS_PER_TABLE = 32;
+/**
+ * While connections are counted, the alarm fires at least this often, so counts left by sockets
+ * lost in a restart are reconciled (and the table can expire) even if no client comes back.
+ */
+const RECONCILE_MS = 3_600_000;
 
 /** Kept on each socket so the player survives hibernation; absent until the socket's `hello`. */
 type Attachment = { player: PlayerId; name: string };
@@ -54,6 +61,7 @@ export class TableObject extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
+    if (this.ctx.getWebSockets().length >= MAX_SOCKETS_PER_TABLE) return Response.json({ error: "too-many-connections" }, { status: 429 });
     const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
     this.ctx.acceptWebSocket(server);
     return new Response(null, { status: 101, webSocket: client });
@@ -80,11 +88,17 @@ export class TableObject extends DurableObject<Env> {
     await this.reconcile(ws);
   }
 
-  /** One bot decision per invocation (to stay within the per-invocation CPU limit), then a tick, then re-arm. */
+  /**
+   * Reconciles connection counts, makes at most one bot decision, and only once it is due (to stay
+   * within the per-invocation CPU limit), then a tick, then re-arms.
+   */
   async alarm(): Promise<void> {
+    if (!(await this.load())) return;
+    await this.reconcile();
     const state = await this.load();
     if (!state) return;
-    if (botToAct(state) !== undefined) {
+    const due = botWake(state);
+    if (botToAct(state) !== undefined && due !== undefined && Date.now() >= due) {
       const action = await chooseBotAction(state);
       if (action) await this.dispatch({ type: "bot", revision: state.revision, action, at: Date.now() });
     }
@@ -155,11 +169,17 @@ export class TableObject extends DurableObject<Env> {
     await this.arm(state);
   }
 
-  /** Sets the alarm for the state's next wake, never sooner than one bot pause from now (no busy loop on a past wake). */
+  /**
+   * Sets the alarm for the state's next wake, never sooner than one bot pause from now (no busy loop
+   * on a past wake), and no later than RECONCILE_MS from now while connections are counted.
+   */
   private async arm(state: TableState): Promise<void> {
+    const now = Date.now();
     const wake = nextWake(state);
-    if (wake === undefined) await this.ctx.storage.deleteAlarm();
-    else await this.ctx.storage.setAlarm(Math.max(wake, Date.now() + BOT_PAUSE_MS));
+    const backstop = Object.keys(state.connections).length > 0 ? now + RECONCILE_MS : undefined;
+    const at = Math.min(wake === undefined ? Infinity : Math.max(wake, now + BOT_PAUSE_MS), backstop ?? Infinity);
+    if (at === Infinity) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(at);
   }
 
   /** Applies an event; on a change stores it, then sends every identified connection its own view. */
@@ -181,11 +201,12 @@ export class TableObject extends DurableObject<Env> {
     return out;
   }
 
+  /** Removes the lobby entry first, so a failed removal leaves the table for the alarm's retry instead of a stale lobby row. */
   private async expire(state: TableState): Promise<void> {
+    await this.lobby().remove(state.id);
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.state = null;
-    await this.lobby().remove(state.id);
   }
 
   private lobby() {
