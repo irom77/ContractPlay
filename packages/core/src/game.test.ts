@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal, type Card, type Seat } from "./cards.js";
-import { applyAction, createGameState, redoAction, replayActions, undoAction } from "./game.js";
+import { applyAction, createGameState, playContextFor, redoAction, replayActions, undoAction } from "./game.js";
 import { trickWinner } from "./rules.js";
 
 const initial = () => createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" });
@@ -109,5 +109,27 @@ describe("immutable bridge game transitions", () => {
     }).length;
     expect(state.score?.tricksTaken).toBe(declaringTricks);
     expect(Object.values(state.hands).flat()).toHaveLength(0);
+  });
+});
+
+describe("playContextFor", () => {
+  it("shows dummy only after the opening lead, and declarer's hand when dummy is to play", () => {
+    let state = bid(initial(), "north", "1hearts");
+    for (const seat of ["east", "south", "west"] as const) state = bid(state, seat, "pass");
+    expect(state.phase).toBe("play");
+
+    const beforeLead = playContextFor(state);
+    expect(beforeLead).toMatchObject({ seat: "east", declarer: "north", played: [] });
+    expect(beforeLead.visibleHand).toBeUndefined();
+    expect(beforeLead.trump).toBe("hearts");
+
+    const lead = state.hands.east[0]!;
+    const afterLead = play(state, "east", lead);
+    const dummyToPlay = playContextFor(afterLead);
+    expect(dummyToPlay.seat).toBe("south");
+    expect(dummyToPlay.hand).toEqual(afterLead.hands.south);
+    expect(dummyToPlay.visibleHand).toEqual(afterLead.hands.north);
+    expect(dummyToPlay.ledSuit).toBe(lead.suit);
+    expect(playContextFor(afterLead, "west").visibleHand).toEqual(afterLead.hands.south);
   });
 });

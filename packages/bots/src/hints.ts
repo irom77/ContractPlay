@@ -143,6 +143,10 @@ function explainDouble(view: AuctionView): string {
     return `Negative double: 6+ points with ${unbidMajors.length === 2 ? "both majors" : unbidMajors.length === 1 ? `four ${unbidMajors[0]}` : "the unbid suits"}. It is for takeout, not penalties.`;
   }
   const response = ours[1];
+  if (ours.length === 1 && ours[0]!.seat === me && ours[0]!.level === 1 && isSuit(ours[0]!.strain) && isSuit(target.strain) && target.level <= 3 &&
+    prior.slice(-2).every(({ bid }) => bid === "pass") && prior.every(({ bid }) => bid !== "double")) {
+    return `Reopening double: short in ${target.strain}, with support for the unbid suits. For takeout, and partner may pass with good ${target.strain}.`;
+  }
   if (ours.length === 2 && myEarlierBids.length === 1 && ours[0]!.seat === me && response && isMajor(response.strain) && response.level === 1 && overcall && overcall.index > response.index && overcall.level <= 2) {
     return `Support double: exactly three-card support for partner's ${response.strain}.`;
   }
@@ -391,6 +395,18 @@ function explainLaterBid(view: AuctionView, call: Contract): string {
   if (myOpening && reply && uncontested && myOpening.level === 2 && isSuit(myOpening.strain) && myOpening.strain !== "clubs" && reply.level === 2 && reply.strain === "notrump" && call.level === 3) {
     if (suit === myOpening.strain) return "A minimum weak two, with no extra feature to show.";
     return suit ? `A maximum weak two with a feature (an ace or king) in ${suit}.` : "A maximum weak two with no feature in a side suit.";
+  }
+  if (myOpening && reply && uncontested && myOpening.level === 1 && isMajor(myOpening.strain) && reply.level === 2 && reply.strain === "notrump" &&
+    !prior.slice(0, myOpening.index).some(({ seat, bid }) => seat === partner && bid === "pass")) {
+    const major = myOpening.strain;
+    if (call.level === 3 && suit === major) return `Answers Jacoby 2NT: 18+ points and no short suit. Suggests a slam in ${major}.`;
+    if (call.level === 3 && !suit) return "Answers Jacoby 2NT: 15–17 points and no short suit.";
+    if (call.level === 4 && suit === major) return "Answers Jacoby 2NT: a minimum opening with no short suit. To play.";
+    if (call.level === 3 && suit) return `Answers Jacoby 2NT: a singleton or void in ${suit}.`;
+  }
+  const partnerOpenedTwoClubs = ours[0]!.seat === partner && ours[0]!.level === 2 && ours[0]!.strain === "clubs" && !view.bids.some(({ index }) => index < ours[0]!.index);
+  if (partnerOpenedTwoClubs && uncontested && mine.length === 1 && mine[0]!.level === 2 && mine[0]!.strain === "diamonds" && !suit && call.level === 2) {
+    return "A weak hand with no fit and no suit worth showing. The auction is still forcing.";
   }
   if (view.expert && myOpening && reply && uncontested && myOpening.level === 1 && isMajor(myOpening.strain) && reply.level === 2 && reply.strain === "clubs" && call.level === 2 &&
     myOpening.index >= 2 && prior.slice(0, myOpening.index).some(({ seat }) => seat === partner)) {

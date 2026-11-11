@@ -5,6 +5,7 @@ import {
   createGameState,
   deal,
   redoAction,
+  playContextFor,
   requestHint,
   SUITS,
   trickWinner,
@@ -251,13 +252,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       const actorSeat = turnState.currentActor;
       const action = turnState.phase === "auction"
         ? { type: "bid" as const, seat: actorSeat, bid: await bot.chooseBid(turnState.hands[actorSeat], turnState.auction, actorSeat) }
-        : { type: "play" as const, seat: actorSeat, card: await bot.chooseCard({
-            seat: actorSeat,
-            hand: turnState.hands[actorSeat],
-            currentTrick: turnState.currentTrick,
-            ...(turnState.currentTrick[0] ? { ledSuit: turnState.currentTrick[0].card.suit } : {}),
-            ...(turnState.contract && turnState.contract.strain !== "notrump" ? { trump: turnState.contract.strain } : {})
-          }) };
+        : { type: "play" as const, seat: actorSeat, card: await bot.chooseCard(playContextFor(turnState, actorSeat)) };
       if (cancelled) return;
       const result = applyAction(turnState, action);
       if (result.ok) setGame((current) => current === turnState ? result.state : current);
@@ -295,13 +290,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
         if (!cancelled && isCallAvailable(hintGame, suggestion.bid)) setBidHint({ game: hintGame, ...suggestion });
       }).catch(failed);
     } else if (hintGame.phase === "play") {
-      const context = {
-        seat,
-        hand: hintGame.hands[seat],
-        currentTrick: hintGame.currentTrick,
-        ...(hintGame.currentTrick[0] ? { ledSuit: hintGame.currentTrick[0].card.suit } : {}),
-        ...(hintGame.contract && hintGame.contract.strain !== "notrump" ? { trump: hintGame.contract.strain } : {})
-      };
+      const context = playContextFor(hintGame, seat);
       const suggestion = solver
         ? requestHint(context, solver).then((cards) => ({ cards, reason: "Recommended by the solver." }))
         : suggestPlay(context).then(({ card, reason }) => ({ cards: [card], reason }));

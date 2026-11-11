@@ -9,7 +9,7 @@ import { SEATS, type Bid, type Hand, type PublicBid, type Seat, type Suit } from
  */
 
 type Strain = Suit | "notrump";
-type Contract = Readonly<{ level: number; strain: Strain; seat: Seat }>;
+export type Contract = Readonly<{ level: number; strain: Strain; seat: Seat }>;
 
 const strainOrder: readonly Strain[] = ["clubs", "diamonds", "hearts", "spades", "notrump"];
 const suitsHighToLow: readonly Suit[] = ["spades", "hearts", "diamonds", "clubs"];
@@ -36,7 +36,7 @@ function shape(hand: Hand) {
 }
 
 /** Opener's rebid after 1x – (pass) – new suit – (pass). */
-function openerRebid(hand: Hand, opening: Contract, response: Contract): Bid {
+export function openerRebid(hand: Hand, opening: Contract, response: Contract): Bid {
   const { length, hcp, balanced, stopper } = shape(hand);
   const opened = opening.strain as Suit;
   const responded = response.strain as Suit;
@@ -97,9 +97,10 @@ function afterNegativeDouble(hand: Hand, opening: Contract, overcall: Contract):
 
   const major = unbid.filter((suit) => isMajor(suit) && length(suit) >= 4).sort((a, b) => length(b) - length(a))[0];
   if (major) {
-    if (hcp >= 19) return `${Math.max(gameLevel(major), cheapestLevel(major))}${major}` as Bid;
+    if (hcp >= 19 || (hcp >= 17 && cheapestLevel(major) >= 3)) return `${Math.max(gameLevel(major), cheapestLevel(major))}${major}` as Bid;
     return bid(major, hcp >= 16 && cheapestLevel(major) + 1 < gameLevel(major) ? 1 : 0);
   }
+  if (stopper(theirs) && hcp >= 18) return `${Math.max(3, cheapestLevel("notrump"))}notrump` as Bid;
   if (stopper(theirs) && (balanced || length(opened) < 5)) {
     if (hcp >= 18) return `${Math.max(3, cheapestLevel("notrump"))}notrump` as Bid;
     return bid("notrump");
@@ -177,7 +178,7 @@ function afterCueRaise(hand: Hand, ownSuit: Suit, theirSuit: Suit, cue: Contract
   const cheapest = (strain: Strain): Bid => `${order(cue.level, strain) > floor ? cue.level : cue.level + 1}${strain}` as Bid;
   if (isMajor(ownSuit)) return hcp >= 14 && order(4, ownSuit) > floor ? `4${ownSuit}` as Bid : cheapest(ownSuit);
   if (stopper(theirSuit)) return hcp >= 14 && order(3, "notrump") > floor ? "3notrump" : cheapest("notrump");
-  return cheapest(ownSuit);
+  return hcp >= 16 && order(5, ownSuit) > floor ? `5${ownSuit}` as Bid : cheapest(ownSuit);
 }
 
 /** Responder's first call with six or more points after partner's one-of-a-suit opening and a pass. */
@@ -343,7 +344,7 @@ export function forcedContinuation(hand: Hand, auction: readonly PublicBid[], se
     const response = calls[2];
     if (
       passes(1) && response && response.seat === partner && response.strain !== "notrump" && response.strain !== opening.strain &&
-      order(response.level, response.strain) < order(2, opening.strain) && !auction.slice(0, first).some((call) => call.seat === partner)
+      order(response.level, response.strain) < order(2, opening.strain) && (!auction.slice(0, first).some((call) => call.seat === partner) || shape(hand).hcp >= 16)
     ) return openerRebid(hand, opening, response);
     const overcall = calls[1];
     if (overcall && overcall.strain !== "notrump" && overcall.strain !== opening.strain && overcall.level <= 3 && live[2]?.bid === "double" && live[2].seat === partner) {

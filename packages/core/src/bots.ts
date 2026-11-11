@@ -11,6 +11,15 @@ export type PlayContext = Readonly<{
   currentTrick: readonly Readonly<{ seat: Seat; card: Card }>[];
   ledSuit?: Suit;
   trump?: Suit;
+  /** The declarer, once the contract is set. */
+  declarer?: Seat;
+  /**
+   * The other hand this player can see: dummy's cards once the opening lead is made, or declarer's own cards when
+   * declarer chooses a card from dummy.
+   */
+  visibleHand?: Hand;
+  /** Every card played to the tricks already completed. */
+  played?: readonly Card[];
 }>;
 
 export interface BotPlayer {

@@ -2,6 +2,7 @@ import { SEATS, cardId, isValidDeal, type Card, type Deal, type Seat, type Suit 
 import { emptyHistory, recordAction, type Bid, type GameAction, type GameHistory } from "./history.js";
 import { trickWinner, validatePlay, type TrickCard } from "./rules.js";
 import { scoreContract, type ContractScore } from "./scoring.js";
+import type { PlayContext } from "./bots.js";
 import type { Vulnerability } from "./types.js";
 
 export type Contract = Readonly<{
@@ -215,4 +216,26 @@ export function redoAction(state: GameState): GameState {
 
 export function replayActions(state: GameState): readonly GameAction[] {
   return state.history.actions;
+}
+
+/**
+ * What the player to act can see when choosing a card: their own hand, the trick so far, the cards already played, and
+ * — once the opening lead is on the table — dummy. When dummy is to play, the hand is dummy's and declarer's is the
+ * visible one, because declarer chooses dummy's cards.
+ */
+export function playContextFor(state: GameState, seat: Seat = state.currentActor): PlayContext {
+  const contract = state.contract;
+  const dummy = contract ? SEATS[(seatIndex(contract.declarer) + 2) % 4]! : undefined;
+  const dummyShown = state.completedTricks.length > 0 || state.currentTrick.length > 0;
+  const visibleSeat = !contract || !dummy || !dummyShown ? undefined : seat === dummy ? contract.declarer : dummy;
+  return {
+    seat,
+    hand: state.hands[seat],
+    currentTrick: state.currentTrick,
+    ...(state.currentTrick[0] ? { ledSuit: state.currentTrick[0].card.suit } : {}),
+    ...(contract && contract.strain !== "notrump" ? { trump: contract.strain } : {}),
+    ...(contract ? { declarer: contract.declarer } : {}),
+    ...(visibleSeat ? { visibleHand: state.hands[visibleSeat] } : {}),
+    played: state.completedTricks.flatMap((trick) => trick.map((play) => play.card))
+  };
 }
