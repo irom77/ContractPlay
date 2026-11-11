@@ -29,7 +29,10 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
-      - run: pnpm web:verify
+      - name: Build and verify the web client without online play
+        run: pnpm web:verify
+        env:
+          VITE_ONLINE_URL: none
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -60,6 +60,15 @@ describe("explainBid", () => {
     expect(meaning(["1H", "P", "P"])).toContain("Fewer than 6 points");
   });
 
+  it("explains Jacoby 2NT answers, a reopening double, and a waiting 2NT after 2C", () => {
+    expect(meaning(["1S", "P", "2NT", "P", "3S"])).toContain("18+ points and no short suit");
+    expect(meaning(["1S", "P", "2NT", "P", "3NT"])).toContain("15–17 points");
+    expect(meaning(["1S", "P", "2NT", "P", "4S"])).toContain("minimum opening");
+    expect(meaning(["1S", "P", "2NT", "P", "3D"])).toContain("singleton or void in diamonds");
+    expect(meaning(["1D", "1S", "P", "P", "X"])).toContain("Reopening double");
+    expect(meaning(["2C", "P", "2D", "P", "2S", "P", "2NT"])).toContain("still forcing");
+  });
+
   it("does not treat a passed hand's two-level response as game forcing", () => {
     expect(meaning(["P", "P", "1S", "P", "2D"], "2/1")).toContain("10+ points");
   });

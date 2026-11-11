@@ -1,0 +1,19 @@
+{
+  "name": "contractplay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-22",
+  "assets": {
+    "directory": "../client/dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "TABLES", "class_name": "TableObject" },
+      { "name": "LOBBY", "class_name": "LobbyObject" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TableObject", "LobbyObject"] }
+  ]
+}

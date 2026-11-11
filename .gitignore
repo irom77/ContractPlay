@@ -23,3 +23,8 @@ Thumbs.db
 
 # Brainstorming mockups
 .superpowers/
+
+# Wrangler local state
+.wrangler/
+.dev.vars
+.dev.vars.*

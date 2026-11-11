@@ -201,6 +201,12 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Stop bots passing forcing bids: natural opener rebids over a new-suit response and a negative double, responder rebids over a reverse and over a new suit after a two-level response, and answers to cue-bid raises, at every skill level.
 - [x] Apply competitive and continuation rules after passes before the opening bid, keeping passed-hand agreements when opener's partner passed.
 - [x] Respond with 6+ points to one of a suit and 8+ to 1NT whatever the shape, jump or reverse as opener with 19+, and bid game when the partnership is known to hold 26 points in an uncontested auction.
+- [x] Implement intermediate through expert strategies and complete SAYC / 2/1 agreements: a shared agreement layer (`packages/bots/src/system.ts`) covers openings through 4-level preempts and 3NT, notrump structures, strong 2♣ and weak-two continuations, Jacoby 2NT answers, limit-raise and game-try answers, fourth suit, Blackwood with the king ask, and game-forcing 2/1 sequences that never stop below game.
+- [x] Implement distinct SAYC and 2/1 response agreements: SAYC passes 1NT with a balanced five-card minimum where 2/1 bids a three-card minor over the forcing 1NT; 2/1 two-level responses are forcing to game, SAYC ones promise 10+ and a rebid.
+- [x] Add intermediate, advanced, and expert bidding/play strategies with distinct tested behavior: Intermediate acts over preempts and 1NT and opens at the four level; Advanced balances, reopens with a double, opens light in third and fourth seat, draws trumps, ruffs, and plays third hand high; Expert cashes established winners, leads singletons against suit contracts, and keeps winners when discarding.
+- [x] Advance partner's takeout double by strength at every level (jump with 9–11, cue-bid with 12+), and act over opponents' preempts and 1NT openings with takeout doubles, penalty doubles, and natural overcalls.
+- [x] Extend the game-with-known-values check to contested auctions (combined 25+ shown points place a major game, 3NT with stoppers, a minor game, or a penalty double); simulated deals with 27+ HCP stopping in a partscore fell from about 2.7% to about 1%.
+- [x] Make the rule classes read auctions relative to the opening bid themselves; `createBot` no longer strips leading passes.
 
 ## Platform delivery
 
@@ -210,3 +216,9 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Pass Windows and macOS installer builds and the iOS/iPadOS simulator build/install/launch workflows in [GitHub Actions](https://github.com/irom77/ContractPlay/actions/runs/40745554895).
 - [x] Document Windows/macOS signing, Apple signing and store submission, web deployment, and account/device requirements in [the platform guide](docs/platform-delivery.md).
 - [x] Enable GitHub Pages with the Actions source and confirm its first deployment (live at https://irom77.github.io/ContractPlay/ since 2026-11-10).
+
+## Online multiplayer
+
+- [x] Build sessions, table lifecycle, and server-authoritative actions (delivered with guest identity only: a display name and a device secret; sign-in remains open in TODO.md).
+- [x] Protect private hands and recover live tables after disconnects.
+- [x] Connect lobby/table UI and verify reconnect, stale actions, and duplicate delivery.

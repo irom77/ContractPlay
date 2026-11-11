@@ -1,5 +1,17 @@
 # Changes
 
+## Unreleased
+
+- Added online tables (not yet deployed; the GitHub Pages web app is built without the online entries, so they appear only once the Cloudflare deployment is live; desktop and iOS builds do not offer online play yet). From "Play online" on the start screen or "Online tables" in the table menu you can open a lobby, create a listed or unlisted table, share its link, and take a seat with a display name; no account is needed. Each seat can be a person or a bot at a skill level you choose, and a hand starts when all four seats are filled and at least one is a person.
+- Online play is dealt and checked by the service, so you see only your own cards, dummy after the opening lead, and all hands when the hand ends. Tables keep running totals. If a player is away, another seated player can hand the seat to a bot, and the player takes it back on return; the host can hand an idle player to a bot after two minutes.
+- Finished online hands are saved to the hand history for review and PBN export. Online tables have no hints, take-back, PBN import, chat, voice, or video, and a seat is tied to the browser, so clearing browser data or changing device loses it.
+- Bots now follow a full set of SAYC and 2/1 agreements. Beyond the earlier rules they answer Jacoby 2NT, limit raises and game tries, continue after a strong 2♣ and a weak two (including the 2NT feature ask), use and answer Blackwood with the king ask, bid on after fourth suit, and never stop below game in a 2/1 game-forcing auction. SAYC and 2/1 differ where the systems do, for example after 1♠–1NT.
+- Bots compete more fully. Partner's takeout double is advanced by strength (jump with 9–11, cue bid with 12+), and from Intermediate up bots double or overcall the opponents' preempts and 1NT openings, rebid as overcaller and doubler, and compete as opener and responder after interference. Advanced and Expert also balance in the pass-out seat, reopen with a double, and open light in third and fourth seat.
+- Bots bid game in contested auctions when the partnership has shown the points for it. In simulated deals, hands with 27+ points stopping in a partscore fell from just under 3% to about 1%.
+- Skill levels now play the cards differently. Advanced draws trumps as declarer, ruffs when void, plays third hand high, and discards from its weakest suit; Expert also cashes cards that have become winners, leads a singleton against a suit contract, and keeps winners when discarding. Against the same contracts, each level takes more tricks than the one below it.
+- Hints explain more calls: answers to Jacoby 2NT, a reopening double, and responder's waiting 2NT after a strong 2♣.
+- Bots read every auction from the opening bid, so passes before the opening no longer need special handling.
+
 ## 0.1.9 - 2026-11-10
 
 - Bots no longer pass partner's forcing bids. Opener now rebids naturally over a new-suit response and over a negative double, responder bids on over a reverse or a new suit after a two-level response, and a cue-bid raise is answered. Before this, a bot passed one of these in about 3% of deals, sometimes with 20 or more points.

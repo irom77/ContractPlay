@@ -969,3 +969,14 @@ describe("bridge table", () => {
     expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.currentActor).toBe("east");
   });
 });
+
+describe("Play online entry", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+  afterEach(() => { cleanup(); location.hash = ""; });
+
+  it("offers Play online on the start screen and routes to the lobby", async () => {
+    render(<App />);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Play online" }));
+    expect(location.hash).toBe("#/online");
+  });
+});

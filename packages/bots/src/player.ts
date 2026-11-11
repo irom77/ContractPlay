@@ -1,5 +1,7 @@
 import { SEATS, cardId, type Bid, type BotConfig, type BotPlayer, type Hand, type PlayContext, type PublicBid, type Seat, type Suit } from "@contractplay/core";
 import { forcedContinuation, strongOpenerRebid } from "./forcing.js";
+import { advancedCard, expertCard } from "./play.js";
+import { createSystem } from "./system.js";
 
 export interface ConventionSystem {
   readonly style: "SAYC" | "2/1";
@@ -294,6 +296,21 @@ function fourthHighestFromLongestSuit(cards: Hand) {
   return [...longestSuit.cards].sort((a, b) => rankValue(b.rank) - rankValue(a.rank))[3];
 }
 
+/**
+ * The auction as the rule classes read it, from the opening bid. Passes before the opening bid only matter when they make the responding
+ * hand a passed hand; otherwise the auction means the same as one the opener dealt, which is how the rules are written.
+ * So the leading passes are dropped for the defending side, and for the opening side unless opener's partner passed.
+ */
+function withoutInertLeadingPasses(auction: readonly PublicBid[], seat: Seat): readonly PublicBid[] {
+  const first = auction.findIndex(({ bid }) => bid !== "pass");
+  if (first <= 0) return auction;
+  const opener = auction[first]!.seat;
+  const openerPartner = SEATS[(SEATS.indexOf(opener) + 2) % SEATS.length]!;
+  const onOpeningSide = seat === opener || seat === openerPartner;
+  if (onOpeningSide && auction.slice(0, first).some((call) => call.seat === openerPartner)) return auction;
+  return auction.slice(first);
+}
+
 export class BeginnerBot implements BotPlayer {
   readonly config: BotConfig;
   readonly convention: ConventionSystem;
@@ -304,7 +321,8 @@ export class BeginnerBot implements BotPlayer {
     this.convention = makeConvention(config.biddingStyle === "2/1" ? "2/1" : "SAYC");
   }
 
-  async chooseBid(hand: Hand, auction: readonly PublicBid[], seat: Seat): Promise<Bid> {
+  async chooseBid(hand: Hand, recorded: readonly PublicBid[], seat: Seat): Promise<Bid> {
+    const auction = withoutInertLeadingPasses(recorded, seat);
     if (auction.length === 0 || auction.every(({ bid }) => bid === "pass")) {
       return this.convention.openingBid(hand);
     }
@@ -1741,7 +1759,8 @@ export class IntermediateBot implements BotPlayer {
     this.biddingBot = new BeginnerBot({ ...config, skill: "beginner" });
   }
 
-  chooseBid(hand: Hand, auction: readonly PublicBid[], seat: Seat): Promise<Bid> {
+  chooseBid(hand: Hand, recorded: readonly PublicBid[], seat: Seat): Promise<Bid> {
+    const auction = withoutInertLeadingPasses(recorded, seat);
     const partner = SEATS[(SEATS.indexOf(seat) + 2) % SEATS.length]!;
     const contractCalls = auction.filter(({ bid }) => bid !== "pass");
     if (auction.every(({ bid }) => bid === "pass")) {
@@ -2411,6 +2430,8 @@ export class AdvancedBot implements BotPlayer {
         if (sequence) return sequence;
       }
     }
+    const chosen = advancedCard(context);
+    if (chosen) return chosen;
     return this.intermediateBot.chooseCard(context);
   }
 }
@@ -2426,7 +2447,8 @@ export class ExpertBot implements BotPlayer {
     this.advancedBot = new AdvancedBot({ ...config, skill: "advanced" });
   }
 
-  chooseBid(hand: Hand, auction: readonly PublicBid[], seat: Seat): Promise<Bid> {
+  chooseBid(hand: Hand, recorded: readonly PublicBid[], seat: Seat): Promise<Bid> {
+    const auction = withoutInertLeadingPasses(recorded, seat);
     const calls = auction.filter(({ bid }) => bid !== "pass");
     const partner = SEATS[(SEATS.indexOf(seat) + 2) % SEATS.length]!;
     const isNotrumpOpening = (bid: Bid | undefined) => bid === "1notrump" || bid === "2notrump";
@@ -3629,6 +3651,8 @@ export class ExpertBot implements BotPlayer {
   }
 
   chooseCard(context: PlayContext): Promise<Hand[number]> {
+    const counted = expertCard(context);
+    if (counted) return Promise.resolve(counted);
     if (context.currentTrick.length === 0 && context.trump) {
       const lead = topOfTouchingHonorSequence(context.hand) ??
         fourthHighestFromLongestSuit(context.hand) ?? lowestCard(context.hand);
@@ -3649,21 +3673,6 @@ export function createRuleBot(config: BotConfig): BotPlayer {
 }
 
 /**
- * The auction as the rules should read it. Passes before the opening bid only matter when they make the responding
- * hand a passed hand; otherwise the auction means the same as one the opener dealt, which is how the rules are written.
- * So the leading passes are dropped for the defending side, and for the opening side unless opener's partner passed.
- */
-function withoutInertLeadingPasses(auction: readonly PublicBid[], seat: Seat): readonly PublicBid[] {
-  const first = auction.findIndex(({ bid }) => bid !== "pass");
-  if (first <= 0) return auction;
-  const opener = auction[first]!.seat;
-  const openerPartner = SEATS[(SEATS.indexOf(opener) + 2) % SEATS.length]!;
-  const onOpeningSide = seat === opener || seat === openerPartner;
-  if (onOpeningSide && auction.slice(0, first).some((call) => call.seat === openerPartner)) return auction;
-  return auction.slice(first);
-}
-
-/**
  * A bot for the table. Where no rule fits and a pass would break a forcing agreement, it makes a natural forced call.
  * Should a rule ever choose a call the auction no longer allows, the bot passes instead, so a table never waits on a
  * call that cannot be made.
@@ -3673,10 +3682,14 @@ export function createBot(config: BotConfig): BotPlayer {
   return {
     config: bot.config,
     async chooseBid(hand, auction, seat) {
-      const chosen = await bot.chooseBid(hand, withoutInertLeadingPasses(auction, seat), seat);
+      const style = bot.config.biddingStyle === "2/1" ? "2/1" : "SAYC";
+      const system = createSystem(hand, auction, seat, style, bot.config.skill);
+      const agreed = system.agreed();
+      if (agreed) return agreed;
+      const chosen = await bot.chooseBid(hand, auction, seat);
       const bid = chosen === "pass"
-        ? forcedContinuation(hand, auction, seat, bot.config.biddingStyle === "2/1" ? "2/1" : "SAYC") ?? chosen
-        : strongOpenerRebid(hand, auction, seat, chosen) ?? chosen;
+        ? system.continued() ?? forcedContinuation(hand, auction, seat, style) ?? system.values() ?? chosen
+        : system.corrected(chosen) ?? strongOpenerRebid(hand, auction, seat, chosen) ?? chosen;
       return isLegalCall(bid, auction, seat) ? bid : "pass";
     },
     chooseCard: (context) => bot.chooseCard(context)
