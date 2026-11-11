@@ -35,6 +35,9 @@ importers:
       '@contractplay/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
+      '@contractplay/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
       '@tauri-apps/api':
         specifier: ^2.12.4
         version: 2.12.4
