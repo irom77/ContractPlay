@@ -125,6 +125,9 @@ The bidding-system and play-level work described in `2026-11-10-bidding-system-a
 ## Risks to check early
 
 - The free plan limits processing time per request. A bot's decision must fit comfortably; measure `createBot` call and card choices in the Worker runtime before building on it. If it does not fit, the fallback is the paid Workers plan (about $5 a month), which is the owner's decision.
+- Measured (Task 1, 20 seeded deals, expert / 2/1, 1212 decisions, all `applyAction` results ok):
+  - Workers runtime (`@cloudflare/vitest-plugin`, local workerd): max 5.000 ms, mean 0.041 ms. The runtime clock only advances in coarse steps during synchronous work, so the max is clock granularity, not a real figure; the whole test took about 85 ms for 1212 decisions.
+  - Plain Node 24: max 6.9 to 7.8 ms, mean 0.045 ms, total about 65 ms. The max is the very first decision (cold JIT); the next slowest are 4.3 ms, 1.3 ms, 1.0 ms. Steady state is well under 5 ms, but the cold first decision exceeds the 5 ms stop threshold, so confirm against the free plan's CPU limit with a deployed Worker before relying on it (owner decision on the paid plan).
 - `packages/bots` and `packages/core` must run in the Worker runtime without Node-only APIs; verify with a local run first.
 
 ## Left to the builder
