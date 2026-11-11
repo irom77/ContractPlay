@@ -216,3 +216,9 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Pass Windows and macOS installer builds and the iOS/iPadOS simulator build/install/launch workflows in [GitHub Actions](https://github.com/irom77/ContractPlay/actions/runs/40745554895).
 - [x] Document Windows/macOS signing, Apple signing and store submission, web deployment, and account/device requirements in [the platform guide](docs/platform-delivery.md).
 - [x] Enable GitHub Pages with the Actions source and confirm its first deployment (live at https://irom77.github.io/ContractPlay/ since 2026-11-10).
+
+## Online multiplayer
+
+- [x] Build sessions, table lifecycle, and server-authoritative actions (delivered with guest identity only: a display name and a device secret; sign-in remains open in TODO.md).
+- [x] Protect private hands and recover live tables after disconnects.
+- [x] Connect lobby/table UI and verify reconnect, stale actions, and duplicate delivery.

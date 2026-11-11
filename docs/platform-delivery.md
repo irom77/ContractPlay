@@ -43,10 +43,47 @@ pnpm --filter @contractplay/client exec tauri ios build --target aarch64 --expor
 
 The CI simulator build does not require Apple signing credentials. Device installation, TestFlight, and App Store distribution do.
 
+## Online tables on Cloudflare
+
+Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). Nothing is deployed yet: the web app is still served from GitHub Pages until the project owner deploys to Cloudflare and confirms it works. After that, GitHub Pages is to become a redirect to the new address (a later task).
+
+### First deployment
+
+1. Create a free Cloudflare account.
+2. From the repository root, run `pnpm --filter @contractplay/server exec wrangler login` and approve access in the browser.
+3. Run `pnpm run deploy` (plain `pnpm deploy` is a different, built-in pnpm command). It runs `pnpm web:verify` and then `wrangler deploy` in `apps/server`. Wrangler prints the address, of the form `https://contractplay.<account-subdomain>.workers.dev`.
+4. Open the address in two browser windows and play a table to confirm it works.
+
+Use `wrangler deploy --dry-run` in `apps/server` (after `pnpm build`) to check that the configuration bundles without deploying.
+
+### Deploying from GitHub Actions
+
+`.github/workflows/deploy-cloudflare.yml` runs on pushes to `main` and by manual dispatch. It installs, runs `pnpm web:verify`, and runs `wrangler deploy` in `apps/server`. Until the token secret exists the deploy step is skipped with a notice, so the workflow still passes. Pull requests do not trigger it.
+
+To enable it:
+
+1. In the Cloudflare dashboard, open **Account API tokens**, choose **Create Token**, and under **Permission policies** select the **Edit Cloudflare Workers** template. Scope it to the one account, and name it for this repository.
+2. Add two repository secrets under **Settings -> Secrets and variables -> Actions**: `CLOUDFLARE_API_TOKEN` (the token) and `CLOUDFLARE_ACCOUNT_ID` (shown in the dashboard). Never commit either value.
+
+Cloudflare also publishes an official `cloudflare/wrangler-action`; this workflow runs `wrangler deploy` directly with the two environment variables instead, which Cloudflare's CI documentation describes.
+
+### Desktop and iOS builds
+
+The web app uses its own origin as the service address. Desktop and iOS builds have no origin, so set `VITE_ONLINE_URL` to the deployed address (for example `https://contractplay.<account-subdomain>.workers.dev`) when building them. Without it the app has no service address and hides "Play online" and "Online tables".
+
+### Free-plan limits
+
+The Worker uses SQLite-backed Durable Objects, the only kind available on the Workers Free plan. Cloudflare's published free-plan limits include 100,000 Worker requests per day, 100,000 Durable Object requests per day, 100,000 SQL rows written per day, and 10 ms of CPU time per Worker invocation. Check Cloudflare's pricing and limits pages for current values. The 10 ms CPU limit must be confirmed on the first real deployment against bot decisions, which are measured in the design under "Risks to check early" (about 7 ms for the first decision after a cold start in Node, about 0.05 ms on average). The service also applies its own limits: at most 100 listed and 400 unlisted tables, 10 table creations per network address per hour, and 32 identified and 8 total connections per address per table.
+
+### Attaching bridge.romaniuk.us later
+
+Cloudflare's documentation says Workers Custom Domains support only domains that are active zones on your Cloudflare account, so `romaniuk.us` (or the subdomain's zone) would first have to be added to Cloudflare, which means using Cloudflare's name servers. A Custom Domain cannot be created on a hostname that already has a CNAME DNS record. The domain can then be attached in the dashboard or with a `routes` entry such as `{ "pattern": "bridge.romaniuk.us", "custom_domain": true }` in `apps/server/wrangler.jsonc`. This is not set up and the repository does not do it.
+
 ## CI and release workflows
 
 - `.github/workflows/ci.yml` runs workspace checks, builds Windows and macOS installers, and builds and launches the app in an iPad simulator for pushes and pull requests.
 - `.github/workflows/deploy-web.yml` deploys the static browser client to GitHub Pages on pushes to `main` or by manual dispatch.
+- `.github/workflows/deploy-cloudflare.yml` deploys the Worker and web client to Cloudflare on pushes to `main` or by manual dispatch once the repository secrets exist; without them it skips the deploy. See [Online tables on Cloudflare](#online-tables-on-cloudflare).
 - `.github/workflows/release.yml` builds Windows and macOS assets for `v*.*.*` tags and creates a draft GitHub release. Review installers before publishing them. Windows artifacts are unsigned. macOS uses an ad-hoc signature; it is suitable for build validation but still prompts users to allow the app and does not replace Developer ID signing and notarization.
 - The first GitHub Actions run passed the workspace checks, Windows and macOS installer builds, and iPad simulator build/install/launch. See the [run summary](https://github.com/irom77/ContractPlay/actions/runs/40745554895). This checkout is Linux/WSL and cannot run those platform builds locally.
 
@@ -66,7 +103,7 @@ TestFlight and App Store distribution require an Apple Developer account, an app
 
 ### Web
 
-GitHub Pages deployment requires the repository's Pages source to be set to GitHub Actions and the workflow token to have Pages deployment permission. No server, database, or account credentials are needed for the static client.
+GitHub Pages deployment requires the repository's Pages source to be set to GitHub Actions and the workflow token to have Pages deployment permission. No server, database, or account credentials are needed for the static client. Online play needs the Cloudflare deployment described above.
 
 ## Upstream platform references
 

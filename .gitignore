@@ -26,3 +26,5 @@ Thumbs.db
 
 # Wrangler local state
 .wrangler/
+.dev.vars
+.dev.vars.*

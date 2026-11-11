@@ -18,19 +18,22 @@
 
 ## Status
 
-ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, and hints. At any point in a deal you can hand the rest of the hand to the bots from the table menu. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
+ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
-Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app is deployed to GitHub Pages at https://irom77.github.io/ContractPlay/. Signed and physical-device builds remain pending their documented setup steps. Online multiplayer and complete SAYC and 2/1 agreements remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
+Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app is deployed to GitHub Pages at https://irom77.github.io/ContractPlay/. Signed and physical-device builds remain pending their documented setup steps. Online tables are built and tested locally but not deployed yet: the Cloudflare service has not been published, so the GitHub Pages app has no online play, and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 
 ## Project structure
 
 ```text
 apps/client/          React and Vite browser client
+apps/server/          Cloudflare Worker that serves the client and runs online tables
 apps/client/src-tauri/ Tauri host for desktop and iOS/iPadOS
 packages/core/        Platform-neutral cards, rules, and game state
 packages/pbn/         PBN parser, serializer, and diagnostics
 packages/persistence/ Versioned local game storage
 packages/bots/        Bidding and card-play strategies
+packages/protocol/    Messages shared by the client and the online service
+packages/table/       Online table rules: seats, host, presence, scoring totals
 docs/superpowers/     Feature plans and specifications
 ```
 
@@ -41,6 +44,20 @@ The core package owns legal actions and immutable game transitions. PBN, persist
 Choose Beginner, Intermediate, Advanced, or Expert play, and configure SAYC or 2/1 bidding. All levels share one set of partnership agreements: opening bids, notrump structures, strong 2♣ and weak twos, major-suit raises with Jacoby 2NT, fourth suit, Blackwood, and game-forcing 2/1 sequences, with answers to partner's doubles, overcalls, and forcing bids. Beginner bids constructively and does not start competitive action. Intermediate adds overcalls, takeout doubles, preempts, and action over the opponents' preempts and 1NT. Advanced adds balancing, reopening doubles, and light third- and fourth-seat openings, and in the play draws trumps, ruffs, and plays third hand high. Expert adds Gerber, splinters, Reverse Drury, and Lebensohl, and in the play cashes established winners and protects them when discarding. Bots use standard technique and do not see hidden hands, so they still make mistakes; rarer conventions and advanced card play such as squeezes and endplays are not covered.
 
 Hints are off by default. Suggestions are the Expert bot's choice in the selected bidding style, based on standard technique and not on seeing all four hands, so they can be wrong. Call meanings cover common SAYC and 2/1 situations and fall back to a plain natural description elsewhere. If a host supplies a solver, card hints show its legal recommendations instead.
+
+## Online tables
+
+Online tables let four people, with bots filling any empty seats, play one table together. They are not live yet: see [Online tables on Cloudflare](docs/platform-delivery.md#online-tables-on-cloudflare) for the deployment steps. To try them locally, run `pnpm server:dev`.
+
+- **Lobby.** The lobby lists open tables. A table can be unlisted and then is reachable only by its link, `<address>/#/table/<id>`. There are no accounts: you choose a display name (1-20 characters), and the browser keeps a device secret in local storage that the service stores only as a hash. Clearing browser data or switching device loses your seat.
+- **Seats.** Each of the four seats is empty, a person, or a bot at a skill level you choose. A hand needs all four seats filled and at least one person. The creator is the host and can remove a person between hands; any seated person can free an away player's seat between hands. A newcomer can only take an empty seat.
+- **Play.** The service shuffles with a cryptographically secure generator and enforces every action with the same rules as the solo app. Each player receives only their own cards, dummy after the opening lead, and every hand when the hand ends; someone not seated sees seats and score only. Declarer plays dummy. Bots act on the service after about a second. Each table keeps running totals, with each hand's points going to the side that scored them.
+- **Away players.** The seat waits. Another seated player can hand it to an Intermediate bot, and the player takes it back on return. The host can hand a present but idle player to a bot after two minutes.
+- **History.** Finished online hands are saved to the device's hand history for review and PBN export; passed-out hands are not saved.
+- **Not available online:** accounts or sign-in, chat, voice or video, hints, take-back, and PBN import.
+- **Limits.** At most 100 listed and 400 unlisted tables; 10 table creations per network address per hour; 32 identified connections per table and 8 connections per address per table; unidentified connections are closed after 10 seconds. A table nobody ever joined is removed after 10 minutes, and any table after 24 hours with no person connected.
+
+In the app, online play is reached from "Play online" on the start screen and "Online tables" in the table menu. Both are hidden when the app has no service address: the web app uses its own origin, while desktop and iOS builds need `VITE_ONLINE_URL` set at build time.
 
 ## Development
 

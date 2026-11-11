@@ -15,7 +15,8 @@
     "typecheck": "pnpm --recursive build && pnpm --recursive typecheck",
     "lint": "eslint \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.ts\"",
     "test": "pnpm --filter @contractplay/pbn... build && pnpm --filter @contractplay/persistence... build && pnpm --filter @contractplay/bots... build && pnpm --filter @contractplay/protocol... build && pnpm --filter @contractplay/table... build && vitest run --passWithNoTests && pnpm --filter @contractplay/server test",
-    "server:dev": "pnpm --workspace-root build && pnpm --filter @contractplay/server dev"
+    "server:dev": "pnpm --workspace-root build && pnpm --filter @contractplay/server dev",
+    "deploy": "pnpm web:verify && pnpm --filter @contractplay/server exec wrangler deploy"
   },
   "devDependencies": {
     "eslint": "^9.22.0",
