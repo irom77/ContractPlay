@@ -430,6 +430,8 @@ describe("presence on the server", () => {
 
   it("does not delay a due bot when a new socket connects", async () => {
     fakeClock();
+    // an hour ahead, so no alarm comes due by the real clock while this test moves the faked one
+    vi.setSystemTime(Date.now() + 3_600_000);
     const id = await newTableId();
     const { client: a } = await Client.join(id, SECRET_A, "Alice");
     a.send({ type: "sit", seat: "south" });
@@ -526,7 +528,7 @@ describe("presence on the server", () => {
     await runInDurableObject(stubFor(id), (instance) => { delete (instance as unknown as { dispatch?: Dispatch }).dispatch; });
   });
 
-  it("keeps a stored and sent change when the lobby update fails, and the next change repairs the lobby row", async () => {
+  it("keeps a stored and sent change when the lobby update fails, and a later change repairs the lobby row", async () => {
     const id = await newTableId();
     const { client: a } = await Client.join(id, SECRET_A, "Alice");
     type Patched = { lobby?: () => { update(): Promise<void> } };
@@ -539,7 +541,7 @@ describe("presence on the server", () => {
     const seated = await a.viewAfter(0);
     expect(seated.yourSeat).toBe("north");
     expect((await storedState(id))!.seats.north.kind).toBe("human");
-    expect(warn).toHaveBeenCalledWith("table: lobby update failed; the next change will repair it");
+    expect(warn).toHaveBeenCalledWith("table: lobby update failed; a later seat or score change will repair it");
     expect((await listTables()).find((t) => t.id === id)!.seats.north).toEqual({ kind: "empty" });
     await runInDurableObject(stubFor(id), (instance) => { delete (instance as unknown as Patched).lobby; });
     a.send({ type: "setBot", seat: "east", skill: "advanced" });

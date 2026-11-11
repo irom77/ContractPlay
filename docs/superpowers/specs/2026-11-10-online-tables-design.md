@@ -106,7 +106,7 @@ Display names and table names are length-limited and stripped of control charact
 Not built now, but the design should not block them:
 
 - **Sign-in:** the rest of the service only ever sees a player id. Replacing "hash of a device secret" with "verified account" should touch the connection step only.
-- **Permissions and invitations:** tables already carry a creator and a listed/unlisted flag; an invite-only table and seat-level permissions would extend that record.
+- **Permissions and invitations:** tables already carry a host and a listed/unlisted flag; an invite-only table and seat-level permissions would extend that record.
 - **Voice and video:** a table already has a set of connected, identified people to signal between.
 
 ## Testing

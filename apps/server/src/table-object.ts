@@ -253,11 +253,11 @@ export class TableObject extends DurableObject<Env> {
     }
     const summary = summaryOf(out.state);
     if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state))) {
-      // the change is already stored and sent; a missed lobby update is repaired by the next change
+      // the change is already stored and sent; a missed lobby update is repaired by the next change to the lobby row
       try {
         await this.lobby().update(summary);
       } catch {
-        console.warn("table: lobby update failed; the next change will repair it");
+        console.warn("table: lobby update failed; a later seat or score change will repair it");
       }
     }
     return out;
