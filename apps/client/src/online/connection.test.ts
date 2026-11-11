@@ -180,6 +180,11 @@ describe("serviceUrl", () => {
     expect(serviceUrl()).toBe("https://play.example.org");
   });
 
+  it("is undefined when VITE_ONLINE_URL is none, even on an http(s) page", () => {
+    vi.stubEnv("VITE_ONLINE_URL", "none");
+    expect(serviceUrl()).toBeUndefined();
+  });
+
   it("falls back to the page origin on http(s)", () => {
     vi.stubEnv("VITE_ONLINE_URL", "");
     expect(serviceUrl()).toBe(location.origin);

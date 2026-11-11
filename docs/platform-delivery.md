@@ -45,7 +45,7 @@ The CI simulator build does not require Apple signing credentials. Device instal
 
 ## Online tables on Cloudflare
 
-Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). Nothing is deployed yet: the web app is still served from GitHub Pages until the project owner deploys to Cloudflare and confirms it works. After that, GitHub Pages is to become a redirect to the new address (a later task).
+Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the built web client from `apps/client/dist` and runs the tables and the lobby as Durable Objects (SQLite-backed). Nothing is deployed yet: the web app is still served from GitHub Pages, whose build is made with `VITE_ONLINE_URL=none` and so has no online entry, until the project owner deploys to Cloudflare and confirms it works. After that, GitHub Pages is to become a redirect to the new address (a planned follow-up).
 
 ### First deployment
 
@@ -58,7 +58,7 @@ Use `wrangler deploy --dry-run` in `apps/server` (after `pnpm build`) to check t
 
 ### Deploying from GitHub Actions
 
-`.github/workflows/deploy-cloudflare.yml` runs on pushes to `main` and by manual dispatch. It installs, runs `pnpm web:verify`, and runs `wrangler deploy` in `apps/server`. Until the token secret exists the deploy step is skipped with a notice, so the workflow still passes. Pull requests do not trigger it.
+`.github/workflows/deploy-cloudflare.yml` runs on pushes to `main` and by manual dispatch. It installs, runs `pnpm web:verify`, and runs `wrangler deploy` in `apps/server`. Until the token secret exists the deploy step is skipped with a notice, so the workflow still passes. Pull requests do not trigger it, and the job runs only from `main`, so a manual run from another branch does nothing. It also skips the deploy, with a notice naming the missing secret, unless both secrets below are set.
 
 To enable it:
 
@@ -69,11 +69,11 @@ Cloudflare also publishes an official `cloudflare/wrangler-action`; this workflo
 
 ### Desktop and iOS builds
 
-The web app uses its own origin as the service address. Desktop and iOS builds have no origin, so set `VITE_ONLINE_URL` to the deployed address (for example `https://contractplay.<account-subdomain>.workers.dev`) when building them. Without it the app has no service address and hides "Play online" and "Online tables".
+The Cloudflare deployment serves the app and the tables from one address, so the web app uses its own origin as the service address. The GitHub Pages build (`deploy-web.yml`) sets `VITE_ONLINE_URL=none`, which hides "Play online" and "Online tables" because Pages has no service. Desktop and iOS builds have no http(s) origin, so set `VITE_ONLINE_URL` to the Cloudflare address (for example `https://contractplay.<account-subdomain>.workers.dev`) when building them; without it they have no service address and hide the same entries.
 
 ### Free-plan limits
 
-The Worker uses SQLite-backed Durable Objects, the only kind available on the Workers Free plan. Cloudflare's published free-plan limits include 100,000 Worker requests per day, 100,000 Durable Object requests per day, 100,000 SQL rows written per day, and 10 ms of CPU time per Worker invocation. Check Cloudflare's pricing and limits pages for current values. The 10 ms CPU limit must be confirmed on the first real deployment against bot decisions, which are measured in the design under "Risks to check early" (about 7 ms for the first decision after a cold start in Node, about 0.05 ms on average). The service also applies its own limits: at most 100 listed and 400 unlisted tables, 10 table creations per network address per hour, and 32 identified and 8 total connections per address per table.
+The Worker uses SQLite-backed Durable Objects, the only kind available on the Workers Free plan. Cloudflare's published free-plan limits include 100,000 Worker requests per day, 100,000 Durable Object requests per day, 100,000 SQL rows written per day, and 10 ms of CPU time per Worker invocation. Check Cloudflare's pricing and limits pages for current values. The 10 ms CPU limit must be confirmed on the first real deployment against bot decisions, which are measured in the [design](superpowers/specs/2026-11-10-online-tables-design.md) under "Risks to check early" (about 7 ms for the first decision after a cold start in Node, about 0.05 ms on average). The service also applies its own limits: at most 100 listed and 400 unlisted tables, 10 table creations per network address per hour, and 32 identified and 8 total connections per address per table.
 
 ### Attaching bridge.romaniuk.us later
 
@@ -83,7 +83,7 @@ Cloudflare's documentation says Workers Custom Domains support only domains that
 
 - `.github/workflows/ci.yml` runs workspace checks, builds Windows and macOS installers, and builds and launches the app in an iPad simulator for pushes and pull requests.
 - `.github/workflows/deploy-web.yml` deploys the static browser client to GitHub Pages on pushes to `main` or by manual dispatch.
-- `.github/workflows/deploy-cloudflare.yml` deploys the Worker and web client to Cloudflare on pushes to `main` or by manual dispatch once the repository secrets exist; without them it skips the deploy. See [Online tables on Cloudflare](#online-tables-on-cloudflare).
+- `.github/workflows/deploy-cloudflare.yml` deploys the Worker and web client to Cloudflare on pushes to `main` or by manual dispatch from `main` once the repository secrets exist; without them it skips the deploy. See [Online tables on Cloudflare](#online-tables-on-cloudflare).
 - `.github/workflows/release.yml` builds Windows and macOS assets for `v*.*.*` tags and creates a draft GitHub release. Review installers before publishing them. Windows artifacts are unsigned. macOS uses an ad-hoc signature; it is suitable for build validation but still prompts users to allow the app and does not replace Developer ID signing and notarization.
 - The first GitHub Actions run passed the workspace checks, Windows and macOS installer builds, and iPad simulator build/install/launch. See the [run summary](https://github.com/irom77/ContractPlay/actions/runs/40745554895). This checkout is Linux/WSL and cannot run those platform builds locally.
 

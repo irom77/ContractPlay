@@ -20,7 +20,7 @@
 
 ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
-Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app is deployed to GitHub Pages at https://irom77.github.io/ContractPlay/. Signed and physical-device builds remain pending their documented setup steps. Online tables are built and tested locally but not deployed yet: the Cloudflare service has not been published, so the GitHub Pages app has no online play, and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
+Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app is deployed to GitHub Pages at https://irom77.github.io/ContractPlay/. Signed and physical-device builds remain pending their documented setup steps. Online tables are built and tested locally but not deployed yet: the Cloudflare service has not been published, so the GitHub Pages app has no online entry (it is built with `VITE_ONLINE_URL=none`), and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 
 ## Project structure
 
@@ -47,7 +47,7 @@ Hints are off by default. Suggestions are the Expert bot's choice in the selecte
 
 ## Online tables
 
-Online tables let four people, with bots filling any empty seats, play one table together. They are not live yet: see [Online tables on Cloudflare](docs/platform-delivery.md#online-tables-on-cloudflare) for the deployment steps. To try them locally, run `pnpm server:dev`.
+Online tables let four people, with bots filling any empty seats, play one table together. They are not live yet: see [Online tables on Cloudflare](docs/platform-delivery.md#online-tables-on-cloudflare) for the deployment steps. To try them locally, run `pnpm server:dev` and open http://localhost:8787.
 
 - **Lobby.** The lobby lists open tables. A table can be unlisted and then is reachable only by its link, `<address>/#/table/<id>`. There are no accounts: you choose a display name (1-20 characters), and the browser keeps a device secret in local storage that the service stores only as a hash. Clearing browser data or switching device loses your seat.
 - **Seats.** Each of the four seats is empty, a person, or a bot at a skill level you choose. A hand needs all four seats filled and at least one person. The creator is the host and can remove a person between hands; any seated person can free an away player's seat between hands. A newcomer can only take an empty seat.
@@ -57,7 +57,7 @@ Online tables let four people, with bots filling any empty seats, play one table
 - **Not available online:** accounts or sign-in, chat, voice or video, hints, take-back, and PBN import.
 - **Limits.** At most 100 listed and 400 unlisted tables; 10 table creations per network address per hour; 32 identified connections per table and 8 connections per address per table; unidentified connections are closed after 10 seconds. A table nobody ever joined is removed after 10 minutes, and any table after 24 hours with no person connected.
 
-In the app, online play is reached from "Play online" on the start screen and "Online tables" in the table menu. Both are hidden when the app has no service address: the web app uses its own origin, while desktop and iOS builds need `VITE_ONLINE_URL` set at build time.
+In the app, online play is reached from "Play online" on the start screen and "Online tables" in the table menu. Both are hidden when the app has no service address. The Cloudflare deployment serves the app and the tables from one address, so it uses its own origin; the GitHub Pages build is made with `VITE_ONLINE_URL=none` and has no online entry; desktop and iOS builds need `VITE_ONLINE_URL` set to the Cloudflare address at build time.
 
 ## Development
 

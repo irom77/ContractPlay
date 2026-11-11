@@ -8,9 +8,10 @@ export type TableConnection = { send(message: Exclude<ClientMessage, { type: "he
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000];
 const SOCKET_OPEN = 1;
 
-/** The online service origin: the build-time setting, else the page origin when served over http(s). */
+/** The online service origin: the build-time setting ("none" turns online play off), else the page origin when served over http(s). */
 export function serviceUrl(): string | undefined {
   const configured = import.meta.env.VITE_ONLINE_URL;
+  if (configured === "none") return undefined;
   if (configured) return configured;
   return location.protocol === "http:" || location.protocol === "https:" ? location.origin : undefined;
 }
