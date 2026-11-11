@@ -32,6 +32,8 @@ export type TableViewProps = {
   lastTrickOpen: boolean; onToggleLastTrick(): void;
   /** Show the bottom seat's cards in the hand zone when the viewer is not acting. */
   showBottomHand: boolean;
+  /** During online play, keep every visible hand at its seat for the whole play. */
+  fixedSeatHands?: boolean;
   /** Keep playable cards disabled, for example while a completed trick is still on the table. */
   cardsDisabled?: boolean;
   /** Keep every call in the bid picker disabled, for example while a sent call awaits the service. */
@@ -53,7 +55,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
-  game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand,
+  game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false,
   cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
@@ -71,6 +73,7 @@ export function TableView({
   const shownActor = game.currentActor;
   const dummySeat = contract ? partnerOf(contract.declarer) : undefined;
   const dummyVisible = !!contract && (game.currentTrick.length > 0 || game.completedTricks.length > 0 || phase === "complete");
+  const fixedPlayHands = fixedSeatHands && phase === "play" && dummyVisible;
   const completedNsTricks = contract
     ? game.completedTricks.filter((trick) => samePartnership(trickWinner(trick, trump), "north")).length
     : 0;
@@ -80,7 +83,7 @@ export function TableView({
   // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.
   const playFromDummy = canAct && phase === "play" && dummyVisible && actingSeat === dummySeat && positionOf(actingSeat) !== "bottom";
   const handIsInteractive = canAct && !playFromDummy;
-  const handSeat: Seat | undefined = handIsInteractive ? actingSeat : showBottomHand || playFromDummy ? bottomSeat : undefined;
+  const handSeat: Seat | undefined = fixedPlayHands ? undefined : handIsInteractive ? actingSeat : showBottomHand || playFromDummy ? bottomSeat : undefined;
   const handCards = handSeat ? sortHand(game.hands[handSeat]) : [];
   const handIsDummy = dummyVisible && handSeat === dummySeat;
   const lastTrick = game.completedTricks.at(-1);
@@ -118,18 +121,22 @@ export function TableView({
           const explainedHere = seatCalls.find(({ index }) => index === shownExplanation);
           const vulnerable = game.vulnerability === "Both" || (game.vulnerability === "NS" && samePartnership(seat, "north")) || (game.vulnerability === "EW" && samePartnership(seat, "east"));
           const isDealer = game.dealer === seat;
-          const dummyCards = dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : [];
-          return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${dummyCards.length ? "has-dummy" : ""} ${dummyCards.length && playFromDummy ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
+          const seatCards = fixedPlayHands
+            ? sortHand(game.hands[seat])
+            : dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : [];
+          const seatHasCards = seatCards.length > 0;
+          const seatCanPlay = fixedPlayHands ? canAct && actingSeat === seat : playFromDummy && seat === dummySeat;
+          return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards ? "has-dummy" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
             <span className="seat-compass" role="img" aria-label={`${seatNames[seat]}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}`} title={`${seatNames[seat]}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
             {seatLabel?.(seat)}
             {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
               ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
               : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null}
             {explainedHere && explainCall ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainCall.text(explainedHere.index)}</p> : null}
-            {dummyCards.length ? <section className="dummy-table-hand" aria-label={`${seatNames[seat]}'s dummy hand`}>
+            {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat ? "dummy " : ""}hand`}>
               {SUITS.map((suit) => {
-                const suitCards = dummyCards.filter((card) => card.suit === suit);
-                return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => playFromDummy
+                const suitCards = seatCards.filter((card) => card.suit === suit);
+                return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => seatCanPlay
                   ? <button className={`table-card dummy-card ${isRedSuit(card.suit) ? "red-card" : ""} ${hintedCards?.has(cardId(card)) ? "hinted-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={cardsDisabled} onClick={() => onPlay?.(seat, card)}>{cardFace(card)}</button>
                   : tableCard(card, "table-card dummy-card", cardLabel(card)))}</div> : null;
               })}

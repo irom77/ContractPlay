@@ -289,6 +289,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             lastTrickOpen={lastTrickOpen}
             onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
             showBottomHand
+            fixedSeatHands
             cardsDisabled={inputDisabled}
             bidsDisabled={inputDisabled}
             statusText={statusText}

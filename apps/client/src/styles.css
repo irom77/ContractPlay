@@ -169,6 +169,8 @@ button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var
 .seat { position: absolute; z-index: 3; display: flex; align-items: center; gap: var(--u); }
 .pos-top { top: calc(1.5 * var(--u)); left: 50%; transform: translateX(-50%); }
 .pos-bottom { bottom: var(--u); left: 50%; transform: translateX(-50%); }
+.pos-bottom.has-fixed-hand { bottom: calc(4 * var(--u)); flex-direction: column; align-items: center; }
+.pos-bottom.has-fixed-hand .fixed-seat-hand { order: -1; }
 .pos-left { top: 50%; left: calc(2 * var(--u)); flex-direction: column; align-items: flex-start; transform: translateY(-50%); }
 .pos-right { top: 50%; right: calc(2 * var(--u)); flex-direction: column; align-items: flex-end; transform: translateY(-50%); }
 .pos-left.has-dummy, .pos-right.has-dummy { top: calc(21 * var(--u)); display: grid; grid-template-columns: auto 1fr; transform: none; }
@@ -210,6 +212,7 @@ button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max
 
 /* ---------- Dummy ---------- */
 .dummy-table-hand { display: flex; gap: calc(.8 * var(--u)); --h: calc(14 * var(--u)); --step: calc(4.2 * var(--u)); }
+.fixed-seat-hand { position: relative; z-index: 4; }
 .pos-left .dummy-table-hand, .pos-right .dummy-table-hand { flex-direction: column; gap: calc(.5 * var(--u)); --h: calc(8.2 * var(--u)); --step: calc(2.7 * var(--u)); }
 .pos-right .dummy-table-hand { align-items: flex-end; }
 .dummy-suit-row { display: flex; }

@@ -295,6 +295,7 @@ describe("OnlineTable play", () => {
     const game = playCards(oneNoTrump(), 1);
     expect(game.currentActor).toBe("south");
     service.push(inHand(game, ["north", "south"]));
+    expect(within(screen.getByRole("region", { name: "North's hand" })).getAllByRole("img")).toHaveLength(13);
     const dummy = within(screen.getByRole("region", { name: "South's dummy hand" }));
     const card = legalCards(game.hands.south, game.currentTrick[0]!.card.suit)[0]!;
     const buttons = dummy.getAllByRole("button", { name: /^Play / });
@@ -323,7 +324,7 @@ describe("OnlineTable play", () => {
     const seats = { north: bot, east: bot, south: human("Bob"), west: bot };
     const dummyTurn = playCards(oneNoTrump(), 1);
     service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats, game: publicGame(dummyTurn, ["north", "south"]) }));
-    const dummyCard = within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / })[0]!;
+    const dummyCard = within(screen.getByRole("region", { name: "South's dummy hand" })).getAllByRole("button", { name: /^Play / })[0]!;
     await user.click(dummyCard);
     expect(service.sent.at(-1)).toMatchObject({ type: "act", action: { type: "play", seat: "south" } });
 

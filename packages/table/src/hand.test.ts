@@ -1,7 +1,7 @@
 import { validatePlay } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { botToAct, botWake, chooseBotAction } from "./hand.js";
+import { botToAct, botWake } from "./hand.js";
 import { viewFor } from "./view.js";
 import { reduce } from "./reduce.js";
 import { fourHumans, newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
