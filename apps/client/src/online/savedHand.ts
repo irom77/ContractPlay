@@ -4,7 +4,7 @@ import type { TableView } from "@contractplay/protocol";
 
 /**
  * The finished hand as a full game for the device's hand history: the revealed deal replayed through
- * the auction and every played card in order. Undefined when the deal is not revealed or a step fails.
+ * the auction and every played card in order. Undefined when the deal is not revealed or malformed, or a step fails.
  */
 export function savedHandFrom(view: TableView, id: string, savedAt: string): SavedHand | undefined {
   const game = view.game;
@@ -13,7 +13,12 @@ export function savedHandFrom(view: TableView, id: string, savedAt: string): Sav
     ...game.auction.map(({ seat, bid }): GameAction => ({ type: "bid", seat, bid })),
     ...[...game.completedTricks.flat(), ...game.currentTrick].map(({ seat, card }): GameAction => ({ type: "play", seat, card }))
   ];
-  let state = createGameState({ deal: view.revealed, dealer: game.dealer, vulnerability: game.vulnerability });
+  let state;
+  try {
+    state = createGameState({ deal: view.revealed, dealer: game.dealer, vulnerability: game.vulnerability });
+  } catch {
+    return undefined;
+  }
   for (const action of actions) {
     const result = applyAction(state, action);
     if (!result.ok) return undefined;

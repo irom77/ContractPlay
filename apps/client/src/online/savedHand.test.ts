@@ -71,4 +71,11 @@ describe("savedHandFrom", () => {
     const tampered = { ...view, game: { ...view.game!, completedTricks: [[first![1]!, first![0]!, ...first!.slice(2)], ...rest] } };
     expect(savedHandFrom(tampered, "x", "now")).toBeUndefined();
   });
+
+  it("returns undefined when the revealed deal is malformed", async () => {
+    const original = await playedHand(7);
+    const view = viewFor(finishedTable(original), "alice");
+    const malformed = { ...view, revealed: { ...view.revealed!, north: view.revealed!.north.slice(1) } };
+    expect(savedHandFrom(malformed, "x", "now")).toBeUndefined();
+  });
 });

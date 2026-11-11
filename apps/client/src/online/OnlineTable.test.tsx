@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { applyAction, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
@@ -85,14 +86,39 @@ function playCards(game: GameState, count: number): GameState {
 
 const seatedNorth = { north: human("Bob"), east: bot, south: bot, west: bot };
 
+/** What the screen showed at one commit, read in the commit itself, before passive effects run. */
+type Frame = { trickCards: number; enabledCards: number; result: boolean; table: boolean };
+function frameNow(): Frame {
+  return {
+    trickCards: document.querySelectorAll('[aria-label="Current trick"] [role="img"]').length,
+    enabledCards: [...document.querySelectorAll("button")].filter((b) => b.getAttribute("aria-label")?.startsWith("Play ") && !b.disabled).length,
+    result: document.querySelector('[aria-label="Hand result"]') !== null,
+    table: document.querySelector('[aria-label^="Bridge table"]') !== null
+  };
+}
+
 function setup(options: { named?: boolean } = {}) {
   const storage = memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const service = fakeService();
   const onLeave = vi.fn();
-  const utils = render(<OnlineTable baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={onLeave} connect={service.connect} />);
+  const frames: Frame[] = [];
+  const utils = render(<Profiler id="table" onRender={() => frames.push(frameNow())}>
+    <OnlineTable baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={onLeave} connect={service.connect} />
+  </Profiler>);
   if (options.named !== false) service.status("open");
-  return { ...service, storage, onLeave, unmount: utils.unmount };
+  return { ...service, storage, onLeave, frames, unmount: utils.unmount };
+}
+
+/** Plays from `game` until just before the fourth card of a trick that North or South wins, so declarer leads next. */
+function beforeTrickWonByNorthSouth(game: GameState): GameState {
+  let state = game;
+  for (;;) {
+    while (state.currentTrick.length < 3) state = playOne(state);
+    const next = playOne(state);
+    if (next.currentActor === "north" || next.currentActor === "south") return state;
+    state = next;
+  }
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -265,6 +291,65 @@ describe("OnlineTable play", () => {
     expect(trick()).toHaveLength(0);
   });
 
+  it("draws the held trick, with input disabled, in the very first render of the completing view", () => {
+    vi.useFakeTimers();
+    const service = setup();
+    const three = beforeTrickWonByNorthSouth(playCards(oneNoTrump(), 0));
+    service.push(inHand(three, ["north", "south"]));
+    const start = service.frames.length;
+    service.push(inHand(playOne(three), ["north", "south"], { revision: 13 }));
+    const after = service.frames.slice(start);
+    expect(after.length).toBeGreaterThan(0);
+    for (const frame of after) expect(frame).toMatchObject({ trickCards: 4, enabledCards: 0 });
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(service.frames.at(-1)).toMatchObject({ trickCards: 0 });
+    expect(service.frames.at(-1)!.enabledCards).toBeGreaterThan(0);
+  });
+
+  it("holds the last trick of the hand on the table, then shows the result", () => {
+    vi.useFakeTimers();
+    const service = setup();
+    const last = playCards(oneNoTrump(), 51);
+    service.push(inHand(last, ["north", "south"], { revision: 69 }));
+    const finished = playOne(last);
+    expect(finished.phase).toBe("complete");
+    const start = service.frames.length;
+    service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+    const held = service.frames.slice(start);
+    expect(held.length).toBeGreaterThan(0);
+    for (const frame of held) expect(frame).toMatchObject({ table: true, result: false, trickCards: 4 });
+    act(() => { vi.advanceTimersByTime(1999); });
+    expect(screen.queryByRole("region", { name: "Hand result" })).toBeNull();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: /^Bridge table/ })).toBeNull();
+  });
+
+  it("does not carry a held trick into a new hand", () => {
+    vi.useFakeTimers();
+    const service = setup();
+    const three = playCards(oneNoTrump(), 3);
+    service.push(inHand(three, ["north", "south"]));
+    service.push(inHand(playOne(three), ["north", "south"], { revision: 13 }));
+    expect(within(screen.getByRole("region", { name: "Current trick" })).queryAllByRole("img")).toHaveLength(4);
+    service.push(inHand(newGame(), ["north"], { handNumber: 2, revision: 20 }));
+    expect(within(screen.getByRole("region", { name: "Current trick" })).queryAllByRole("img")).toHaveLength(0);
+    expect((screen.getByRole("button", { name: "Pass" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("unlocks an action lost across a reconnect when the view after the reconnect arrives", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const view = inHand(newGame(), ["north"]);
+    service.push(view);
+    await user.click(screen.getByRole("button", { name: "Pass" }));
+    service.status("reconnecting");
+    service.status("open");
+    expect((screen.getByRole("button", { name: "Pass" }) as HTMLButtonElement).disabled).toBe(true);
+    service.push(view);
+    expect((screen.getByRole("button", { name: "Pass" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("hands an away player to a bot", () => {
     const service = setup();
     service.push(inHand(newGame(), ["north"], { seats: { north: human("Bob"), east: human("Ann", { away: true }), south: bot, west: bot } }));
@@ -375,6 +460,28 @@ describe("OnlineTable connection", () => {
     expect(screen.getByText("This table no longer exists.")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Back to lobby" }));
     expect(service.onLeave).toHaveBeenCalled();
+  });
+
+  it("clears a refusal message after five seconds", () => {
+    vi.useFakeTimers();
+    const service = setup();
+    const view = tableView();
+    service.push(view);
+    service.refuse("seat-taken", view);
+    act(() => { vi.advanceTimersByTime(4999); });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    act(() => { vi.advanceTimersByTime(1); });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("clears a refusal message when the hand number changes", () => {
+    const service = setup();
+    const view = tableView({ yourSeat: "north", seats: seatedNorth, canDeal: true });
+    service.push(view);
+    service.refuse("hand-in-progress", view);
+    expect(screen.getByRole("alert")).toBeTruthy();
+    service.push(tableView({ yourSeat: "north", seats: seatedNorth, handNumber: 1, handInProgress: true, game: publicGame(newGame(), ["north"]) }));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows nothing for a stale refusal and a message for others", () => {

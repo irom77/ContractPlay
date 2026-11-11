@@ -1,24 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { SUITS, type GameAction, type Seat, type SkillLevel, type TrickCard } from "@contractplay/core";
+import type { GameAction, Seat, TrickCard } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
-import type { ClientMessage, PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
+import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { createHandName, handNameFromId } from "../handNames.js";
 import { TableView } from "../table/TableView.js";
-import { contractText, partnerOf, samePartnership, seatNames, seats, sortHand, suitSymbols } from "../table/labels.js";
+import { partnerOf, seatNames } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
+import { SeatingPanel, type Outgoing } from "./SeatingPanel.js";
 
 /** How long the host waits on a present player's turn before "Hand to a bot" is offered (the service's limit). */
 const IDLE_MS = 120_000;
 const TRICK_HOLD_MS = 2000;
+const NOTICE_MS = 5000;
 const HISTORY_LIMIT = 25;
-const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
 
 export type OnlineTableProps = { baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect };
-
-type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
 function refusalText(reason: RefusalReason): string | undefined {
   if (reason === "stale") return undefined;
@@ -50,6 +49,22 @@ function saveToHistory(storage: StorageLike, view: TableViewData): void {
   }
 }
 
+type Hold = { handNumber: number; cards: readonly TrickCard[] };
+type Received = { view?: TableViewData; hold?: Hold };
+
+/**
+ * The hold that goes with an incoming view, worked out in the same update that stores the view so the
+ * completed trick is on screen in the very first render of that view: a new hold when the view completes
+ * a trick, none in a new hand, otherwise the current one until its timer ends it.
+ */
+function receive(previous: Received, view: TableViewData): Received {
+  const before = previous.view;
+  if (!before || before.handNumber !== view.handNumber) return { view };
+  const completed = view.game?.completedTricks ?? [];
+  if (completed.length > (before.game?.completedTricks.length ?? 0)) return { view, hold: { handNumber: view.handNumber, cards: completed.at(-1) ?? [] } };
+  return previous.hold ? { view, hold: previous.hold } : { view };
+}
+
 export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
   if (!identity) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
@@ -57,55 +72,61 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
 }
 
 function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect }: OnlineTableProps & { identity: Identity }) {
-  const [view, setView] = useState<TableViewData>();
+  const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
-  const [notice, setNotice] = useState<string>();
+  const [notice, setNotice] = useState<{ text: string }>();
   // True from sending a call or card until the service answers with any view or refusal.
   const [waiting, setWaiting] = useState(false);
-  const [hold, setHold] = useState<{ handNumber: number; cards: readonly TrickCard[] }>();
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
   const [auctionShown, setAuctionShown] = useState(false);
   const [turn, setTurn] = useState<{ key: string; since: number }>();
   const [idleTurn, setIdleTurn] = useState<string>();
   const [copyNote, setCopyNote] = useState<string>();
   const connection = useRef<TableConnection | undefined>(undefined);
-  const previous = useRef<{ handNumber: number; completed: number } | undefined>(undefined);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const previousHand = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const current = connect({
       baseUrl, tableId, identity,
-      onView: (next) => { setView(next); setWaiting(false); },
-      onRefused: (reason) => { setWaiting(false); setNotice(refusalText(reason)); },
+      onView: (next) => { setReceived((previous) => receive(previous, next)); setWaiting(false); },
+      onRefused: (reason) => {
+        setWaiting(false);
+        const text = refusalText(reason);
+        setNotice(text === undefined ? undefined : { text });
+      },
       onStatus: setStatus
     });
     connection.current = current;
     return () => { current.close(); if (connection.current === current) connection.current = undefined; };
   }, [baseUrl, tableId, identity, connect]);
 
-  useEffect(() => () => { if (holdTimer.current !== undefined) clearTimeout(holdTimer.current); }, []);
+  // Only ending the hold is timed; starting it happens with the view (see `receive`).
+  useEffect(() => {
+    if (!hold) return;
+    const timer = setTimeout(() => setReceived((current) => current.hold === hold ? (current.view ? { view: current.view } : {}) : current), TRICK_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [hold]);
 
-  // Per view: hold a just-completed trick, note when the turn changed, and keep a finished hand.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice((current) => current === notice ? undefined : current), NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
+  // Per view: reset per-hand display state, note when the turn changed, and keep a finished hand.
   useEffect(() => {
     if (!view) return;
     const game = view.game;
-    const completed = game?.completedTricks.length ?? 0;
-    const before = previous.current;
-    previous.current = { handNumber: view.handNumber, completed };
-    if (before?.handNumber !== view.handNumber) {
-      if (holdTimer.current !== undefined) clearTimeout(holdTimer.current);
-      setHold(undefined);
+    if (previousHand.current !== view.handNumber) {
+      previousHand.current = view.handNumber;
       setLastTrickOpen(false);
       setAuctionShown(false);
-    } else if (game && completed > before.completed) {
-      if (holdTimer.current !== undefined) clearTimeout(holdTimer.current);
-      setHold({ handNumber: view.handNumber, cards: game.completedTricks.at(-1) ?? [] });
-      setLastTrickOpen(false);
-      holdTimer.current = setTimeout(() => { holdTimer.current = undefined; setHold(undefined); }, TRICK_HOLD_MS);
+      setNotice(undefined);
     }
     if (game && game.currentTrick.length > 0) setLastTrickOpen(false);
 
-    const key = game && isLive(game) ? `${view.handNumber}:${deciderOf(game)}:${game.auction.length + completed * 4 + game.currentTrick.length}` : undefined;
+    // The host's two-minute clock starts when this client first sees the turn, not when the service began it.
+    const key = game && isLive(game) ? `${view.handNumber}:${deciderOf(game)}:${game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length}` : undefined;
     setTurn((known) => key === undefined ? undefined : known?.key === key ? known : { key, since: Date.now() });
 
     if (view.revealed && game?.phase === "complete") saveToHistory(storage, view);
@@ -129,7 +150,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       <span>ContractPlay was updated. Reload to keep playing.</span>
       <button className="primary-button" type="button" onClick={() => location.reload()}>Reload</button>
     </div> : null}
-    {notice ? <p className="error-message" role="alert">{notice}</p> : null}
+    {notice ? <p className="error-message" role="alert">{notice.text}</p> : null}
   </>;
 
   if (status === "gone") {
@@ -225,103 +246,4 @@ function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatIn
     {isHost ? <span className="online-badge">host</span> : null}
     {onHandToBot ? <button className="secondary-button online-seat-button" type="button" aria-label={`Hand to a bot for ${seatNames[seat]}`} onClick={onHandToBot}>Hand to a bot</button> : null}
   </span>;
-}
-
-function SeatingPanel({ view, totals, statusLine, backButton, copyNote, onCopy, send }: {
-  view: TableViewData; totals: string; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void; send(message: Outgoing): void;
-}) {
-  const [botSkills, setBotSkills] = useState<Record<Seat, SkillLevel>>({ north: "intermediate", east: "intermediate", south: "intermediate", west: "intermediate" });
-  const yourSeat = view.yourSeat;
-  const betweenHands = !view.handInProgress;
-  const skillSelect = (value: SkillLevel, onChange: (skill: SkillLevel) => void) =>
-    <select aria-label="Bot skill" value={value} onChange={(event) => onChange(event.target.value as SkillLevel)}>
-      {(Object.keys(skillNames) as SkillLevel[]).map((skill) => <option key={skill} value={skill}>{skillNames[skill]}</option>)}
-    </select>;
-
-  const controls = (seat: Seat, info: SeatInfo): React.ReactNode => {
-    if (!betweenHands) return null;
-    if (info.kind === "empty") {
-      if (!yourSeat) return <button className="primary-button" type="button" onClick={() => send({ type: "sit", seat })}>Sit here</button>;
-      return <>
-        {skillSelect(botSkills[seat], (skill) => setBotSkills((chosen) => ({ ...chosen, [seat]: skill })))}
-        <button className="secondary-button" type="button" onClick={() => send({ type: "setBot", seat, skill: botSkills[seat] })}>Add bot</button>
-      </>;
-    }
-    if (info.kind === "bot") {
-      if (!yourSeat) return null;
-      return <>
-        {skillSelect(info.skill, (skill) => send({ type: "setBot", seat, skill }))}
-        <button className="secondary-button" type="button" onClick={() => send({ type: "clearSeat", seat })}>Remove bot</button>
-      </>;
-    }
-    if (seat === yourSeat) return <button className="secondary-button" type="button" onClick={() => send({ type: "leave" })}>Leave seat</button>;
-    if (yourSeat && (info.away || view.host === yourSeat)) return <button className="secondary-button" type="button" onClick={() => send({ type: "clearSeat", seat })}>Free seat</button>;
-    return null;
-  };
-
-  return (
-    <main className="app-shell">
-      <section className="empty-table lobby online-seating" aria-label={`Table ${view.name}`}>
-        <div className="start-bar">
-          <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
-          <span className="table-tools-row">
-            <button className="secondary-button" type="button" onClick={onCopy}>Copy table link</button>
-            {backButton}
-          </span>
-        </div>
-        <div className="lobby-panel">
-          <div className="section-heading">
-            <h2>{view.name}</h2>
-            <span className="quiet-copy">{view.style}</span>
-          </div>
-          <p className="online-totals">{totals}</p>
-          {copyNote ? <p className="quiet-copy online-copy-note" role="status">{copyNote}</p> : null}
-          {view.handInProgress && !yourSeat ? <p>A hand is in progress. You can take a seat when it ends.</p> : null}
-          {view.revealed && view.game ? <HandResult game={view.game} revealed={view.revealed} /> : null}
-          <div className="online-seats">
-            {seats.map((seat) => {
-              const info = view.seats[seat];
-              const occupant = info.kind === "empty" ? "Open" : info.kind === "bot" ? `Bot · ${skillNames[info.skill]}` : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name;
-              return <div key={seat} role="group" aria-label={`${seatNames[seat]} seat`} className={`online-seat online-seat-${seat}`}>
-                <div className="online-seat-head">
-                  <span className="quiet-copy">{seatNames[seat]}</span>
-                  <strong>{occupant}</strong>
-                  {info.kind === "human" && info.away ? <span className="online-badge">away</span> : null}
-                  {view.host === seat ? <span className="online-badge">host</span> : null}
-                  {seat === yourSeat ? <span className="online-badge">you</span> : null}
-                </div>
-                <div className="online-seat-controls">{controls(seat, info)}</div>
-              </div>;
-            })}
-          </div>
-          {yourSeat ? <button className="primary-button" type="button" disabled={!view.canDeal} onClick={() => send({ type: "deal" })}>Deal</button> : null}
-        </div>
-        {statusLine}
-      </section>
-    </main>
-  );
-}
-
-function HandResult({ game, revealed }: { game: PublicGame; revealed: NonNullable<TableViewData["revealed"]> }) {
-  const contract = game.contract;
-  return (
-    <section className="online-result" aria-label="Hand result">
-      <h2>{contract ? <>{contractText(contract)} by {seatNames[contract.declarer]}</> : "Passed out"}</h2>
-      {contract && game.score ? <p>{game.score.tricksTaken} tricks for {samePartnership(contract.declarer, "north") ? "NS" : "EW"} · {game.score.score > 0 ? "+" : ""}{game.score.score} NS</p> : null}
-      <div className="online-hands">
-        {seats.map((seat) => {
-          const hand = sortHand(revealed[seat]);
-          return <div key={seat} role="group" aria-label={`${seatNames[seat]}'s hand`} className="online-hand">
-            <strong>{seatNames[seat]}</strong>
-            {SUITS.map((suit) => {
-              const ranks = hand.filter((card) => card.suit === suit).map((card) => card.rank === "T" ? "10" : card.rank).join(" ");
-              return <span key={suit} className={suit === "hearts" || suit === "diamonds" ? "online-hand-red" : undefined}>
-                <span aria-hidden="true">{suitSymbols[suit]}</span><span className="sr-only">{suit}</span> {ranks || "—"}
-              </span>;
-            })}
-          </div>;
-        })}
-      </div>
-    </section>
-  );
 }
