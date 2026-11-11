@@ -34,6 +34,8 @@ export type TableViewProps = {
   showBottomHand: boolean;
   /** Keep playable cards disabled, for example while a completed trick is still on the table. */
   cardsDisabled?: boolean;
+  /** Keep every call in the bid picker disabled, for example while a sent call awaits the service. */
+  bidsDisabled?: boolean;
   statusText: string; ariaLabel: string;
   seatLabel?(seat: Seat): React.ReactNode;       // extra per-seat content (online: player name, away, bot badge, seat controls)
   onBid?(bid: Bid): void; onPlay?(seat: Seat, card: Card): void;
@@ -52,7 +54,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand,
-  cardsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, tools, overlay
+  cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -145,11 +147,11 @@ export function TableView({
             <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
               {[1, 2, 3, 4, 5, 6, 7].map((level) => biddingStrains.map((strain) => {
                 const bid = `${level}${strain}` as Bid;
-                return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""} ${hintedBid === bid ? "hinted-bid" : ""}`} aria-label={`${level} ${strain}`} title={hintedBid === bid ? "Suggested bid" : undefined} disabled={!isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
+                return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""} ${hintedBid === bid ? "hinted-bid" : ""}`} aria-label={`${level} ${strain}`} title={hintedBid === bid ? "Suggested bid" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
               }))}
             </div>
             <div className="bid-special-calls" role="group" aria-label="Pass, double, or redouble">
-              {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid} ${hintedBid === bid ? "hinted-bid" : ""}`} title={hintedBid === bid ? "Suggested call" : undefined} disabled={!isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
+              {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid} ${hintedBid === bid ? "hinted-bid" : ""}`} title={hintedBid === bid ? "Suggested call" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
             </div>
           </div> : null}
         </section>

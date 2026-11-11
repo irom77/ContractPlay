@@ -35,31 +35,37 @@ function seatLabel(seat: SeatInfo): string {
 export function Lobby({ baseUrl, storage, onOpenTable, onSolo, api = defaultApi }: LobbyProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
   const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
 
   if (!identity || editingName) {
-    const submit = () => {
-      const name = nameDraft.trim();
-      if (name === "") return;
-      setIdentity(saveIdentity(storage, name));
-      setEditingName(false);
-    };
-    return (
-      <main className="app-shell">
-        <section className="empty-table lobby" aria-label="Choose a name">
-          <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span></div>
-          <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-            <label>Your name<input aria-label="Your name" value={nameDraft} maxLength={20} autoFocus onChange={(event) => setNameDraft(event.target.value)} /></label>
-            <button className="primary-button" type="submit" disabled={nameDraft.trim() === ""}>Continue</button>
-            <button className="secondary-button" type="button" onClick={onSolo}>Solo play</button>
-          </form>
-        </section>
-      </main>
-    );
+    return <NameGate storage={storage} initialName={editingName ? identity?.name ?? "" : ""}
+      onSaved={(saved) => { setIdentity(saved); setEditingName(false); }} secondary={{ label: "Solo play", onClick: onSolo }} />;
   }
 
   return <LobbyTables identity={identity} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo}
-    onChangeName={() => { setNameDraft(identity.name); setEditingName(true); }} />;
+    onChangeName={() => setEditingName(true)} />;
+}
+
+/** The online name form: saves the display name (keeping the device secret) and hands back the identity. */
+export function NameGate({ storage, initialName = "", onSaved, secondary }: {
+  storage: StorageLike; initialName?: string; onSaved(identity: Identity): void; secondary: { label: string; onClick(): void };
+}) {
+  const [nameDraft, setNameDraft] = useState(initialName);
+  const submit = () => {
+    const name = nameDraft.trim();
+    if (name !== "") onSaved(saveIdentity(storage, name));
+  };
+  return (
+    <main className="app-shell">
+      <section className="empty-table lobby" aria-label="Choose a name">
+        <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span></div>
+        <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+          <label>Your name<input aria-label="Your name" value={nameDraft} maxLength={20} autoFocus onChange={(event) => setNameDraft(event.target.value)} /></label>
+          <button className="primary-button" type="submit" disabled={nameDraft.trim() === ""}>Continue</button>
+          <button className="secondary-button" type="button" onClick={secondary.onClick}>{secondary.label}</button>
+        </form>
+      </section>
+    </main>
+  );
 }
 
 function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName }: {

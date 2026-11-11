@@ -272,3 +272,43 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .lobby-seats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); font-size: 13px; }
 .lobby-table .secondary-button { justify-self: start; }
 .lobby > .error-message { position: static; }
+
+/* ---------- Online table ---------- */
+.online-seat-label { display: flex; flex-wrap: wrap; align-items: center; gap: calc(.6 * var(--u)); max-width: max(140px, calc(30 * var(--u))); border-radius: 7px; padding: calc(.4 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; }
+.online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-right .online-seat-label { justify-content: flex-end; }
+.online-badge { border-radius: 99px; padding: 1px 7px; background: rgba(255, 255, 255, .14); color: var(--gold); font-size: var(--text-s); font-weight: 700; }
+.online-seat-button { min-height: max(26px, calc(4 * var(--u))); }
+/* Beside dummy at the side, the label sits next to the compass and the calls move to their own row. */
+.online-table .has-dummy .online-seat-label { grid-row: 1; grid-column: 2; }
+.online-table .pos-right.has-dummy .online-seat-label { grid-column: 1; justify-self: end; }
+.online-table .pos-left.has-dummy .seat-auction-calls, .online-table .pos-right.has-dummy .seat-auction-calls { grid-row: 2; grid-column: 1 / -1; }
+.online-totals { border-radius: 7px; padding: calc(.5 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; white-space: nowrap; }
+.lobby-panel .online-totals { justify-self: start; margin: 0; }
+.online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
+.online-resume { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: 50%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; border-radius: 10px; padding: 10px 14px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-m); transform: translateX(-50%); }
+.online-seats { display: grid; grid-template-areas: ". north ." "west . east" ". south ."; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.online-seat { display: grid; align-content: start; gap: 6px; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.online-seat-north { grid-area: north; } .online-seat-east { grid-area: east; } .online-seat-south { grid-area: south; } .online-seat-west { grid-area: west; }
+.online-seat-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; min-width: 0; }
+.online-seat-head strong { overflow-wrap: anywhere; }
+.online-seat-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.online-seat-controls .primary-button, .online-seat-controls .secondary-button { min-height: 34px; padding: 0 12px; font-size: 13px; }
+.online-seat-controls select { min-width: 0; max-width: 100%; height: 34px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 6px; background: #21483e; color: var(--ink); font-size: 13px; }
+.online-result { display: grid; gap: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 0; }
+.online-result h2 { margin: 0; font: 700 20px/1.1 var(--suit-font); }
+.online-result h2 .red-card { color: #ff6b62; }
+.online-result p { margin: 0; color: #d6e0d8; }
+.online-hands { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.online-hand { display: grid; gap: 2px; font: 13px/1.35 var(--suit-font); }
+.online-hand-red > span:first-child { color: #ff6b62; }
+.online-copy-note { overflow-wrap: anywhere; }
+.lobby > .online-status { position: static; transform: none; }
+@media (max-width: 520px) {
+  .online-seats { grid-template-areas: "north north" "west east" "south south"; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .online-seating .start-bar .secondary-button { padding: 0 8px; font-size: 12px; }
+}
+/* Tall, narrow windows: keep the take-back panel clear of the bottom seat. */
+@media (max-aspect-ratio: 4/5) {
+  .online-resume { bottom: max(100px, calc(18 * var(--u))); }
+}

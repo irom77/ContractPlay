@@ -47,10 +47,12 @@ describe("Root", () => {
     expect(soloVisible()).toBe(true);
   });
 
-  it("renders the table placeholder for a table route", () => {
+  it("renders the online table for a table route, asking for a name first, and leaves to the lobby", async () => {
     location.hash = "#/table/ABC234";
     render(<Root />);
-    expect(screen.getByRole("heading", { name: "Table ABC234" })).toBeTruthy();
+    expect(screen.getByLabelText("Your name")).toBeTruthy();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Back to lobby" }));
+    expect(location.hash).toBe("#/online");
   });
 
   it.each(["", "#/online", "#/table/ABC234"])("renders solo for %j with no service URL", (hash) => {

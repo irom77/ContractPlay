@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import App from "./App.js";
 import { serviceUrl } from "./online/connection.js";
 import { Lobby } from "./online/Lobby.js";
+import { OnlineTable } from "./online/OnlineTable.js";
 import { parseRoute, routeHash, type Route } from "./online/route.js";
 
 export default function Root() {
@@ -26,5 +27,5 @@ export default function Root() {
   if (route.screen === "lobby") {
     return <Lobby baseUrl={baseUrl} storage={storage} onOpenTable={(id) => navigate({ screen: "table", id })} onSolo={() => navigate({ screen: "solo" })} />;
   }
-  return <main className="app-shell"><h1>Table {route.id}</h1></main>;
+  return <OnlineTable key={route.id} baseUrl={baseUrl} tableId={route.id} storage={storage} onLeave={() => navigate({ screen: "lobby" })} />;
 }
