@@ -320,6 +320,16 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .error-message { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: calc(2 * var(--u)); max-width: min(420px, calc(100% - 4 * var(--u))); margin: 0; border-left: 3px solid #ff8a78; border-radius: 6px; padding: 9px 13px; background: rgba(60, 16, 14, .94); color: #ffd9d0; font-size: var(--text-m); box-shadow: 0 6px 18px #0008; }
 .app-shell > .error-message { bottom: 16px; left: 16px; }
 
+/* ---------- Claims ---------- */
+/* The picker, a pending claim, or the answer asked of an opponent, centred over the trick. */
+.claim-panel { position: absolute; z-index: 8; top: 50%; left: 50%; display: grid; justify-items: center; gap: calc(1.2 * var(--u)); width: max-content; max-width: min(400px, calc(100% - 32px)); border: 1px solid rgba(242, 193, 78, .45); border-radius: calc(1.4 * var(--u)); padding: calc(2.4 * var(--u)) calc(3 * var(--u)); background: rgba(12, 40, 34, .96); box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) #0007; text-align: center; transform: translate(-50%, -50%); }
+.claim-panel p { margin: 0; color: #e6ede4; font-size: var(--text-m); }
+.claim-actions, .claim-stepper { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.claim-stepper output { min-width: 2.2em; color: var(--gold); font-size: var(--text-l); font-weight: 800; font-variant-numeric: tabular-nums; }
+.claim-stepper .secondary-button[aria-label] { min-width: 40px; padding: 0 10px; }
+.claim-line { color: var(--gold); }
+.claim-notice { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: 50%; max-width: min(420px, calc(100% - 32px)); margin: 0; border-left: 3px solid var(--gold); border-radius: 6px; padding: 9px 13px; background: rgba(12, 40, 34, .94); color: var(--ink); font-size: var(--text-m); box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
+
 /* Tall, narrow windows: the corner clusters keep a readable size, so seats along the top start below them. */
 @media (max-aspect-ratio: 4/5) {
   .pos-top { top: max(104px, calc(24 * var(--u))); }

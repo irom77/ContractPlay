@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { applyAction, cardId, createGameState, deal, trickWinner, undoAction, validatePlay } from "@contractplay/core";
+import { applyAction, cardId, createGameState, deal, RANKS, trickWinner, undoAction, validatePlay } from "@contractplay/core";
 import type { GameState, Solver } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1118,6 +1118,102 @@ describe("bridge table", () => {
       fireEvent.click(screen.getByRole("button", { name: /Take back/ }));
       expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
       expect(screen.queryByText(/^Queued:/)).toBeNull();
+    });
+  });
+
+  describe("claiming", () => {
+    const suitHand = (suit: "spades" | "hearts" | "diamonds" | "clubs") => RANKS.map((rank) => ({ suit, rank }));
+    /** South holds every spade, North every heart, East every diamond, West every club. South declares; West has led the club ace, so North (dummy) is to play. */
+    function southDeclaresAfterLead(bid: "1spades" | "1notrump"): GameState {
+      let game = createGameState({ deal: { north: suitHand("hearts"), east: suitHand("diamonds"), south: suitHand("spades"), west: suitHand("clubs") }, dealer: "south", vulnerability: "None" });
+      const actions = [...[bid, "pass", "pass", "pass"].map((call) => ({ type: "bid" as const, seat: game.currentActor, bid: call as never })), { type: "play" as const, seat: "west" as const, card: { suit: "clubs" as const, rank: "A" as const } }];
+      for (const action of actions) {
+        const result = applyAction(game, { ...action, seat: game.currentActor });
+        if (!result.ok) throw new Error(result.error.message);
+        game = result.state;
+      }
+      return game;
+    }
+    const claimItem = () => screen.queryByRole("button", { name: "Claim", hidden: true });
+
+    function renderAsSouthAgainstBots(game: GameState) {
+      storeCurrentGame(game);
+      render(<App />);
+      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
+      fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
+    }
+
+    it("accepts a claim the robots prove and shows it in the result", async () => {
+      renderAsSouthAgainstBots(southDeclaresAfterLead("1spades"));
+      fireEvent.click(claimItem()!);
+      fireEvent.click(screen.getByRole("button", { name: "Claim all 13" }));
+
+      expect(screen.getByText(/Checking…/)).toBeTruthy();
+      expect(claimItem()).toBeNull();
+      await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 3000 });
+      expect(within(screen.getByRole("region", { name: "Hand result" })).getByText("Claimed by South (declarer): 13 of the remaining 13 tricks")).toBeTruthy();
+      expect(loadSoloData(window.localStorage).currentGame!.claim).toEqual({ seat: "south", tricks: 13 });
+    });
+
+    it("names the robot that rejects a claim it cannot prove and lets the user play on", async () => {
+      renderAsSouthAgainstBots(southDeclaresAfterLead("1notrump"));
+      fireEvent.click(claimItem()!);
+      fireEvent.click(screen.getByRole("button", { name: "Claim all 13" }));
+
+      await waitFor(() => expect(screen.getByText("East rejected the claim of 13 tricks")).toBeTruthy(), { timeout: 3000 });
+      expect(screen.queryByText(/Checking…/)).toBeNull();
+      expect(loadSoloData(window.localStorage).currentGame!.phase).toBe("play");
+      expect(screen.getByText("North to play")).toBeTruthy();
+      const playable = within(screen.getByRole("region", { name: "North's dummy hand" })).getAllByRole("button", { name: /^Play / }) as HTMLButtonElement[];
+      expect(playable.every((button) => !button.disabled)).toBe(true);
+    });
+
+    it("applies a claim at once at a manual table, for the number of tricks chosen", () => {
+      storeCurrentGame(southDeclaresAfterLead("1spades"));
+      render(<App />);
+      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.click(claimItem()!);
+      fireEvent.click(screen.getByRole("button", { name: "Fewer tricks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Fewer tricks" }));
+      expect(screen.getByLabelText("Tricks to claim").textContent).toBe("11");
+      fireEvent.click(screen.getByRole("button", { name: "Claim" }));
+
+      expect(within(screen.getByRole("region", { name: "Hand result" })).getByText("Claimed by South (declarer): 11 of the remaining 13 tricks")).toBeTruthy();
+    });
+
+    it("closes the picker on Cancel", () => {
+      storeCurrentGame(southDeclaresAfterLead("1spades"));
+      render(<App />);
+      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.click(claimItem()!);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("button", { name: "Claim all 13" })).toBeNull();
+      expect(loadSoloData(window.localStorage).currentGame!.phase).toBe("play");
+    });
+
+    it("offers no claim on a bot's turn, while bots finish, or in review", () => {
+      const game = southDeclaresAfterLead("1spades");
+      // West (a bot) is on lead before the club ace.
+      renderAsSouthAgainstBots(undoAction(game));
+      expect(claimItem()).toBeNull();
+      cleanup();
+
+      storeCurrentGame(game);
+      render(<App />);
+      fireEvent.click(screen.getByLabelText("Table menu"));
+      expect(claimItem()).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
+      expect(claimItem()).toBeNull();
+      cleanup();
+
+      const hand: SavedHand = { id: "finished", game: completedGame(), savedAt: new Date().toISOString() };
+      storeCurrentGame(game, [hand]);
+      render(<App />);
+      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.click(screen.getByRole("button", { name: /^Review / }));
+      expect(screen.getByRole("region", { name: "Hand review" })).toBeTruthy();
+      expect(claimItem()).toBeNull();
     });
   });
 

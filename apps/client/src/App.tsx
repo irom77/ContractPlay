@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applyAction,
   cardId,
+  claimSeatFor,
   createGameState,
   deal,
   emptyRubber,
@@ -25,25 +26,34 @@ import {
 } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { deleteSavedHand, loadSoloData, saveSoloData, type PbnMetadata, type SavedHand, type SoloData } from "@contractplay/persistence";
-import { createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
+import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
-import { cardLabel, claimText, compactCallLabel, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
+import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard.js";
+import { ClaimPanel } from "./table/ClaimPanel.js";
 import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
 const hintsStorageKey = "contractplay.hints";
 const scoringStorageKey = "contractplay.scoring";
+/** How long the robots seem to think about a claim, so the player sees it being checked. */
+const CLAIM_CHECK_MS = 800;
 type ScoringFormat = "rubber" | "single";
 
 function createHandId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/** The robot that answers a claim for the other side: the first defender for a declaring-side claim, else declarer. */
+function claimAnswerer(game: GameState, claimSeat: Seat): Seat {
+  const declarer = game.contract!.declarer;
+  return samePartnership(claimSeat, declarer) ? seats.find((seat) => !samePartnership(seat, declarer))! : declarer;
 }
 
 const savedHandName = (hand: SavedHand): string => hand.name ?? handNameFromId(hand.id);
@@ -97,6 +107,10 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [botsFinishHandId, setBotsFinishHandId] = useState<string>();
   // A card the user picked before their turn, played for them when it comes.
   const [queued, setQueued] = useState<QueuedCard>();
+  // The position the claim picker was opened in; it closes when the position changes.
+  const [claimPickedAt, setClaimPickedAt] = useState<GameState>();
+  // A claim against robots being checked, for the position it was made in.
+  const [soloClaim, setSoloClaim] = useState<{ game: GameState; seat: Seat; tricks: number }>();
   const botsFinishing = !!currentHandId && botsFinishHandId === currentHandId;
   const botsFinishingRef = useRef(botsFinishing);
   botsFinishingRef.current = botsFinishing;
@@ -247,8 +261,43 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     return () => { cancelled = true; };
   }, [hintGame, biddingStyle, solver]);
 
+  // The user may claim on their own play turn (as declarer, on dummy's turn too); not while bots finish or in review.
+  const claimSeat = canShowHand && game?.phase === "play" ? claimSeatFor(game) : undefined;
+  const soloClaimPending = !!soloClaim && soloClaim.game === game && claimSeat !== undefined;
+  const pickingClaim = !!game && claimPickedAt === game && claimSeat !== undefined && !soloClaimPending;
+
+  // The robots on the other side answer a claim with the exact check, and accept only a proven one.
+  useEffect(() => {
+    if (!soloClaimPending || !soloClaim) return;
+    const pending = soloClaim;
+    const timer = window.setTimeout(() => {
+      const action = { type: "claim" as const, seat: pending.seat, tricks: pending.tricks };
+      const result = checkClaim(pending.game, action) === "proven" ? applyAction(pending.game, action) : undefined;
+      setSoloClaim(undefined);
+      if (result?.ok) {
+        setGame((current) => current === pending.game ? result.state : current);
+        setMessage("");
+      } else {
+        setMessage(claimRejectedText({ tricks: pending.tricks, by: claimAnswerer(pending.game, pending.seat) }));
+      }
+    }, CLAIM_CHECK_MS);
+    return () => window.clearTimeout(timer);
+  }, [soloClaimPending, soloClaim]);
+
+  function claim(tricks: number) {
+    if (!game || claimSeat === undefined) return;
+    setClaimPickedAt(undefined);
+    if (!playAgainstBots) {
+      // At a manual table the user plays both sides, so the claim stands at once.
+      submitAction({ type: "claim", seat: claimSeat, tricks });
+      return;
+    }
+    setMessage("");
+    setSoloClaim({ game, seat: claimSeat, tricks });
+  }
+
   // A card the user must play (the only legal one) is played for them after a short pause.
-  const forced = canShowHand && forcedPlayOn && !temporaryTrick && game !== takenBackTo && game ? forcedCard(game) : undefined;
+  const forced = canShowHand && forcedPlayOn && !temporaryTrick && !soloClaimPending && !pickingClaim && game !== takenBackTo && game ? forcedCard(game) : undefined;
   useEffect(() => {
     if (!forced || !game) return;
     const turnState = game;
@@ -259,9 +308,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     return () => window.clearTimeout(timer);
   }, [forced, game]);
 
-  // A solo claim waiting for an answer. Solo has no claims yet; when it does, a pending one clears the queue.
-  const soloClaimPending = false;
   // Seats whose queued card is kept: against bots, the user's own and, once dummy is down, dummy's when the user declares.
+  // None while a claim is being checked, which clears the queue.
   const queueOwnerSeats: readonly Seat[] = !isReviewing && playAgainstBots && !botsFinishing && !soloClaimPending && game?.phase === "play"
     ? game.contract?.declarer === userSeat && (game.currentTrick.length > 0 || game.completedTricks.length > 0) ? [userSeat, partnerOf(userSeat)] : [userSeat]
     : [];
@@ -271,7 +319,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   }, [queued, activeQueued]);
 
   // The queued card is played like a forced one, after the same pause; when a card is forced it is that card, so only one plays.
-  const queuedNow = game && canShowHand && !temporaryTrick && !forced ? queuedPlay(game, activeQueued, game.currentActor) : undefined;
+  const queuedNow = game && canShowHand && !temporaryTrick && !forced && !pickingClaim ? queuedPlay(game, activeQueued, game.currentActor) : undefined;
   useEffect(() => {
     if (!queuedNow || !game) return;
     const turnState = game;
@@ -575,6 +623,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       <summary className="icon-button" aria-label="Table menu" title="Table menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></summary>
       <div className="table-menu-content">
         {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
+        {claimSeat !== undefined && !soloClaimPending && !pickingClaim ? <button className="secondary-button menu-deal" type="button" title="Claim some or all of the remaining tricks" onClick={(event) => { closeMenu(event); setClaimPickedAt(game); }}>Claim</button> : null}
         {!isReviewing && liveTurn ? <button className="secondary-button menu-deal" type="button" aria-pressed={botsFinishing} onClick={(event) => { closeMenu(event); setBotsFinishHandId(botsFinishing ? undefined : currentHandId); }}>{botsFinishing ? "Take back control" : "Let bots finish this hand"}</button> : null}
         {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section> : null}
         {!isReviewing && scoring === "rubber" ? <section className="rubber-menu" aria-label="Rubber">
@@ -599,6 +648,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     {phase === "complete" && shownGame.score && contract ? <section className={`score-panel ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
       <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
       <ContractOutcome score={shownGame.score} />
+      {shownGame.claim ? <p className="claim-line">{claimText(shownGame.claim, contract.declarer, remainingTricks(shownGame))}</p> : null}
       <p className="hand-points-line">{rubberHand ? rubberHandText(rubberHand) : `${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
       {inRubber ? <RubberScoresheet summary={rubberSummary} /> : null}
       {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>{inRubber && rubberSummary.winner ? "Deal a new rubber" : "Next deal"}</button> : null}
@@ -623,6 +673,10 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
     </div> : null}
 
+    {pickingClaim && game ? <ClaimPanel mode="pick" remaining={remainingTricks(game)} onClaim={claim} onCancel={() => setClaimPickedAt(undefined)} />
+      : soloClaimPending && soloClaim ? <ClaimPanel mode="pending" text={`${pendingClaimText(soloClaim, remainingTricks(soloClaim.game), true)}. Checking…`} onWithdraw={() => setSoloClaim(undefined)} />
+      : null}
+
     {message ? <p className="error-message" role="alert">{message}</p> : null}
   </>;
 
@@ -639,7 +693,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
           lastTrickOpen={lastTrickOpen}
           onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
           showBottomHand={showBottomHand}
-          cardsDisabled={!!temporaryTrick}
+          cardsDisabled={!!temporaryTrick || pickingClaim || soloClaimPending}
           queueSeats={canAct ? [] : queueOwnerSeats}
           queuedCard={activeQueued}
           onQueue={(seat, card) => setQueued((current) => current?.seat === seat && cardId(current.card) === cardId(card) ? undefined : { handKey: currentHandId, seat, card })}
