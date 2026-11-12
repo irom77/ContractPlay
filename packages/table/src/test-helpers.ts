@@ -1,5 +1,5 @@
 import { createBot } from "@contractplay/bots";
-import { SEATS, playContextFor } from "@contractplay/core";
+import { SEATS, applyAction, playContextFor } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import type { ClientMessage } from "@contractplay/protocol";
 import { chooseBotAction, deciderOf } from "./hand.js";
@@ -72,4 +72,31 @@ export function fourHumans(): TableState {
   let t = newTable();
   SEATS.forEach((seat, i) => { t = sendOk(t, `p${i}`, { type: "sit", seat }, i); });
   return t;
+}
+
+/**
+ * A table in the play of 1NT by South (seed 1 deal, North deals): each seat a human (player id = seat name) or a
+ * bot, with South seated first (so South is host). With `lead`, West has made the opening lead and dummy is to play.
+ */
+export function tableInPlay(kinds: Record<Seat, "human" | "bot">, lead = true, seed = 1): TableState {
+  let t = newTable();
+  for (const seat of ["south", "north", "east", "west"] as const) {
+    t = kinds[seat] === "human"
+      ? sendOk(t, seat, { type: "sit", seat }, 1)
+      : sendOk(t, "south", { type: "setBot", seat, skill: "advanced" });
+  }
+  t = sendOk(t, "south", { type: "deal" }, 1, seededRandom(seed));
+  let game = t.game!;
+  const bids: GameAction[] = [
+    { type: "bid", seat: "north", bid: "pass" }, { type: "bid", seat: "east", bid: "pass" },
+    { type: "bid", seat: "south", bid: "1notrump" }, { type: "bid", seat: "west", bid: "pass" },
+    { type: "bid", seat: "north", bid: "pass" }, { type: "bid", seat: "east", bid: "pass" }
+  ];
+  if (lead) bids.push({ type: "play", seat: "west", card: game.hands.west[0]! });
+  for (const action of bids) {
+    const result = applyAction(game, action);
+    if (!result.ok) throw new Error(result.error.message);
+    game = result.state;
+  }
+  return { ...t, game, revision: t.revision + 1 };
 }

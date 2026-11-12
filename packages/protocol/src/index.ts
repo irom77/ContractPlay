@@ -1,7 +1,7 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -26,6 +26,10 @@ export type TableView = TableSummary & {
   host?: Seat; yourSeat?: Seat; canDeal: boolean;
   game?: PublicGame;
   revealed?: Deal;
+  /** A claim waiting for answers: `seat` is the claiming side's seat (declarer for the declaring side), `waitingOn` the seats yet to accept. */
+  claim?: { seat: Seat; tricks: number; waitingOn: Seat[] };
+  /** The last claim, rejected by `by`; shown until the next card or call. */
+  claimRejected?: { seat: Seat; tricks: number; by: Seat };
 };
 
 export type ClientMessage =
@@ -36,7 +40,8 @@ export type ClientMessage =
   | { type: "deal" }
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
   | { type: "handToBot"; seat: Seat } | { type: "resume" } | { type: "autoPlay" }
-  | { type: "takeBack" } | { type: "cancelHand" };
+  | { type: "takeBack" } | { type: "cancelHand" }
+  | { type: "claim"; tricks: number } | { type: "answerClaim"; accept: boolean } | { type: "withdrawClaim" };
 
 export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "already-seated" | "not-allowed" | "hand-in-progress" | "not-ready" | "stale" | "not-your-turn" | "illegal";
 
@@ -108,7 +113,12 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
       return seat && skill ? { type: "setBot", seat, skill } : undefined;
     }
-    case "leave": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": return { type: data.type };
+    case "leave": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": case "withdrawClaim": return { type: data.type };
+    case "claim": {
+      const tricks = count(data.tricks);
+      return tricks !== undefined && tricks <= 13 ? { type: "claim", tricks } : undefined;
+    }
+    case "answerClaim": return typeof data.accept === "boolean" ? { type: "answerClaim", accept: data.accept } : undefined;
     case "act": {
       const handNumber = count(data.handNumber), revision = count(data.revision), action = parseAction(data.action);
       return handNumber !== undefined && revision !== undefined && action ? { type: "act", handNumber, revision, action } : undefined;

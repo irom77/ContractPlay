@@ -1,8 +1,9 @@
 import type { Seat } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
+import { settleClaim } from "./claim.js";
 import { botWake, deciderOf } from "./hand.js";
 import {
-  EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, UNVISITED_TABLE_MS, accept, refuse, seatOf, without,
+  EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, UNVISITED_TABLE_MS, accept, refuse, seatOf, without, withoutClaim,
   type Outcome, type PlayerId, type SeatState, type TableState
 } from "./state.js";
 
@@ -59,7 +60,10 @@ function onTurn(state: TableState, seat: Seat): boolean {
   return game !== undefined && (game.phase === "auction" || game.phase === "play") && deciderOf(state, game.currentActor) === seat;
 }
 
-/** Puts a bot in for an away player (any other seated human), or for an idle player on turn (host only). */
+/**
+ * Puts a bot in for an away player (any other seated human), or for an idle player on turn (host only).
+ * A pending claim is kept, and the stand-in answers it at once if that seat was still to answer.
+ */
 export function handToBot(state: TableState, player: PlayerId, seat: Seat, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   const target = state.seats[seat];
@@ -67,7 +71,8 @@ export function handToBot(state: TableState, player: PlayerId, seat: Seat, at: n
   const away = state.awaySince[target.player] !== undefined;
   const idle = state.host === player && onTurn(state, seat) && at - state.turnSince >= IDLE_MS;
   if (!away && !idle) return refuse(state, "not-allowed");
-  return accept(state, { seats: { ...state.seats, [seat]: { ...target, standIn: "intermediate" } } });
+  const handed = accept(state, { seats: { ...state.seats, [seat]: { ...target, standIn: "intermediate" } } });
+  return handed.state.pendingClaim ? settleClaim(handed.state, at) : handed;
 }
 
 /**
@@ -79,7 +84,7 @@ export function autoPlay(state: TableState, player: PlayerId): Outcome {
   if (!seat) return refuse(state, "not-seated");
   const held = state.seats[seat] as Human;
   if (state.game?.phase !== "play" || held.standIn !== undefined) return refuse(state, "not-allowed");
-  return accept(state, { seats: { ...state.seats, [seat]: { ...held, standIn: "intermediate", autoPlay: true } } });
+  return accept(withoutClaim(state), { seats: { ...state.seats, [seat]: { ...held, standIn: "intermediate", autoPlay: true } } });
 }
 
 /** The sender takes their seat back from a stand-in. */
@@ -88,7 +93,7 @@ export function resume(state: TableState, player: PlayerId): Outcome {
   if (!seat) return refuse(state, "not-seated");
   const held = state.seats[seat] as Human;
   if (held.standIn === undefined) return refuse(state, "not-allowed");
-  return accept(state, { seats: { ...state.seats, [seat]: withoutStandIn(held) } });
+  return accept(withoutClaim(state), { seats: { ...state.seats, [seat]: withoutStandIn(held) } });
 }
 
 /** The longest-seated human who is not away, other than `except`. */

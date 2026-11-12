@@ -21,6 +21,13 @@ export type TableState = Readonly<{
   revision: number; handNumber: number;
   game?: GameState; totals: { ns: number; ew: number };
   turnSince: number; lastHumanAt: number; trickJustCompleted: boolean;
+  /**
+   * A claim waiting for answers. `seat` is the claiming side's seat in the game (declarer for the declaring side,
+   * else the defender who claimed); `accepted` lists the answering seats that have accepted. Play is frozen meanwhile.
+   */
+  pendingClaim?: Readonly<{ seat: Seat; tricks: number; accepted: readonly Seat[] }>;
+  /** The last claim and the seat that rejected it, kept until the next game action or claim change. */
+  claimRejected?: Readonly<{ seat: Seat; tricks: number; by: Seat }>;
   /** Present (true) until a human first connects. A state without it counts as visited. */
   unvisited?: true;
 }>;
@@ -101,6 +108,12 @@ export function withoutAutoPlay(seats: TableState["seats"]): TableState["seats"]
 /** The state with no hand on the table, as before the first deal. */
 export const withoutGame = (state: TableState): TableState =>
   Object.fromEntries(Object.entries(state).filter(([k]) => k !== "game")) as TableState;
+
+/** The state with no pending claim and no rejection notice. */
+export const withoutClaim = (state: TableState): TableState =>
+  state.pendingClaim === undefined && state.claimRejected === undefined
+    ? state
+    : Object.fromEntries(Object.entries(state).filter(([k]) => k !== "pendingClaim" && k !== "claimRejected")) as TableState;
 
 /** The state with its host removed (so a new host, if any, can be added without a stale one). */
 export const withoutHost = (state: TableState): TableState =>

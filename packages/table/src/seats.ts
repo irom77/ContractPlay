@@ -1,6 +1,6 @@
 import type { Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
-import { accept, betweenHands, hostAfter, refuse, seatOf, without, withoutGame, withoutHost, type Outcome, type PlayerId, type SeatState, type TableState } from "./state.js";
+import { accept, betweenHands, hostAfter, refuse, seatOf, without, withoutClaim, withoutGame, withoutHost, type Outcome, type PlayerId, type SeatState, type TableState } from "./state.js";
 
 function withSeat(state: TableState, seat: Seat, value: SeatState): TableState["seats"] {
   return { ...state.seats, [seat]: value };
@@ -49,5 +49,5 @@ export function clearSeat(state: TableState, player: PlayerId, seat: Seat): Outc
 function vacate(state: TableState, seat: Seat, player: PlayerId, replacement: SeatState = { kind: "empty" }): Outcome {
   const seats = withSeat(state, seat, replacement);
   const names = (state.connections[player] ?? 0) > 0 ? state.names : without(state.names, player);
-  return accept({ ...withoutHost(state), seats, names, awaySince: without(state.awaySince, player) }, hostAfter(state, seats));
+  return accept({ ...withoutHost(withoutClaim(state)), seats, names, awaySince: without(state.awaySince, player) }, hostAfter(state, seats));
 }

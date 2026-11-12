@@ -2,7 +2,7 @@ import { SEATS, cardId } from "@contractplay/core";
 import type { Card, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import type { TableState } from "./state.js";
-import { fourHumans, newTable, playOut, seededRandom, sendOk, tableWithBots } from "./test-helpers.js";
+import { fourHumans, newTable, playOut, seededRandom, sendOk, tableInPlay, tableWithBots } from "./test-helpers.js";
 import { summaryOf, viewFor } from "./view.js";
 
 /** Every card object found anywhere in a JSON value. */
@@ -85,6 +85,17 @@ describe("viewFor", () => {
 
     expect(viewFor(state, "alice").game!.hands.north).toHaveLength(13);
     expect(viewFor(state, "alice").game!.hands.south).toHaveLength(13);
+  });
+
+  it("reveals the claimer's hand only while the claim is pending", () => {
+    const t = tableInPlay({ north: "bot", east: "human", south: "human", west: "human" });
+    expect(viewFor(t, "east").game!.hands.south).toEqual([]);
+    const pending = sendOk(t, "south", { type: "claim", tricks: 9 });
+    expect(viewFor(pending, "east").game!.hands.south).toEqual(t.game!.hands.south);
+    expect(viewFor(pending, "west").game!.hands.east).toEqual([]);
+    const rejected = sendOk(pending, "east", { type: "answerClaim", accept: false });
+    expect(viewFor(rejected, "east").game!.hands.south).toEqual([]);
+    expect(viewFor(rejected, "east").claim).toBeUndefined();
   });
 
   it("marks away humans and shows stand-ins", () => {
