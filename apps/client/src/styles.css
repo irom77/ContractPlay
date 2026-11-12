@@ -251,6 +251,21 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .dummy-card.hinted-card { z-index: 1; box-shadow: 0 0 0 max(2px, calc(.4 * var(--u))) var(--gold), 0 0 calc(2 * var(--u)) var(--gold); }
 .dummy-card + .dummy-card { margin-left: calc(var(--step) - var(--w)); }
 
+/* ---------- Card backs at hidden seats ---------- */
+/* Overlapping backs show how many cards a seat holds: a row along the top, a column down either side. */
+.hidden-hand { display: flex; --h: calc(7.6 * var(--u)); --w: calc(var(--h) * .7); --step: calc(2.1 * var(--u)); }
+.card-back { display: block; flex: none; width: var(--w); height: var(--h); border: 1px solid #b3aea2; border-radius: calc(var(--h) * .08); box-shadow: 0 calc(var(--h) * .02) calc(var(--h) * .05) #0009;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .16) 0 12%, transparent 12% 24%), #1f55b5; background-clip: padding-box; }
+.card-back + .card-back { margin-left: calc(var(--step) - var(--w)); }
+.pos-top.has-backs { flex-wrap: wrap; justify-content: center; width: max-content; max-width: 100%; }
+.pos-top.has-backs .hidden-hand { order: 4; flex-basis: auto; }
+.pos-top.has-backs .seat-auction-calls { order: 3; flex-basis: 100%; justify-content: center; }
+.pos-left .hidden-hand, .pos-right .hidden-hand { flex-direction: column; --step: calc(1.6 * var(--u)); }
+.pos-left .card-back, .pos-right .card-back { width: var(--h); height: var(--w); }
+.pos-left .card-back + .card-back, .pos-right .card-back + .card-back { margin-left: 0; margin-top: calc(var(--step) - var(--w)); }
+.pos-right .hidden-hand { align-self: flex-end; }
+.pos-left .hidden-hand { align-self: flex-start; }
+
 /* ---------- Centre of the table ---------- */
 .trick-area { position: absolute; z-index: 2; inset: 0; pointer-events: none; --h: calc(19 * var(--u)); --dx: calc(11 * var(--u)); --dy: calc(8 * var(--u)); }
 .trick-card { position: absolute; top: 50%; left: 50%; }

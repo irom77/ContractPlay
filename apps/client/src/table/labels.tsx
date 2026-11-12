@@ -8,6 +8,11 @@ export function claimText(claim: { seat: Seat; tricks: number }, declarer: Seat,
   const who = claim.seat === declarer ? `${seatNames[claim.seat]} (declarer)` : seatNames[claim.seat];
   return `Claimed by ${who}: ${claim.tricks} of the remaining ${remaining} tricks`;
 }
+/** How many cards a seat still holds: 13 minus its plays, whether or not its hand is sent. */
+export function cardsHeld(game: PublicGame, seat: Seat): number {
+  const played = [...game.completedTricks.flat(), ...game.currentTrick].filter((play) => play.seat === seat).length;
+  return 13 - played;
+}
 export const biddingStrains = ["clubs", "diamonds", "hearts", "spades", "notrump"] as const;
 export const suitSymbols: Record<Suit, string> = { spades: "♠", hearts: "♥", diamonds: "♦", clubs: "♣" };
 const suitNames: Record<Suit, string> = { spades: "spades", hearts: "hearts", diamonds: "diamonds", clubs: "clubs" };
