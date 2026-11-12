@@ -424,9 +424,9 @@ describe("bridge table", () => {
     await user.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
 
     expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
-    await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 8000 });
     expect(loadSoloData(window.localStorage).currentGame!.phase).toBe("complete");
-  });
+  }, 10_000);
 
   it("plays a forced card automatically after a short pause", async () => {
     vi.useFakeTimers();

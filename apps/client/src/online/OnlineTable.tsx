@@ -9,7 +9,7 @@ import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { TableView } from "../table/TableView.js";
 import { ClaimPanel } from "../table/ClaimPanel.js";
-import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, seatNames, seats as seatOrder } from "../table/labels.js";
+import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
@@ -39,6 +39,10 @@ function refusalText(reason: RefusalReason): string | undefined {
 }
 
 const isLive = (game: PublicGame | undefined): boolean => game?.phase === "auction" || game?.phase === "play";
+
+/** Calls and cards so far in the hand; it goes down only when someone takes an action back. */
+const actionCount = (game: PublicGame | undefined): number =>
+  game ? game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length : 0;
 
 /** The seat that decides a card for `seat`, including a human dummy taking over for a bot declarer. */
 function cardDecider(game: PublicGame, seats: TableViewData["seats"], seat: Seat): Seat {
@@ -174,6 +178,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const [takenBackTo, setTakenBackTo] = useState<number>();
   // A card picked before the viewer's turn, sent for them when it comes.
   const [queued, setQueued] = useState<QueuedCard | undefined>(initialQueued);
+  // The hand and action count of the last view: a lower count in the same hand is a take-back, by anyone.
+  const lastActions = useRef<{ handNumber: number; count: number } | undefined>(undefined);
   // The revision the claim picker was opened at; it closes when the table moves on.
   const [claimPickedAt, setClaimPickedAt] = useState<number>();
   const queueOwners = view ? queueOwnerSeats(view) : [];
@@ -185,6 +191,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       onView: (next) => {
         setReceived((previous) => receive(previous, next));
         setWaiting(false);
+        // A take-back by anyone clears the queue: the card was picked for a position that no longer exists.
+        const count = actionCount(next.game);
+        if (lastActions.current?.handNumber === next.handNumber && count < lastActions.current.count) setQueued(undefined);
+        lastActions.current = { handNumber: next.handNumber, count };
         if (takeBackSent.current) { takeBackSent.current = false; setTakenBackTo(next.revision); }
       },
       onRefused: (reason) => {
@@ -194,7 +204,11 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
         const text = refusalText(reason);
         setNotice(text === undefined ? undefined : { text });
       },
-      onStatus: setStatus
+      onStatus: (next) => {
+        setStatus(next);
+        // Dropped on any break in the connection: the table may have moved on while this client was away.
+        if (next !== "open") setQueued(undefined);
+      }
     });
     connection.current = current;
     return () => { current.close(); if (connection.current === current) connection.current = undefined; };
@@ -383,7 +397,9 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     const isHost = view.host === yourSeat;
     const pendingClaim = view.claim;
     const remaining = 13 - game.completedTricks.length;
-    const canClaim = actingSeat !== undefined && game.phase === "play" && !pendingClaim;
+    // The service allows one claim per side per trick, and clears `claimRejected` with the next card.
+    const ownSideRejected = !!view.claimRejected && samePartnership(view.claimRejected.seat, yourSeat);
+    const canClaim = actingSeat !== undefined && game.phase === "play" && !pendingClaim && !ownSideRejected;
     const pickingClaim = canClaim && claimPickedAt === view.revision;
     // The claimer is whoever decides for the claiming side's seat; the opponents asked to answer are in `waitingOn`.
     const isClaimer = !!pendingClaim && cardDecider(game, view.seats, pendingClaim.seat) === yourSeat;

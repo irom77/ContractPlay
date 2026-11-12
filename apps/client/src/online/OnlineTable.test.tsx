@@ -600,6 +600,9 @@ describe("OnlineTable play", () => {
       const service = setup();
       service.push(inHand(playCards(oneNoTrump(), 1), ["north", "south"], { revision: 15, claimRejected: { seat: "north", tricks: 13, by: "east" } }));
       expect(screen.getByText("East rejected the claim of 13 tricks")).toBeTruthy();
+      // The service allows one claim per side per trick, so Claim waits for the next card.
+      expect(menuItem("Claim")).toBeNull();
+      service.push(inHand(playCards(oneNoTrump(), 1), ["north", "south"], { revision: 16, claimRejected: { seat: "east", tricks: 13, by: "north" } }));
       expect(menuItem("Claim")).toBeTruthy();
     });
 
@@ -881,6 +884,41 @@ describe("OnlineTable connection", () => {
         service.push(tableView({ handInProgress: true, handNumber: 1, revision: 14, yourSeat: "south", seats, game: publicGame(westToPlay, ["north", "south"]) }));
         expect(within(screen.getByRole("region", { name: "North's hand" })).getAllByRole("button", { name: /^Queue / })).toHaveLength(13);
         expect(within(screen.getByRole("region", { name: "South's dummy hand" })).getAllByRole("button", { name: /^Queue / })).toHaveLength(12);
+      });
+
+      it("drops the queue when another player takes an action back", () => {
+        vi.useFakeTimers();
+        const service = setupQueue();
+        const start = oneNoTrump();
+        const southToPlay = playOne(start);
+        const northToPlay = playCards(southToPlay, 2);
+        const card = legalCards(northToPlay.hands.north, northToPlay.currentTrick[0]!.card.suit)[0]!;
+        service.push(live(southToPlay, { revision: 11, game: publicGame(southToPlay, ["north", "south"]) }));
+        const westToPlay = playOne(southToPlay);
+        service.push(live(westToPlay, { revision: 12, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getByRole("button", { name: `Queue ${cardLabel(card)}` }));
+        expect(screen.getByText(`Queued: ${cardLabel(card)}`)).toBeTruthy();
+
+        // East takes back the opening lead: fewer cards played in the same hand.
+        service.push(live(start, { revision: 13 }));
+        expect(screen.queryByText(/^Queued:/)).toBeNull();
+        service.push(live(northToPlay, { revision: 14, game: publicGame(northToPlay, ["north", "south"]) }));
+        expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(service.sent).toEqual([]);
+      });
+
+      it("drops the queue when the connection breaks", () => {
+        const service = setupQueue();
+        const westToPlay = playCards(oneNoTrump(), 2);
+        service.push(live(westToPlay, { revision: 15, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getAllByRole("button", { name: /^Queue / })[0]!);
+        expect(screen.getAllByRole("button", { name: /^Unqueue / })).toHaveLength(1);
+        service.status("reconnecting");
+        service.status("open");
+        service.push(live(westToPlay, { revision: 15, game: publicGame(westToPlay, ["north", "south"]) }));
+        expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+        expect(screen.getAllByRole("button", { name: /^Queue / }).length).toBeGreaterThan(0);
       });
 
       it("offers no queue while a bot plays for the viewer", () => {
