@@ -39,14 +39,14 @@
 
 ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu, and during card play the **Auto play** button (online: **Auto play this hand** in the game menu) lets a bot play your cards until the deal ends, then gives them back. A card that is your only legal play (a singleton in the led suit, or your last card) is played for you after a short pause; turn this off with "Play forced cards automatically" in the deal settings. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
-Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app and online tables are deployed together to Cloudflare at https://contractplay.niuk.workers.dev. The old GitHub Pages copy has no online entry and is no longer updated. Signed and physical-device builds remain pending their documented setup steps, and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
+Windows and macOS installer builds pass on GitHub Actions. iOS and iPadOS are paused: the Tauri host still supports them, but CI no longer builds them (see the [platform delivery guide](docs/platform-delivery.md) to resume). The web app and online tables are deployed together to Cloudflare at https://contractplay.niuk.workers.dev. The old GitHub Pages copy has no online entry and is no longer updated. Signed and physical-device builds remain pending their documented setup steps, and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 
 ## Project structure
 
 ```text
 apps/client/          React and Vite browser client
 apps/server/          Cloudflare Worker that serves the client and runs online tables
-apps/client/src-tauri/ Tauri host for desktop and iOS/iPadOS
+apps/client/src-tauri/ Tauri host for desktop (and iOS/iPadOS, paused)
 packages/core/        Platform-neutral cards, rules, and game state
 packages/pbn/         PBN parser, serializer, and diagnostics
 packages/persistence/ Versioned local game storage
