@@ -3,6 +3,7 @@ import { SELF, evictDurableObject, runDurableObjectAlarm, runInDurableObject } f
 import { SEATS, playContextFor } from "@contractplay/core";
 import type { GameAction, GameState, Seat } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
+import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import type { ClientMessage, ServerMessage, TableSummary, TableView } from "@contractplay/protocol";
 import { BOT_PAUSE_MS, EMPTY_TABLE_MS, TRICK_PAUSE_MS } from "@contractplay/table";
 import type { TableState } from "@contractplay/table";
@@ -102,7 +103,7 @@ class Client {
 
   static async join(id: string, secret: string, name: string, ip?: string): Promise<{ client: Client; view: TableView }> {
     const client = await Client.open(id, ip);
-    client.send({ type: "hello", version: 1, secret, name });
+    client.send({ type: "hello", version: PROTOCOL_VERSION, secret, name });
     const first = await client.next();
     if (first.type !== "view") throw new Error(`expected a view, got ${first.type}`);
     return { client, view: first.view };
@@ -232,7 +233,7 @@ describe("lobby", () => {
 describe("connections", () => {
   it("answers a wrong protocol version with reload and closes, even when the rest of the hello is invalid", async () => {
     const id = await newTableId();
-    for (const hello of [{ type: "hello", version: 99, secret: SECRET_A, name: "Alice" }, { type: "hello", version: 2 }]) {
+    for (const hello of [{ type: "hello", version: 99, secret: SECRET_A, name: "Alice" }, { type: "hello", version: PROTOCOL_VERSION - 1 }]) {
       const client = await Client.open(id);
       client.send(hello);
       expect(await client.next()).toEqual({ type: "reload" });
@@ -243,7 +244,7 @@ describe("connections", () => {
   it("answers an unknown table with gone and closes", async () => {
     for (const id of ["NOSUCH", "ABCDEF"]) {
       const client = await Client.open(id);
-      client.send({ type: "hello", version: 1, secret: SECRET_A, name: "Alice" });
+      client.send({ type: "hello", version: PROTOCOL_VERSION, secret: SECRET_A, name: "Alice" });
       expect(await client.next()).toEqual({ type: "gone" });
       await client.waitClosed();
     }
@@ -708,7 +709,7 @@ describe("expiry", () => {
     expect(await runDurableObjectAlarm(stub)).toBe(true);
     expect((await listTables()).map((t) => t.id)).not.toContain(id);
     const client = await Client.open(id);
-    client.send({ type: "hello", version: 1, secret: SECRET_A, name: "Alice" });
+    client.send({ type: "hello", version: PROTOCOL_VERSION, secret: SECRET_A, name: "Alice" });
     expect(await client.next()).toEqual({ type: "gone" });
   });
 });

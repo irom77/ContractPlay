@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { applyAction, createDeck, createGameState, deal, playContextFor, shuffle } from "@contractplay/core";
 import type { GameState, Seat } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
+import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import { describe, expect, it } from "vitest";
 
 function seededRandom(seed: number): () => number {
@@ -18,7 +19,7 @@ describe("worker", () => {
   it("health", async () => {
     const response = await SELF.fetch("https://x/api/health");
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, protocol: 1 });
+    expect(await response.json()).toEqual({ ok: true, protocol: PROTOCOL_VERSION });
   });
 
   it("bots run in the Worker runtime", async () => {

@@ -1,7 +1,7 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
