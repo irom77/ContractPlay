@@ -15,7 +15,9 @@ import {
   samePartnership,
   seatNames,
   seats,
+  handSuitOrder,
   sortHand,
+  suitGapShare,
   suitSymbols
 } from "./labels.js";
 
@@ -154,7 +156,7 @@ export function TableView({
             </div>
             {explainedHere && explainCall ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainCall.text(explainedHere.index)}</p> : null}
             {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat ? "dummy " : ""}hand`}>
-              {SUITS.map((suit) => {
+              {handSuitOrder(seatCards).map((suit) => {
                 const suitCards = seatCards.filter((card) => card.suit === suit);
                 return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => seatCanPlay
                   ? <button className={`table-card dummy-card ${isRedSuit(card.suit) ? "red-card" : ""} ${hintedCards?.has(cardId(card)) ? "hinted-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={cardsDisabled} onClick={() => onPlay?.(seat, card)}>{cardFace(card)}</button>
@@ -188,7 +190,7 @@ export function TableView({
 
       {fixedPlayHands ? null : <div className="hand-zone">
         {handSeat && handCards.length ? <section className="hand-panel" aria-label={`${seatNames[handSeat]}'s ${handIsInteractive ? "hand" : "cards"}`}>
-          <div className="cards-row">
+          <div className="cards-row" style={{ "--gap-share": suitGapShare(handCards) } as CSSProperties}>
             {handSeat !== bottomSeat || handIsDummy ? <span className="hand-tag" title={`${seatNames[handSeat]}${handIsDummy ? " · dummy" : ""}`}><span className={`seat-compass ${handIsDummy ? "dummy-compass" : ""}`} aria-hidden="true">{handSeat[0]!.toUpperCase()}</span><span className="sr-only">{seatNames[handSeat]}{handIsDummy ? ", dummy" : ""}</span></span> : null}
             {handCards.map((card, index) => {
               const className = `playing-card ${isRedSuit(card.suit) ? "red-card" : ""} ${index > 0 && handCards[index - 1]!.suit !== card.suit ? "suit-gap" : ""}`;

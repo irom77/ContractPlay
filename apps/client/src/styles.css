@@ -150,7 +150,9 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .card-corner { position: absolute; top: 3.5%; left: 4%; display: grid; width: 22%; justify-items: center; line-height: .92; }
 .card-corner span:first-child { font: 800 calc(var(--h) * .19)/.9 "Arial Narrow", "Helvetica Neue", Arial, sans-serif; letter-spacing: -.05em; }
 .card-corner span.card-rank-ten { font-size: calc(var(--h) * .16); letter-spacing: -.12em; text-indent: -.1em; }
-.card-corner span + span { font-size: calc(var(--h) * .17); line-height: 1; }
+.card-corner span + span { font-size: calc(var(--h) * .18); line-height: 1; }
+/* Suits are drawn as SVG shapes (see SuitGlyph) so spades and clubs, hearts and diamonds differ in silhouette on every system. */
+.suit-glyph { display: block; width: 1em; height: 1em; fill: currentColor; }
 .card-corner-bottom { top: auto; right: 4%; bottom: 3.5%; left: auto; transform: rotate(180deg); }
 .card-pips { position: absolute; inset: 15% 38%; }
 .card-pip { position: absolute; font-size: calc(var(--h) * .125); line-height: 1; transform: translate(-50%, -50%); }
@@ -169,8 +171,11 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .hand-panel { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; --h: calc(26 * var(--u)); --step: min(calc(11 * var(--u)), calc((100vw - 35 * var(--u)) / 12)); }
 .cards-row { display: flex; align-items: center; }
 .cards-row .playing-card { transition: transform .12s ease; }
-.cards-row .playing-card + .playing-card { margin-left: calc(var(--step) - var(--w)); }
-.cards-row .playing-card.suit-gap { margin-left: calc(var(--step) - var(--w) + 1.5 * var(--u)); }
+/* Suits are grouped without widening the hand: each boundary gets --suit-gap extra, paid for by the in-suit steps
+   (--gap-share is boundaries / in-suit steps), which never close up past the corner index. */
+.cards-row { --suit-gap: min(calc(2.2 * var(--u)), calc(.3 * var(--step))); }
+.cards-row .playing-card + .playing-card { margin-left: max(calc(var(--step) - var(--suit-gap) * var(--gap-share, 0) - var(--w)), calc(-.68 * var(--w))); }
+.cards-row .playing-card.suit-gap { margin-left: calc(var(--step) + var(--suit-gap) - var(--w)); }
 button.playing-card { cursor: pointer; }
 button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var(--u))); }
 .playing-card.hinted-card { transform: translateY(calc(-1.6 * var(--u))); box-shadow: 0 0 0 max(3px, calc(.5 * var(--u))) var(--gold), 0 0 calc(3 * var(--u)) var(--gold); }

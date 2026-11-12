@@ -63,6 +63,11 @@ function bidButtonLabel(call: string) {
   return `${call[0]} ${strain}`;
 }
 
+/** The suit of the card leading the trick on the table, read from its label since cards draw their suits as shapes. */
+function currentLedSuit(): string | undefined {
+  return screen.getByRole("region", { name: "Current trick" }).querySelector(".trick-card")?.getAttribute("aria-label")?.match(/ of (\w+)$/)?.[1];
+}
+
 function playButtonLabel(card: { rank: string; suit: string }) {
   const rank = ({ A: "ace", K: "king", Q: "queen", J: "jack", T: "ten" } as Record<string, string>)[card.rank] ?? card.rank;
   return `Play ${rank} of ${card.suit}`;
@@ -541,7 +546,7 @@ describe("bridge table", () => {
 
     const card = screen.getAllByRole("button", { name: /^Play / })[0]!;
     expect(card.querySelector(".card-corner-top")?.textContent).toBeTruthy();
-    expect(card.querySelector(".card-center-suit, .card-portrait")?.textContent).toMatch(/[♠♥♦♣]/);
+    expect(card.querySelector(".card-center-suit svg.suit-glyph, .card-portrait svg.suit-glyph")).toBeTruthy();
     expect(card.querySelector(".card-corner-bottom")).toBeTruthy();
     const numericCards = screen.getAllByRole("button", { name: /^Play / }).filter((playingCard) => {
       const rank = playingCard.querySelector(".card-corner-top span")?.textContent;
@@ -706,16 +711,15 @@ describe("bridge table", () => {
     selectCall("pass");
     selectCall("pass");
 
-    const suitName: Record<string, string> = { "♠": "spades", "♥": "hearts", "♦": "diamonds", "♣": "clubs" };
     for (let cardCount = 0; cardCount < 52 && !screen.queryByRole("region", { name: "Hand result" }); cardCount++) {
       let cards = screen.getAllByRole("button", { name: /^Play / });
       if (cards.every((card) => card.hasAttribute("disabled"))) {
         await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
         cards = screen.getAllByRole("button", { name: /^Play / });
       }
-      const leadSymbol = screen.getByRole("region", { name: "Current trick" }).textContent?.match(/[♠♥♦♣]/)?.[0];
-      const followingCard = leadSymbol
-        ? cards.find((card) => card.getAttribute("aria-label")?.endsWith(`of ${suitName[leadSymbol]}`))
+      const ledSuit = currentLedSuit();
+      const followingCard = ledSuit
+        ? cards.find((card) => card.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`))
         : undefined;
       fireEvent.click(followingCard ?? cards[0]!);
     }
@@ -808,14 +812,12 @@ describe("bridge table", () => {
         ?? ["North", "South"].map((seat) => screen.queryByRole("region", { name: `${seat}'s hand` })).find((handPanel) => handPanel?.querySelector(".dummy-compass"));
       expect(dummyHand).toBeTruthy();
     });
-    const symbol = screen.getByRole("region", { name: "Current trick" }).textContent?.match(/[♠♥♦♣]/)?.[0];
-    const suitName: Record<string, string> = { "♠": "spades", "♥": "hearts", "♦": "diamonds", "♣": "clubs" };
+    const ledSuit = currentLedSuit();
     await user.click(screen.getByRole("switch", { name: "Hints" }));
     await waitFor(() => expect(document.querySelector(".hinted-card")).toBeTruthy());
     const hintedDummyCards = screen.getAllByRole("button", { name: /^Play / }).filter((button) => button.classList.contains("hinted-card"));
     expect(hintedDummyCards).toHaveLength(1);
     const dummyCards = screen.getAllByRole("button", { name: /^Play / });
-    const ledSuit = symbol ? suitName[symbol] : undefined;
     const canFollowSuit = ledSuit !== undefined && dummyCards.some((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`));
     if (canFollowSuit) {
       expect(hintedDummyCards.every((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`))).toBe(true);
@@ -910,8 +912,7 @@ describe("bridge table", () => {
 
     await waitFor(() => expect(screen.getByText("North to play")).toBeTruthy());
     const dummyButtons = within(screen.getByRole("region", { name: "North's dummy hand" })).getAllByRole("button", { name: /^Play / });
-    const ledSuit = Object.entries({ "♠": "spades", "♥": "hearts", "♦": "diamonds", "♣": "clubs" })
-      .find(([symbol]) => screen.getByRole("region", { name: "Current trick" }).textContent?.includes(symbol))?.[1];
+    const ledSuit = currentLedSuit();
     await user.click(dummyButtons.find((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`)) ?? dummyButtons[0]!);
 
     await waitFor(() => expect(screen.getByText("South to play")).toBeTruthy());

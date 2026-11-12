@@ -19,6 +19,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   auction: () => {
     expect(screen.getByText("Your call")).toBeTruthy();
+    // The hand alternates suit colours (♠♥♣♦) and draws suits as shapes, so like-coloured suits never sit together.
+    const suitRuns = [...screen.getByRole("region", { name: "South's hand" }).querySelectorAll(".playing-card")]
+      .map((card) => card.getAttribute("aria-label")!.split(" of ")[1]).filter((suit, index, all) => suit !== all[index - 1]);
+    expect(suitRuns).toEqual(["spades", "hearts", "clubs", "diamonds"]);
+    expect(document.querySelector(".playing-card .card-corner svg.suit-glyph")).toBeTruthy();
     expect(screen.getByRole("switch", { name: "Hints" }).getAttribute("aria-checked")).toBe("false");
   },
   "auction-hints": () => {
