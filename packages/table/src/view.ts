@@ -1,7 +1,7 @@
 import { SEATS } from "@contractplay/core";
 import type { Deal, Seat } from "@contractplay/core";
 import type { PublicGame, SeatInfo, TableSummary, TableView } from "@contractplay/protocol";
-import { claimResponders } from "./claim.js";
+import { sideOf } from "./claim.js";
 import { canDeal } from "./hand.js";
 import { betweenHands, seatOf, type PlayerId, type SeatState, type TableState } from "./state.js";
 
@@ -16,8 +16,8 @@ export function summaryOf(state: TableState): TableSummary {
 }
 
 /**
- * The game as `viewer` may see it: only own cards, plus dummy once the opening lead is made, and the claiming
- * side's seat while its claim is pending.
+ * The game as `viewer` may see it: only own cards, plus dummy once the opening lead is made, and, for the
+ * claimer's opponents, the claiming side's seat while its claim is pending.
  */
 function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined {
   const g = state.game;
@@ -28,8 +28,9 @@ function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined
   const declarerShownToHumanDummy = dummyShown && dummy === viewerSeat && g.contract !== undefined &&
     state.seats[g.contract.declarer].kind === "bot" && viewerInfo.kind === "human" &&
     (viewerInfo.standIn !== undefined || state.awaySince[viewerInfo.player] === undefined);
+  const claimShown = state.pendingClaim !== undefined && sideOf(viewerSeat) !== sideOf(state.pendingClaim.seat);
   const hands = Object.fromEntries(SEATS.map((seat) => [
-    seat, seat === viewerSeat || seat === state.pendingClaim?.seat || (dummyShown && seat === dummy) || (declarerShownToHumanDummy && seat === g.contract!.declarer) ? [...g.hands[seat]] : []
+    seat, seat === viewerSeat || (claimShown && seat === state.pendingClaim!.seat) || (dummyShown && seat === dummy) || (declarerShownToHumanDummy && seat === g.contract!.declarer) ? [...g.hands[seat]] : []
   ])) as unknown as Deal;
   return {
     phase: g.phase, dealer: g.dealer, vulnerability: g.vulnerability, currentActor: g.currentActor,
@@ -45,7 +46,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined): TableV
   const hostSeat = seatOf(state, state.host);
   const game = yourSeat ? publicGame(state, yourSeat) : undefined;
   const pending = state.pendingClaim;
-  const waitingOn = pending ? claimResponders(state).filter((seat) => !pending.accepted.includes(seat)) : [];
+  const waitingOn = pending ? pending.responders.filter((seat) => !pending.accepted.includes(seat)) : [];
   return {
     ...summaryOf(state),
     listed: state.listed, revision: state.revision, handNumber: state.handNumber, totals: { ...state.totals },
@@ -53,7 +54,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined): TableV
     ...(yourSeat ? { yourSeat } : {}),
     canDeal: canDeal(state, player),
     ...(game ? { game } : {}),
-    ...(pending ? { claim: { seat: pending.seat, tricks: pending.tricks, waitingOn } } : {}),
+    ...(pending ? { claim: { seat: pending.seat, tricks: pending.tricks, waitingOn, madeAt: pending.madeAt } } : {}),
     ...(state.claimRejected ? { claimRejected: { ...state.claimRejected } } : {}),
     ...(yourSeat && state.game && betweenHands(state) ? { revealed: state.game.initialDeal } : {})
   };

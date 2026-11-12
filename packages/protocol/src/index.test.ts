@@ -19,8 +19,8 @@ const valid: ClientMessage[] = [
   { type: "cancelHand" },
   { type: "claim", tricks: 0 },
   { type: "claim", tricks: 13 },
-  { type: "answerClaim", accept: true },
-  { type: "answerClaim", accept: false },
+  { type: "answerClaim", accept: true, claimId: 7 },
+  { type: "answerClaim", accept: false, claimId: 0 },
   { type: "withdrawClaim" }
 ];
 const parse = (v: unknown) => parseClientMessage(JSON.stringify(v));
@@ -45,9 +45,10 @@ describe("parseClientMessage", () => {
     expect(parse({ type: "act", handNumber: "1", revision: 1, action: { type: "bid", seat: "north", bid: "pass" } })).toBeUndefined();
   });
 
-  it("rejects claims outside 0-13 whole tricks and answers that are not true or false", () => {
+  it("rejects claims outside 0-13 whole tricks and answers without a boolean and a claim id", () => {
     for (const tricks of [-1, 14, 1.5, "3", undefined]) expect(parse({ type: "claim", tricks })).toBeUndefined();
-    for (const accept of ["yes", 1, undefined]) expect(parse({ type: "answerClaim", accept })).toBeUndefined();
+    for (const accept of ["yes", 1, undefined]) expect(parse({ type: "answerClaim", accept, claimId: 1 })).toBeUndefined();
+    for (const claimId of [-1, 1.5, "1", undefined]) expect(parse({ type: "answerClaim", accept: true, claimId })).toBeUndefined();
     expect(parse({ type: "act", handNumber: 1, revision: 1, action: { type: "claim", seat: "north", tricks: 1 } })).toBeUndefined();
   });
 

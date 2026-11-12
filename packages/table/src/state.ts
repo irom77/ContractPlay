@@ -23,11 +23,18 @@ export type TableState = Readonly<{
   turnSince: number; lastHumanAt: number; trickJustCompleted: boolean;
   /**
    * A claim waiting for answers. `seat` is the claiming side's seat in the game (declarer for the declaring side,
-   * else the defender who claimed); `accepted` lists the answering seats that have accepted. Play is frozen meanwhile.
+   * else the defender who claimed). `responders` are the seats that must accept, fixed when the claim is made;
+   * `accepted` lists those that have. `madeAt` is the revision the claim was made at, which answers must quote.
+   * Play is frozen meanwhile.
    */
-  pendingClaim?: Readonly<{ seat: Seat; tricks: number; accepted: readonly Seat[] }>;
+  pendingClaim?: Readonly<{ seat: Seat; tricks: number; responders: readonly Seat[]; accepted: readonly Seat[]; madeAt: number }>;
   /** The last claim and the seat that rejected it, kept until the next game action or claim change. */
   claimRejected?: Readonly<{ seat: Seat; tricks: number; by: Seat }>;
+  /**
+   * The side (0 north-south, 1 east-west) whose claim was last rejected or withdrawn, in hand `hand` with `tricks`
+   * tricks completed: it may not claim again until a trick completes. Stale once the hand or trick count moves on.
+   */
+  claimBlocked?: Readonly<{ side: 0 | 1; hand: number; tricks: number }>;
   /** Present (true) until a human first connects. A state without it counts as visited. */
   unvisited?: true;
 }>;

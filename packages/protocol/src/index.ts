@@ -26,8 +26,11 @@ export type TableView = TableSummary & {
   host?: Seat; yourSeat?: Seat; canDeal: boolean;
   game?: PublicGame;
   revealed?: Deal;
-  /** A claim waiting for answers: `seat` is the claiming side's seat (declarer for the declaring side), `waitingOn` the seats yet to accept. */
-  claim?: { seat: Seat; tricks: number; waitingOn: Seat[] };
+  /**
+   * A claim waiting for answers: `seat` is the claiming side's seat (declarer for the declaring side), `waitingOn`
+   * the seats yet to accept. `madeAt` identifies the claim: send it as `claimId` with `answerClaim`.
+   */
+  claim?: { seat: Seat; tricks: number; waitingOn: Seat[]; madeAt: number };
   /** The last claim, rejected by `by`; shown until the next card or call. */
   claimRejected?: { seat: Seat; tricks: number; by: Seat };
 };
@@ -41,7 +44,7 @@ export type ClientMessage =
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
   | { type: "handToBot"; seat: Seat } | { type: "resume" } | { type: "autoPlay" }
   | { type: "takeBack" } | { type: "cancelHand" }
-  | { type: "claim"; tricks: number } | { type: "answerClaim"; accept: boolean } | { type: "withdrawClaim" };
+  | { type: "claim"; tricks: number } | { type: "answerClaim"; accept: boolean; claimId: number } | { type: "withdrawClaim" };
 
 export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "already-seated" | "not-allowed" | "hand-in-progress" | "not-ready" | "stale" | "not-your-turn" | "illegal";
 
@@ -118,7 +121,10 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       const tricks = count(data.tricks);
       return tricks !== undefined && tricks <= 13 ? { type: "claim", tricks } : undefined;
     }
-    case "answerClaim": return typeof data.accept === "boolean" ? { type: "answerClaim", accept: data.accept } : undefined;
+    case "answerClaim": {
+      const claimId = count(data.claimId);
+      return typeof data.accept === "boolean" && claimId !== undefined ? { type: "answerClaim", accept: data.accept, claimId } : undefined;
+    }
     case "act": {
       const handNumber = count(data.handNumber), revision = count(data.revision), action = parseAction(data.action);
       return handNumber !== undefined && revision !== undefined && action ? { type: "act", handNumber, revision, action } : undefined;

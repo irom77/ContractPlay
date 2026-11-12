@@ -62,7 +62,8 @@ function onTurn(state: TableState, seat: Seat): boolean {
 
 /**
  * Puts a bot in for an away player (any other seated human), or for an idle player on turn (host only).
- * A pending claim is kept, and the stand-in answers it at once if that seat was still to answer.
+ * A pending claim is kept only when that seat was still to answer it, and the stand-in then answers at once;
+ * otherwise the claim is cleared.
  */
 export function handToBot(state: TableState, player: PlayerId, seat: Seat, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
@@ -71,8 +72,10 @@ export function handToBot(state: TableState, player: PlayerId, seat: Seat, at: n
   const away = state.awaySince[target.player] !== undefined;
   const idle = state.host === player && onTurn(state, seat) && at - state.turnSince >= IDLE_MS;
   if (!away && !idle) return refuse(state, "not-allowed");
-  const handed = accept(state, { seats: { ...state.seats, [seat]: { ...target, standIn: "intermediate" } } });
-  return handed.state.pendingClaim ? settleClaim(handed.state, at) : handed;
+  const pending = state.pendingClaim;
+  const answers = pending !== undefined && pending.responders.includes(seat) && !pending.accepted.includes(seat);
+  const handed = accept(pending && !answers ? withoutClaim(state) : state, { seats: { ...state.seats, [seat]: { ...target, standIn: "intermediate" } } });
+  return answers ? settleClaim(handed.state, at) : handed;
 }
 
 /**

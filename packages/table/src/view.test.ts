@@ -87,13 +87,23 @@ describe("viewFor", () => {
     expect(viewFor(state, "alice").game!.hands.south).toHaveLength(13);
   });
 
-  it("reveals the claimer's hand only while the claim is pending", () => {
-    const t = tableInPlay({ north: "bot", east: "human", south: "human", west: "human" });
+  it("reveals the claimer's hand to the opponents only, and only while the claim is pending", () => {
+    const t = tableInPlay({ north: "human", east: "human", south: "human", west: "human" });
     expect(viewFor(t, "east").game!.hands.south).toEqual([]);
+    // East is to play after dummy: East claims, and South (declarer) and North (dummy) are the opponents.
+    let east = sendOk(t, "south", { type: "act", handNumber: t.handNumber, revision: t.revision,
+      action: { type: "play", seat: "north", card: t.game!.hands.north.find((c) => c.suit === t.game!.currentTrick[0]!.card.suit) ?? t.game!.hands.north[0]! } });
+    east = sendOk(east, "east", { type: "claim", tricks: 1 });
+    expect(viewFor(east, "south").game!.hands.east).toEqual(east.game!.hands.east);
+    expect(viewFor(east, "north").game!.hands.east).toEqual(east.game!.hands.east);
+    expect(viewFor(east, "west").game!.hands.east).toEqual([]);
+
     const pending = sendOk(t, "south", { type: "claim", tricks: 9 });
     expect(viewFor(pending, "east").game!.hands.south).toEqual(t.game!.hands.south);
+    expect(viewFor(pending, "west").game!.hands.south).toEqual(t.game!.hands.south);
+    expect(viewFor(pending, "north").game!.hands.south).toEqual([]);
     expect(viewFor(pending, "west").game!.hands.east).toEqual([]);
-    const rejected = sendOk(pending, "east", { type: "answerClaim", accept: false });
+    const rejected = sendOk(pending, "east", { type: "answerClaim", accept: false, claimId: pending.pendingClaim!.madeAt });
     expect(viewFor(rejected, "east").game!.hands.south).toEqual([]);
     expect(viewFor(rejected, "east").claim).toBeUndefined();
   });

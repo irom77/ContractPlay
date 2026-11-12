@@ -76,16 +76,16 @@ export function fourHumans(): TableState {
 
 /**
  * A table in the play of 1NT by South (seed 1 deal, North deals): each seat a human (player id = seat name) or a
- * bot, with South seated first (so South is host). With `lead`, West has made the opening lead and dummy is to play.
+ * bot. Humans sit in the order south, north, east, west, so the first of them is host. With `lead`, West has made
+ * the opening lead and dummy is to play.
  */
 export function tableInPlay(kinds: Record<Seat, "human" | "bot">, lead = true, seed = 1): TableState {
+  const order = (["south", "north", "east", "west"] as const).filter((seat) => kinds[seat] === "human");
+  const first = order[0]!;
   let t = newTable();
-  for (const seat of ["south", "north", "east", "west"] as const) {
-    t = kinds[seat] === "human"
-      ? sendOk(t, seat, { type: "sit", seat }, 1)
-      : sendOk(t, "south", { type: "setBot", seat, skill: "advanced" });
-  }
-  t = sendOk(t, "south", { type: "deal" }, 1, seededRandom(seed));
+  for (const seat of order) t = sendOk(t, seat, { type: "sit", seat }, 1);
+  for (const seat of SEATS) if (kinds[seat] === "bot") t = sendOk(t, first, { type: "setBot", seat, skill: "advanced" });
+  t = sendOk(t, first, { type: "deal" }, 1, seededRandom(seed));
   let game = t.game!;
   const bids: GameAction[] = [
     { type: "bid", seat: "north", bid: "pass" }, { type: "bid", seat: "east", bid: "pass" },

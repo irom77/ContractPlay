@@ -30,7 +30,7 @@ export function reduce(state: TableState, event: TableEvent, random: () => numbe
     case "takeBack": return takeBack(state, player, at);
     case "cancelHand": return cancelHand(state, player, at);
     case "claim": return claim(state, player, message.tricks, at);
-    case "answerClaim": return answerClaim(state, player, message.accept, at);
+    case "answerClaim": return answerClaim(state, player, message.accept, message.claimId, at);
     case "withdrawClaim": return withdrawClaim(state, player, at);
   }
 }
