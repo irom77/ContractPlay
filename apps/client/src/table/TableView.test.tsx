@@ -41,11 +41,10 @@ function renderTable(game: PublicGame, overrides: Partial<TableViewProps> = {}) 
 const backsAt = (container: HTMLElement, seat: Seat) => container.querySelectorAll(`.seat-${seat} .hidden-hand .card-back`).length;
 
 describe("card backs at hidden seats", () => {
-  it("shows 13 backs at each hidden seat during the auction", () => {
+  it("shows no backs during the auction", () => {
     const { container } = renderTable(publicGame(newGame(), ["north"]), { showBottomHand: true });
-    for (const seat of ["east", "south", "west"] as const) expect(backsAt(container, seat)).toBe(13);
-    expect(backsAt(container, "north")).toBe(0);
-    expect(container.querySelector(".seat-east .seat-compass")?.getAttribute("aria-label")).toContain(", 13 cards");
+    expect(container.querySelectorAll(".hidden-hand")).toHaveLength(0);
+    expect(container.querySelector(".seat-east .seat-compass")?.getAttribute("aria-label")).not.toContain("cards");
   });
 
   it("shows one fewer back after a seat plays", () => {

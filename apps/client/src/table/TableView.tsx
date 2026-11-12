@@ -158,7 +158,7 @@ export function TableView({
           const seatHasCards = seatCards.length > 0;
           const held = cardsHeld(game, seat);
           // Hands the viewer cannot see are backs; the bottom position never shows backs, as the hand zone is the viewer's own.
-          const showBacks = liveTurn && !seatHasCards && held > 0 && position !== "bottom";
+          const showBacks = phase === "play" && !seatHasCards && held > 0 && position !== "bottom";
           // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
           const isDummy = dummyVisible && seat === dummySeat;
           const seatCanPlay = fixedPlayHands ? canAct && shownActor === seat : playFromDummy && seat === dummySeat;

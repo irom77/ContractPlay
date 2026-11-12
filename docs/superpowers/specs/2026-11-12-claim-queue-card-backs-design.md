@@ -18,7 +18,7 @@ Success: a hand where the rest is obvious ends in one action. A player who alrea
 - Robots judge a claim by checking it against all four hands, and never accept an unproven claim.
 - Claimed hands score, save, review, and export like played hands.
 - Queued cards work in solo and online play, for your own hand and (as declarer) dummy.
-- Face-down backs in solo and online, during the auction and play.
+- Face-down backs in solo and online, during card play only (the owner chose to leave them out of the auction).
 - `#/mocks` previews and README table stay current.
 
 ## Non-goals
@@ -72,7 +72,7 @@ Success: a hand where the rest is obvious ends in one action. A player who alrea
 
 ### Face-down hands
 
-- During the auction and play (not on the result screen, where all hands are revealed), every seat whose cards the viewer cannot see shows one card back per card that seat still holds.
+- During card play only (not during the auction, at the owner's request, and not on the result screen, where all hands are revealed), every seat whose cards the viewer cannot see shows one card back per card that seat still holds.
 - Count = 13 − cards that seat has played (from completed tricks and the current trick). This works for the online `PublicGame` (hidden hands are empty arrays) and for solo.
 - Layout: the same seat area dummy uses. Top seat is a horizontal fan. Side seats are a compact vertical fan, overlapping heavily, so the table fits a phone width. When a seat is face-up (dummy, a revealed claimer hand, a declarer shown to a human dummy), it shows faces instead.
 - Card backs are decorative (`aria-hidden`). The seat's accessible label gains "N cards".
