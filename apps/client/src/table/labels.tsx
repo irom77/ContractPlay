@@ -3,6 +3,11 @@ import type { PublicGame } from "@contractplay/protocol";
 import type { ReactElement } from "react";
 
 export const seatNames: Record<Seat, string> = { north: "North", east: "East", south: "South", west: "West" };
+/** The review/result line for a claim, counting the claimer's tricks among the tricks that remained. */
+export function claimText(claim: { seat: Seat; tricks: number }, declarer: Seat, remaining: number): string {
+  const who = claim.seat === declarer ? `${seatNames[claim.seat]} (declarer)` : seatNames[claim.seat];
+  return `Claimed by ${who}: ${claim.tricks} of the remaining ${remaining} tricks`;
+}
 export const biddingStrains = ["clubs", "diamonds", "hearts", "spades", "notrump"] as const;
 export const suitSymbols: Record<Suit, string> = { spades: "♠", hearts: "♥", diamonds: "♦", clubs: "♣" };
 const suitNames: Record<Suit, string> = { spades: "spades", hearts: "hearts", diamonds: "diamonds", clubs: "clubs" };

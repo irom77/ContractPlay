@@ -9,6 +9,7 @@ import {
   nextRubberDeal,
   recordRubberHand,
   redoAction,
+  remainingTricks,
   summarizeRubber,
   playContextFor,
   requestHint,
@@ -29,7 +30,7 @@ import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
-import { compactCallLabel, contractText, isCallAvailable, samePartnership, seatNames, seats } from "./table/labels.js";
+import { claimText, compactCallLabel, contractText, isCallAvailable, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
 import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
@@ -534,8 +535,11 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   // The hand whose points the hints show during the auction: the one the hand zone shows.
   const auctionHandSeat: Seat | undefined = canAct ? actor : showBottomHand ? bottomSeat : undefined;
   const showCalls = phase !== "play" || auctionShown;
+  const reviewedClaim = selectedHand && reviewCursor > 0 ? selectedHand.game.history.actions[reviewCursor - 1] : undefined;
   const statusText = isReviewing
-    ? `Reviewing action ${reviewCursor} of ${handCount}`
+    ? reviewedClaim?.type === "claim" && contract
+      ? claimText(reviewedClaim, contract.declarer, remainingTricks(selectedHand!.game))
+      : `Reviewing action ${reviewCursor} of ${handCount}`
     : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
   const tableTools = <>

@@ -31,7 +31,7 @@ function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined
     phase: g.phase, dealer: g.dealer, vulnerability: g.vulnerability, currentActor: g.currentActor,
     auction: g.auction, ...(g.contract ? { contract: g.contract } : {}), hands,
     currentTrick: g.currentTrick, completedTricks: g.completedTricks, ...(g.score ? { score: g.score } : {}),
-    trickLeader: g.trickLeader
+    trickLeader: g.trickLeader, ...(g.claim ? { claim: g.claim } : {})
   };
 }
 

@@ -73,9 +73,10 @@ function isGame(value: unknown): value is GameState {
   if (!Array.isArray(value.currentTrick) || value.currentTrick.length > 3 || !value.currentTrick.every(isTrickCard)) return false;
   if (!Array.isArray(value.completedTricks) || !value.completedTricks.every((trick) => Array.isArray(trick) && trick.length === 4 && trick.every(isTrickCard))) return false;
   if (!isRecord(value.history) || !Array.isArray(value.history.actions) || !Number.isInteger(value.history.cursor) || Number(value.history.cursor) < 0 || Number(value.history.cursor) > value.history.actions.length) return false;
-  if (!value.history.actions.every((action) => isRecord(action) && isSeat(action.seat) && (action.type === "bid" ? isBid(action.bid) : action.type === "play" && isCard(action.card)))) return false;
+  if (!value.history.actions.every((action) => isRecord(action) && isSeat(action.seat) && (action.type === "bid" ? isBid(action.bid) : action.type === "play" ? isCard(action.card) : action.type === "claim" && Number.isInteger(action.tricks) && Number(action.tricks) >= 0 && Number(action.tricks) <= 13))) return false;
   if (value.contract !== undefined && (!isRecord(value.contract) || !Number.isInteger(value.contract.level) || Number(value.contract.level) < 1 || Number(value.contract.level) > 7 || !(SUITS.includes(value.contract.strain as Suit) || value.contract.strain === "notrump") || !isSeat(value.contract.declarer) || ![0, 1, 2].includes(Number(value.contract.doubled)))) return false;
   if ((value.phase === "play" || value.phase === "complete") && value.contract === undefined) return false;
+  if (value.claim !== undefined && (!isRecord(value.claim) || !isSeat(value.claim.seat) || !Number.isInteger(value.claim.tricks) || Number(value.claim.tricks) < 0 || Number(value.claim.tricks) > 13)) return false;
   if (value.score !== undefined && (!isRecord(value.score) || typeof value.score.score !== "number" || typeof value.score.tricksTaken !== "number")) return false;
   if (value.phase === "complete" && value.score === undefined) return false;
   return true;

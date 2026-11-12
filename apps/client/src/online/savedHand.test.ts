@@ -1,4 +1,4 @@
-import { applyAction, createDeck, createGameState, deal, playContextFor, shuffle, type GameState } from "@contractplay/core";
+import { applyAction, claimSeatFor, createDeck, createGameState, deal, playContextFor, shuffle, type GameState } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import { createTable, viewFor, type TableState } from "@contractplay/table";
 import { describe, expect, it } from "vitest";
@@ -77,5 +77,23 @@ describe("savedHandFrom", () => {
     const view = viewFor(finishedTable(original), "alice");
     const malformed = { ...view, revealed: { ...view.revealed!, north: view.revealed!.north.slice(1) } };
     expect(savedHandFrom(malformed, "x", "now")).toBeUndefined();
+  });
+
+  it("saves a claimed hand as complete with its claim", async () => {
+    let game = createGameState({ deal: deal(shuffle(createDeck(), seededRandom(3))), dealer: "east", vulnerability: "NS" });
+    for (const bid of ["1clubs", "pass", "pass", "pass"] as const) {
+      const result = applyAction(game, { type: "bid", seat: game.currentActor, bid });
+      if (!result.ok) throw new Error(result.error.message);
+      game = result.state;
+    }
+    const claimer = claimSeatFor(game)!;
+    const claim = applyAction(game, { type: "claim", seat: claimer, tricks: 3 });
+    if (!claim.ok) throw new Error(claim.error.message);
+    const view = viewFor(finishedTable(claim.state), "alice");
+    expect(view.game?.claim).toEqual({ seat: claimer, tricks: 3 });
+    const saved = savedHandFrom(view, "online-T-3", "2026-11-12T10:00:00.000Z");
+    expect(saved?.game.phase).toBe("complete");
+    expect(saved?.game.claim).toEqual({ seat: claimer, tricks: 3 });
+    expect(saved?.game.history.actions.at(-1)).toEqual({ type: "claim", seat: claimer, tricks: 3 });
   });
 });

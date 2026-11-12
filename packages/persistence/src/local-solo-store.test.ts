@@ -1,4 +1,4 @@
-import { applyAction, createGameState, deal, validatePlay } from "@contractplay/core";
+import { applyAction, claimSeatFor, createGameState, deal, validatePlay, type GameAction } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import { deleteSavedHand, exportSavedHand, loadSoloData, saveSoloData, type SoloData } from "./index.js";
 
@@ -26,6 +26,17 @@ function finishHand() {
     state = result.state;
   }
   return state;
+}
+function claimedHand() {
+  let state = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+  for (const bid of ["1clubs", "pass", "pass", "pass"] as const) {
+    const result = applyAction(state, { type: "bid", seat: state.currentActor, bid });
+    if (!result.ok) throw new Error(result.error.message);
+    state = result.state;
+  }
+  const claim = applyAction(state, { type: "claim", seat: claimSeatFor(state)!, tricks: 5 });
+  if (!claim.ok) throw new Error(claim.error.message);
+  return claim.state;
 }
 const record = { id: "hand-1", game: finishHand(), savedAt: "2026-10-25T12:00:00.000Z" };
 const emptyData: SoloData = { version: 1, currentHandId: null, currentGame: null, completedHands: [] };
@@ -120,5 +131,18 @@ describe("local solo store", () => {
 
     expect(JSON.parse(json!).game).toEqual(record.game);
     expect(exportSavedHand(emptyData, "missing")).toBeUndefined();
+  });
+
+  it("round-trips a hand that ended in a claim and rejects a malformed claim", () => {
+    const storage = new MemoryStorage();
+    const claimed = claimedHand();
+    const data: SoloData = { version: 1, currentHandId: null, currentGame: null, completedHands: [{ id: "claimed", game: claimed, savedAt: record.savedAt }] };
+    saveSoloData(storage, data);
+    expect(loadSoloData(storage)).toEqual(data);
+
+    const bad = structuredClone(data);
+    (bad.completedHands[0]!.game.history.actions as GameAction[])[4] = { type: "claim", seat: "north", tricks: 2.5 };
+    saveSoloData(storage, bad);
+    expect(loadSoloData(storage).completedHands).toEqual([]);
   });
 });

@@ -17,7 +17,7 @@ export type SeatInfo =
 export type TableSummary = { id: string; name: string; style: TableStyle; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
 
 /** GameState without history or the original deal; hands the viewer may not see are empty arrays. */
-export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader">;
+export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader" | "claim">;
 
 export type TableView = TableSummary & {
   /** `revision` is the staleness token to send with `act`, not a change counter: views can differ at the same revision, so never dedupe views by it. */
