@@ -69,6 +69,12 @@ describe("card backs at hidden seats", () => {
     expect(backsAt(container, "west")).toBe(13);
   });
 
+  it("never shows backs at the bottom position, even when its hand is not sent", () => {
+    const { container } = renderTable(publicGame(afterOpeningLead(), []), { bottomSeat: "south" });
+    expect(container.querySelector(".pos-bottom .hidden-hand")).toBeNull();
+    expect(container.querySelectorAll(".hidden-hand").length).toBe(3);
+  });
+
   it("shows no backs on a completed hand", () => {
     const game = { ...publicGame(afterOpeningLead(), ["north"]), phase: "complete" as const };
     const { container } = renderTable(game);

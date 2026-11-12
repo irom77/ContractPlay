@@ -258,8 +258,8 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
   background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .16) 0 12%, transparent 12% 24%), #1f55b5; background-clip: padding-box; }
 .card-back + .card-back { margin-left: calc(var(--step) - var(--w)); }
 .pos-top.has-backs { flex-wrap: wrap; justify-content: center; width: max-content; max-width: 100%; }
-.pos-top.has-backs .hidden-hand { order: 4; flex-basis: auto; }
-.pos-top.has-backs .seat-auction-calls { order: 3; flex-basis: 100%; justify-content: center; }
+.pos-top.has-backs .hidden-hand { order: 2; }
+.pos-top.has-backs .seat-auction-calls { order: 1; }
 .pos-left .hidden-hand, .pos-right .hidden-hand { flex-direction: column; --step: calc(1.6 * var(--u)); }
 .pos-left .card-back, .pos-right .card-back { width: var(--h); height: var(--w); }
 .pos-left .card-back + .card-back, .pos-right .card-back + .card-back { margin-left: 0; margin-top: calc(var(--step) - var(--w)); }
