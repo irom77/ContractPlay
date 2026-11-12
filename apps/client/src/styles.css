@@ -11,6 +11,7 @@
   --panel: #14352f;
   --line: rgba(232, 237, 223, .16);
   --gold: #f2c14e;
+  --queued: #7fd0ff;
   --card-black: #15171b;
   --card-red: #d0141e;
   --suit-font: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "DejaVu Sans", "Arial Unicode MS", sans-serif;
@@ -179,6 +180,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 button.playing-card { cursor: pointer; }
 button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var(--u))); }
 .playing-card.hinted-card { transform: translateY(calc(-1.6 * var(--u))); box-shadow: 0 0 0 max(3px, calc(.5 * var(--u))) var(--gold), 0 0 calc(3 * var(--u)) var(--gold); }
+/* A queued card is raised and outlined until its turn comes or it is clicked again. */
+.playing-card.queued-card, button.playing-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-3 * var(--u))); outline: max(3px, calc(.5 * var(--u))) solid var(--queued); outline-offset: 1px; }
 .hand-tag { display: grid; justify-items: center; gap: calc(.6 * var(--u)); margin-right: calc(1.2 * var(--u)); color: var(--gold); font-size: var(--text-s); font-weight: 800; letter-spacing: .06em; }
 .hand-tag .seat-compass { border-color: var(--gold); background: var(--gold); color: var(--deep); }
 
@@ -249,6 +252,8 @@ button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max
 button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.2 * var(--u))); }
 .dummy-card.hinted-card { z-index: 1; box-shadow: 0 0 0 max(2px, calc(.4 * var(--u))) var(--gold), 0 0 calc(2 * var(--u)) var(--gold); }
+.dummy-card.queued-card, button.dummy-card.queued-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.6 * var(--u))); outline: max(2px, calc(.4 * var(--u))) solid var(--queued); outline-offset: 1px; }
+.pos-bottom .dummy-card.queued-card, .pos-bottom button.dummy-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-1.6 * var(--u))); }
 .dummy-card + .dummy-card { margin-left: calc(var(--step) - var(--w)); }
 
 /* ---------- Card backs at hidden seats ---------- */

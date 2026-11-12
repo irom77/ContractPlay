@@ -707,6 +707,59 @@ describe("OnlineTable connection", () => {
       expect(service.sent).toEqual([{ type: "takeBack" }]);
     });
 
+    describe("queueing the next card", () => {
+      /** Forced cards are left to the player, so only the queue can send a card. */
+      const setupQueue = () => {
+        const storage = memoryStorage();
+        storage.setItem("contractplay.forcedPlay", "off");
+        return setup({ storage });
+      };
+
+      it("plays declarer's queued card on declarer's turn, not on dummy's", () => {
+        vi.useFakeTimers();
+        const service = setupQueue();
+        const start = oneNoTrump(); // North declares, East leads, South is a bot dummy North plays for.
+        const southToPlay = playOne(start);
+        const northToPlay = playCards(southToPlay, 2);
+        expect(northToPlay.currentActor).toBe("north");
+        const card = legalCards(northToPlay.hands.north, northToPlay.currentTrick[0]!.card.suit)[0]!;
+
+        service.push(live(start, { revision: 10 }));
+        fireEvent.click(screen.getByRole("button", { name: `Queue ${cardLabel(card)}` }));
+        expect(screen.getByText(`Queued: ${cardLabel(card)}`)).toBeTruthy();
+
+        service.push(live(southToPlay, { revision: 11, game: publicGame(southToPlay, ["north", "south"]) }));
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(service.sent).toEqual([]);
+
+        service.push(live(northToPlay, { revision: 13, game: publicGame(northToPlay, ["north", "south"]) }));
+        act(() => { vi.advanceTimersByTime(499); });
+        expect(service.sent).toEqual([]);
+        act(() => { vi.advanceTimersByTime(1); });
+        expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 13, action: { type: "play", seat: "north", card } }]);
+      });
+
+      it("offers no queue while a bot plays for the viewer", () => {
+        const service = setupQueue();
+        const autoNorth: SeatInfo = { kind: "human", name: "Bob", away: false, standIn: "intermediate", autoPlay: true };
+        service.push(live(oneNoTrump(), { revision: 10 }));
+        expect(screen.getAllByRole("button", { name: /^Queue / }).length).toBeGreaterThan(0);
+        service.push(live(oneNoTrump(), { revision: 11, seats: { ...seatedNorth, north: autoNorth } }));
+        expect(screen.queryAllByRole("button", { name: /^Queue / })).toHaveLength(0);
+      });
+
+      it("drops the queue when the viewer takes a card back", () => {
+        const service = setupQueue();
+        const westToPlay = playCards(oneNoTrump(), 2); // East led, North played dummy's card; West is to play.
+        service.push(live(westToPlay, { revision: 15, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getAllByRole("button", { name: /^Queue / })[0]!);
+        expect(screen.getAllByRole("button", { name: /^Unqueue / })).toHaveLength(1);
+        fireEvent.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+        fireEvent.click(item("Take back"));
+        expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+      });
+    });
+
     it("offers Auto play during card play only, and shows it until the viewer stops it", async () => {
       const user = userEvent.setup();
       const service = setup();

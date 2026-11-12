@@ -30,9 +30,10 @@ import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
-import { claimText, compactCallLabel, contractText, isCallAvailable, samePartnership, seatNames, seats } from "./table/labels.js";
+import { cardLabel, claimText, compactCallLabel, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
+import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard.js";
 import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
 import { serviceUrl } from "./online/connection.js";
 
@@ -94,6 +95,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [aboutOpen, setAboutOpen] = useState(false);
   // The hand the user has handed over: bots make every remaining call and play for it.
   const [botsFinishHandId, setBotsFinishHandId] = useState<string>();
+  // A card the user picked before their turn, played for them when it comes.
+  const [queued, setQueued] = useState<QueuedCard>();
   const botsFinishing = !!currentHandId && botsFinishHandId === currentHandId;
   const botsFinishingRef = useRef(botsFinishing);
   botsFinishingRef.current = botsFinishing;
@@ -256,6 +259,29 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     return () => window.clearTimeout(timer);
   }, [forced, game]);
 
+  // A solo claim waiting for an answer. Solo has no claims yet; when it does, a pending one clears the queue.
+  const soloClaimPending = false;
+  // Seats whose queued card is kept: against bots, the user's own and, once dummy is down, dummy's when the user declares.
+  const queueOwnerSeats: readonly Seat[] = !isReviewing && playAgainstBots && !botsFinishing && !soloClaimPending && game?.phase === "play"
+    ? game.contract?.declarer === userSeat && (game.currentTrick.length > 0 || game.completedTricks.length > 0) ? [userSeat, partnerOf(userSeat)] : [userSeat]
+    : [];
+  const activeQueued = queued && game && queueOwnerSeats.includes(queued.seat) && queueStillValid(game, queued, currentHandId, soloClaimPending) ? queued : undefined;
+  useEffect(() => {
+    if (queued && !activeQueued) setQueued(undefined);
+  }, [queued, activeQueued]);
+
+  // The queued card is played like a forced one, after the same pause; when a card is forced it is that card, so only one plays.
+  const queuedNow = game && canShowHand && !temporaryTrick && !forced ? queuedPlay(game, activeQueued, game.currentActor) : undefined;
+  useEffect(() => {
+    if (!queuedNow || !game) return;
+    const turnState = game;
+    const timer = window.setTimeout(() => {
+      const result = applyAction(turnState, { type: "play", seat: turnState.currentActor, card: queuedNow });
+      if (result.ok) setGame((current) => current === turnState ? result.state : current);
+    }, FORCED_PLAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [queuedNow, game]);
+
   useEffect(() => {
     if (shownExplanation === undefined) return;
     const close = (event: Event) => {
@@ -379,6 +405,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   function takeBack() {
     if (!game || game.history.cursor === 0) return;
     setBotsFinishHandId(undefined);
+    setQueued(undefined);
     const previous = undoAction(game);
     setTakenBackTo(previous);
     setGame(previous);
@@ -540,6 +567,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     ? reviewedClaim?.type === "claim" && contract
       ? claimText(reviewedClaim, contract.declarer, remainingTricks(selectedHand!.game))
       : `Reviewing action ${reviewCursor} of ${handCount}`
+    : liveTurn && activeQueued && !canAct ? `Queued: ${cardLabel(activeQueued.card)}`
     : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
   const tableTools = <>
@@ -612,6 +640,9 @@ export default function App({ solver }: { solver?: Solver } = {}) {
           onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
           showBottomHand={showBottomHand}
           cardsDisabled={!!temporaryTrick}
+          queueSeats={canAct ? [] : queueOwnerSeats}
+          queuedCard={activeQueued}
+          onQueue={(seat, card) => setQueued((current) => current?.seat === seat && cardId(current.card) === cardId(card) ? undefined : { handKey: currentHandId, seat, card })}
           statusText={statusText}
           ariaLabel={isReviewing ? "Hand review" : "Bridge table"}
           onBid={(bid) => { if (game) submitAction({ type: "bid", seat: game.currentActor, bid }); }}

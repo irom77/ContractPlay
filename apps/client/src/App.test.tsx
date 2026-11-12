@@ -1030,6 +1030,97 @@ describe("bridge table", () => {
     expect(saved.currentGame.auction[0].seat).toBe("west");
   });
 
+  describe("queueing the next card", () => {
+    /**
+     * West declares 1NT and North (a bot) has led, so East (dummy, a bot) plays next and South third.
+     * The deal is chosen so South can follow the led suit and also holds another suit.
+     */
+    function southThirdToPlay(): GameState {
+      for (;;) {
+        let game = gameWithContract(["pass", "pass", "pass", "1notrump", "pass", "pass", "pass"]);
+        const lead = game.hands.north[0]!;
+        const result = applyAction(game, { type: "play", seat: "north", card: lead });
+        if (!result.ok) throw new Error(result.error.message);
+        game = result.state;
+        const south = game.hands.south;
+        if (south.some((card) => card.suit === lead.suit) && south.some((card) => card.suit !== lead.suit)) return game;
+      }
+    }
+
+    const cardText = (card: { rank: string; suit: string }) => playButtonLabel(card).replace(/^Play /, "");
+    const southPlays = () => loadSoloData(window.localStorage).currentGame!.history.actions.filter((action) => action.type === "play" && action.seat === "south");
+
+    /** Stores the position with forced cards left to the player, so only the queue can play South's card. */
+    function renderAsSouthAgainstBots(game: GameState) {
+      window.localStorage.setItem("contractplay.forcedPlay", "off");
+      storeCurrentGame(game);
+      render(<App />);
+      expect(screen.queryAllByRole("button", { name: /^Queue / })).toHaveLength(0);
+      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
+      fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
+    }
+
+    /** Lets the bot to act decide, a timer tick at a time, until South is to play. */
+    async function untilSouthToPlay() {
+      for (let tick = 0; tick < 20 && loadSoloData(window.localStorage).currentGame!.currentActor !== "south"; tick += 1) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      }
+      expect(loadSoloData(window.localStorage).currentGame!.currentActor).toBe("south");
+    }
+
+    it("queues a card on a bot's turn, plays it on the user's turn, and un-queues it on a second click", async () => {
+      vi.useFakeTimers();
+      const game = southThirdToPlay();
+      const ledSuit = game.currentTrick[0]!.card.suit;
+      const card = game.hands.south.find((candidate) => candidate.suit === ledSuit)!;
+      renderAsSouthAgainstBots(game);
+
+      fireEvent.click(screen.getByRole("button", { name: `Queue ${cardText(card)}` }));
+      expect(screen.getByText(`Queued: ${cardText(card)}`)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: `Unqueue ${cardText(card)}` }));
+      expect(screen.queryByText(/^Queued:/)).toBeNull();
+      expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+      fireEvent.click(screen.getByRole("button", { name: `Queue ${cardText(card)}` }));
+
+      await untilSouthToPlay();
+      expect(southPlays()).toHaveLength(0);
+      await act(async () => { await vi.advanceTimersByTimeAsync(499); });
+      expect(southPlays()).toHaveLength(0);
+      await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+      expect(southPlays()).toEqual([{ type: "play", seat: "south", card }]);
+    });
+
+    it("drops a queued card that is illegal on the user's turn and leaves the user's cards to play", async () => {
+      vi.useFakeTimers();
+      const game = southThirdToPlay();
+      const ledSuit = game.currentTrick[0]!.card.suit;
+      const offSuit = game.hands.south.find((candidate) => candidate.suit !== ledSuit)!;
+      renderAsSouthAgainstBots(game);
+
+      fireEvent.click(screen.getByRole("button", { name: `Queue ${cardText(offSuit)}` }));
+      await untilSouthToPlay();
+      await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+      expect(southPlays()).toHaveLength(0);
+      expect(screen.queryByText(/^Queued:/)).toBeNull();
+      const playable = screen.getAllByRole("button", { name: /^Play / }) as HTMLButtonElement[];
+      expect(playable.length).toBeGreaterThan(0);
+      expect(playable.every((button) => !button.disabled)).toBe(true);
+    });
+
+    it("clears the queue on a take-back", () => {
+      vi.useFakeTimers();
+      const game = southThirdToPlay();
+      renderAsSouthAgainstBots(game);
+      fireEvent.click(screen.getByRole("button", { name: `Queue ${cardText(game.hands.south[0]!)}` }));
+      expect(screen.getAllByRole("button", { name: /^Unqueue / })).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole("button", { name: /Take back/ }));
+      expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+      expect(screen.queryByText(/^Queued:/)).toBeNull();
+    });
+  });
+
   it("imports the first PBN board with its deal settings", async () => {
     const user = userEvent.setup();
     let imported = createGameState({ deal: deal(), dealer: "west", vulnerability: "EW" });

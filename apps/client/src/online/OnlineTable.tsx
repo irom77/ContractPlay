@@ -6,8 +6,9 @@ import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractpl
 import { createHandName, handNameFromId } from "../handNames.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
+import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { TableView } from "../table/TableView.js";
-import { compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
+import { cardLabel, compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
@@ -51,6 +52,20 @@ function cardDecider(game: PublicGame, seats: TableViewData["seats"], seat: Seat
 /** The seat that decides the current turn. */
 function deciderOf(game: PublicGame, seats: TableViewData["seats"]): Seat {
   return game.phase === "play" ? cardDecider(game, seats, game.currentActor) : game.currentActor;
+}
+
+/**
+ * Seats whose queued card the viewer keeps during play: their own and dummy's, each only while the viewer decides
+ * its cards. None while a bot plays for the viewer or a claim is pending.
+ */
+function queueOwnerSeats(view: TableViewData): Seat[] {
+  const game = view.game;
+  const yourSeat = view.yourSeat;
+  if (!game || !yourSeat || game.phase !== "play" || view.claim) return [];
+  const mine = view.seats[yourSeat];
+  if (mine.kind === "human" && mine.standIn !== undefined) return [];
+  const dummy = game.contract ? partnerOf(game.contract.declarer) : undefined;
+  return [...new Set([yourSeat, ...(dummy ? [dummy] : [])])].filter((seat) => cardDecider(game, view.seats, seat) === yourSeat);
 }
 
 /**
@@ -154,6 +169,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   // A take-back is on its way; the view it brings is remembered so a forced card there waits for the player.
   const takeBackSent = useRef(false);
   const [takenBackTo, setTakenBackTo] = useState<number>();
+  // A card picked before the viewer's turn, sent for them when it comes.
+  const [queued, setQueued] = useState<QueuedCard>();
+  const queueOwners = view ? queueOwnerSeats(view) : [];
+  const activeQueued = queued && view?.game && queueOwners.includes(queued.seat) && queueStillValid(view.game, queued, String(view.handNumber), !!view.claim) ? queued : undefined;
 
   useEffect(() => {
     const current = connect({
@@ -265,6 +284,28 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo]);
 
   useEffect(() => {
+    if (queued && !activeQueued) setQueued(undefined);
+  }, [queued, activeQueued]);
+
+  // The queued card is sent like a forced one, after the same pause. A forced card is that same card, so when the
+  // forced-card effect sends this turn's card, this one stays out of it.
+  useEffect(() => {
+    const game = view?.game;
+    if (!activeQueued || !game || !view.yourSeat || game.phase !== "play" || waiting || status !== "open" || holdingNow) return;
+    const mine = view.seats[view.yourSeat];
+    if ((mine.kind === "human" && mine.standIn !== undefined) || deciderOf(game, view.seats) !== view.yourSeat) return;
+    if (forcedPlayOn && view.revision !== takenBackTo && forcedCard(game)) return;
+    const card = queuedPlay(game, activeQueued, game.currentActor);
+    if (!card) return;
+    const timer = setTimeout(() => {
+      setWaiting(true);
+      setNotice(undefined);
+      connection.current?.send({ type: "act", handNumber: view.handNumber, revision: view.revision, action: { type: "play", seat: game.currentActor, card } });
+    }, FORCED_PLAY_MS);
+    return () => clearTimeout(timer);
+  }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo, activeQueued]);
+
+  useEffect(() => {
     setExplainedCall((shown) => shown && (shown.handNumber !== view?.handNumber || shown.auctionLength !== view?.game?.auction.length) ? undefined : shown);
   }, [view?.handNumber, view?.game?.auction.length]);
 
@@ -339,7 +380,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",
-        onSelect: () => { if (!inputDisabled) { setWaiting(true); takeBackSent.current = true; send({ type: "takeBack" }); } }
+        onSelect: () => { if (!inputDisabled) { setWaiting(true); setQueued(undefined); takeBackSent.current = true; send({ type: "takeBack" }); } }
       },
       ...(game.phase === "play" && !standIn ? [{ id: "auto-play", label: "Auto play this hand", disabled: status !== "open",
         title: "A bot plays your cards until this hand ends, then you play again", onSelect: () => send({ type: "autoPlay" }) }] : []),
@@ -354,6 +395,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       : game.currentTrick.length ? game.currentTrick : lastTrickOpen ? game.completedTricks.at(-1) ?? [] : [];
     const statusText = !live ? (game.phase === "complete" ? "Hand complete" : "Passed out")
       : actingSeat ? (game.phase === "auction" ? "Your call" : actingSeat === yourSeat ? "Your play" : game.currentActor === game.contract?.declarer ? "Play declarer's hand" : "Play from dummy")
+        : activeQueued ? `Queued: ${cardLabel(activeQueued.card)}`
         : `${seatNames[game.currentActor]} to ${game.phase === "auction" ? "bid" : "play"}`;
 
     return (
@@ -372,6 +414,9 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             fixedSeatHands
             cardsDisabled={inputDisabled}
             bidsDisabled={inputDisabled}
+            queueSeats={actingSeat ? [] : queueOwners}
+            queuedCard={activeQueued}
+            onQueue={(seat, card) => setQueued((current) => current?.seat === seat && cardId(current.card) === cardId(card) ? undefined : { handKey: String(view.handNumber), seat, card })}
             statusText={statusText}
             ariaLabel={`Bridge table ${view.name}`}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat}
