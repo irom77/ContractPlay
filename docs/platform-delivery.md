@@ -33,7 +33,7 @@ pnpm --filter @contractplay/client exec tauri ios init
 pnpm --filter @contractplay/client exec tauri ios dev
 ```
 
-The CI workflow builds an iOS simulator app, installs it on an available iPad simulator, launches it, and uploads the app bundle and screenshot. iPadOS uses the same universal iOS app target; there is no separate iPadOS package. A real iPhone/iPad run is still needed before public release.
+The CI workflow has a job that builds an iOS simulator app, installs it on an available iPad simulator, launches it, and uploads the app bundle and screenshot. It is on hold (`if: false` in `.github/workflows/ci.yml`) while iOS and iPadOS are not being pursued. iPadOS uses the same universal iOS app target; there is no separate iPadOS package. A real iPhone/iPad run is still needed before public release.
 
 For a device or App Store package, build on macOS with an Apple signing identity and provisioning profile, for example:
 

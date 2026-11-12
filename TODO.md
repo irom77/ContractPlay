@@ -10,7 +10,8 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 
 ## Platform delivery
 
-- [ ] Validate signed installers and an iPhone/iPad device or App Store build when platform certificates, developer accounts, and devices are available.
+- [ ] Validate signed installers when platform certificates and developer accounts are available.
+- [ ] On hold: iOS and iPadOS (the CI simulator build is switched off; an iPhone/iPad device or App Store build would follow if resumed).
 
 ## Scoring
 

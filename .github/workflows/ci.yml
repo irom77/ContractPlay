@@ -58,6 +58,8 @@ jobs:
 
   ios-simulator:
     name: iOS and iPadOS simulator build
+    # On hold: iOS and iPadOS are not being pursued for now. Remove this line to build them again.
+    if: false
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4

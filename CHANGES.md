@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- iOS and iPadOS are on hold: CI no longer runs the iOS/iPadOS simulator build. The job stays in the workflow, switched off, so it can be turned back on.
 - On the online seating screen, everything in the North, South, East, and West seat cards (seat label, name, badges, the bot skill list, and the buttons) is now centered across and down the card.
 - Online tables moved to protocol version 2, so a page left open from before Auto play is asked to reload ("ContractPlay was updated. Reload to keep playing.") instead of quietly missing the new menu entry.
 - A card that is your only legal play (a singleton in the led suit, or your last card) is now played for you after half a second, in solo and online play, including for dummy when you declare. A card you just took back waits for you instead of being replayed. Turn this off with "Play forced cards automatically" in the deal settings; online tables follow the same choice.
