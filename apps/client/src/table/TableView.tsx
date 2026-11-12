@@ -112,7 +112,7 @@ export function TableView({
   const canQueue = (seat: Seat) => phase === "play" && !!onQueue && !!queueSeats?.includes(seat);
   const queueButton = (seat: Seat, card: Card, className: string) => {
     const queued = isQueued(seat, card);
-    return <button className={`${className} ${queued ? "queued-card" : ""}`} key={cardId(card)} aria-label={`${queued ? "Unqueue" : "Queue"} ${cardLabel(card)}`} title={queued ? "Queued: plays when your turn comes. Click to cancel" : "Queue this card to play when your turn comes"} onClick={() => onQueue?.(seat, card)}>{cardFace(card)}</button>;
+    return <button type="button" className={`${className} ${queued ? "queued-card" : ""}`} key={cardId(card)} aria-label={`${queued ? "Unqueue" : "Queue"} ${cardLabel(card)}`} title={queued ? "Queued: plays when your turn comes. Click to cancel" : "Queue this card to play when your turn comes"} onClick={() => onQueue?.(seat, card)}>{cardFace(card)}</button>;
   };
   const tableCard = (card: Card, className: string, label: string) => <span className={`${className} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={cardId(card)} role="img" aria-label={label}>{cardFace(card)}</span>;
 

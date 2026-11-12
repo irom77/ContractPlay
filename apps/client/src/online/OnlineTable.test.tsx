@@ -739,6 +739,39 @@ describe("OnlineTable connection", () => {
         expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 13, action: { type: "play", seat: "north", card } }]);
       });
 
+      it("sends a queued card that is also the forced card only once", () => {
+        vi.useFakeTimers();
+        const service = setup(); // Forced play stays on.
+        // The last trick with West to play and North (the viewer, holding one card) next.
+        let westToPlay: GameState | undefined;
+        while (!westToPlay) {
+          let game = playCards(oneNoTrump(), 48);
+          while (game.currentActor !== "west" && game.currentTrick.length < 4 && game.hands.north.length === 1) game = playOne(game);
+          if (game.currentActor === "west" && game.hands.north.length === 1) westToPlay = game;
+        }
+        const northToPlay = playOne(westToPlay);
+        expect(northToPlay.currentActor).toBe("north");
+        const card = northToPlay.hands.north[0]!;
+
+        service.push(live(westToPlay, { revision: 30, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getByRole("button", { name: `Queue ${cardLabel(card)}` }));
+        service.push(live(northToPlay, { revision: 31, game: publicGame(northToPlay, ["north", "south"]) }));
+        const acts = () => service.sent.filter((message) => message.type === "act");
+        act(() => { vi.advanceTimersByTime(500); });
+        expect(acts()).toEqual([{ type: "act", handNumber: 1, revision: 31, action: { type: "play", seat: "north", card } }]);
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(acts()).toHaveLength(1);
+      });
+
+      it("lets a human dummy queue for both declaring hands when the bot partner declares", () => {
+        const service = setupQueue();
+        const seats = { north: bot, east: bot, south: human("Bob"), west: bot };
+        const westToPlay = playCards(oneNoTrump(), 2); // East led and South (dummy) played; West is to play.
+        service.push(tableView({ handInProgress: true, handNumber: 1, revision: 14, yourSeat: "south", seats, game: publicGame(westToPlay, ["north", "south"]) }));
+        expect(within(screen.getByRole("region", { name: "North's hand" })).getAllByRole("button", { name: /^Queue / })).toHaveLength(13);
+        expect(within(screen.getByRole("region", { name: "South's dummy hand" })).getAllByRole("button", { name: /^Queue / })).toHaveLength(12);
+      });
+
       it("offers no queue while a bot plays for the viewer", () => {
         const service = setupQueue();
         const autoNorth: SeatInfo = { kind: "human", name: "Bob", away: false, standIn: "intermediate", autoPlay: true };

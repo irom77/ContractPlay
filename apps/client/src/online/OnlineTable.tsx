@@ -8,7 +8,7 @@ import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { TableView } from "../table/TableView.js";
-import { cardLabel, compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
+import { cardLabel, compactCallLabel, isCallAvailable, partnerOf, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
@@ -55,8 +55,9 @@ function deciderOf(game: PublicGame, seats: TableViewData["seats"]): Seat {
 }
 
 /**
- * Seats whose queued card the viewer keeps during play: their own and dummy's, each only while the viewer decides
- * its cards. None while a bot plays for the viewer or a claim is pending.
+ * Seats whose queued card the viewer keeps during play: every seat whose cards the viewer decides (their own, dummy's
+ * as declarer, or both declaring hands as a human dummy for a bot declarer). None while a bot plays for the viewer or
+ * a claim is pending.
  */
 function queueOwnerSeats(view: TableViewData): Seat[] {
   const game = view.game;
@@ -64,8 +65,7 @@ function queueOwnerSeats(view: TableViewData): Seat[] {
   if (!game || !yourSeat || game.phase !== "play" || view.claim) return [];
   const mine = view.seats[yourSeat];
   if (mine.kind === "human" && mine.standIn !== undefined) return [];
-  const dummy = game.contract ? partnerOf(game.contract.declarer) : undefined;
-  return [...new Set([yourSeat, ...(dummy ? [dummy] : [])])].filter((seat) => cardDecider(game, view.seats, seat) === yourSeat);
+  return seatOrder.filter((seat) => cardDecider(game, view.seats, seat) === yourSeat);
 }
 
 /**
