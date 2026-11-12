@@ -252,7 +252,7 @@ describe("connections", () => {
   it("refuses a malformed message with bad-message and keeps the socket", async () => {
     const id = await newTableId();
     const { client } = await Client.join(id, SECRET_A, "Alice");
-    client.send({ type: "sit", seat: "middle" });
+    client.send({ type: "sit", seat: "middle" } as Record<string, unknown>);
     const refused = await client.next();
     expect(refused).toMatchObject({ type: "refused", reason: "bad-message" });
     client.send({ type: "sit", seat: "north" });
