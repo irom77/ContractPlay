@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- On the online seating screen, everything in the North, South, East, and West seat cards (seat label, name, badges, the bot skill list, and the buttons) is now centered across and down the card.
 - Online tables moved to protocol version 2, so a page left open from before Auto play is asked to reload ("ContractPlay was updated. Reload to keep playing.") instead of quietly missing the new menu entry.
 - A card that is your only legal play (a singleton in the led suit, or your last card) is now played for you after half a second, in solo and online play, including for dummy when you declare. A card you just took back waits for you instead of being replayed. Turn this off with "Play forced cards automatically" in the deal settings; online tables follow the same choice.
 - Added **Auto play**: during card play, a bot plays your cards for the rest of the deal and gives them back when it ends. In solo play it is the Auto play button beside Hints (Stop auto play takes control back). Online it is **Auto play this hand** in the game menu; the seat shows an "auto play" badge, **Stop auto play** takes the seat back early, and reconnecting does not cancel it. The UI previews gain an eleventh screen showing it.
