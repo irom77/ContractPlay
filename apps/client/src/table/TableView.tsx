@@ -168,7 +168,7 @@ export function TableView({
         {overlay}
       </div>
 
-      <div className="hand-zone">
+      {fixedPlayHands ? null : <div className="hand-zone">
         {handSeat && handCards.length ? <section className="hand-panel" aria-label={`${seatNames[handSeat]}'s ${handIsInteractive ? "hand" : "cards"}`}>
           <div className="cards-row">
             {handSeat !== bottomSeat || handIsDummy ? <span className="hand-tag"><span className="seat-compass" aria-hidden="true">{handSeat[0]!.toUpperCase()}</span>{handIsDummy ? <span>DUMMY</span> : <span className="sr-only">{seatNames[handSeat]}</span>}</span> : null}
@@ -180,7 +180,7 @@ export function TableView({
             })}
           </div>
         </section> : null}
-      </div>
+      </div>}
     </section>
   );
 }

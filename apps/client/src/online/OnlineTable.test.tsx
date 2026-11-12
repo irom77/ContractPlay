@@ -325,6 +325,8 @@ describe("OnlineTable play", () => {
     const dummyTurn = playCards(oneNoTrump(), 1);
     service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats, game: publicGame(dummyTurn, ["north", "south"]) }));
     expect(screen.getByText("DUMMY")).toBeTruthy();
+    // Every hand sits at its seat on the felt, so no empty bottom strip shrinks the table.
+    expect(document.querySelector(".hand-zone")).toBeNull();
     expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll('[role="img"]')).toHaveLength(1);
     const dummyCard = within(screen.getByRole("region", { name: "South's dummy hand" })).getAllByRole("button", { name: /^Play / })[0]!;
     await user.click(dummyCard);
