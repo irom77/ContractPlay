@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { cardId, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
+import { cardId, forcedCard, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createHandName, handNameFromId } from "../handNames.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
+import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { TableView } from "../table/TableView.js";
 import { compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
@@ -149,12 +150,21 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const [explainedCall, setExplainedCall] = useState<{ handNumber: number; auctionLength: number; index: number }>();
   const connection = useRef<TableConnection | undefined>(undefined);
   const previousHand = useRef<number | undefined>(undefined);
+  const [forcedPlayOn] = useState(() => forcedPlayEnabled(storage));
+  // A take-back is on its way; the view it brings is remembered so a forced card there waits for the player.
+  const takeBackSent = useRef(false);
+  const [takenBackTo, setTakenBackTo] = useState<number>();
 
   useEffect(() => {
     const current = connect({
       baseUrl, tableId, identity,
-      onView: (next) => { setReceived((previous) => receive(previous, next)); setWaiting(false); },
+      onView: (next) => {
+        setReceived((previous) => receive(previous, next));
+        setWaiting(false);
+        if (takeBackSent.current) { takeBackSent.current = false; setTakenBackTo(next.revision); }
+      },
       onRefused: (reason) => {
+        takeBackSent.current = false;
         setWaiting(false);
         setLeaving(false);
         const text = refusalText(reason);
@@ -236,6 +246,24 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     return () => { cancelled = true; };
   }, [view, hintsOn]);
 
+  // A card the player must play (the only legal one) is sent for them after a short pause.
+  const holdingNow = hold !== undefined && hold.handNumber === view?.handNumber;
+  useEffect(() => {
+    const game = view?.game;
+    if (!forcedPlayOn || !game || !view.yourSeat || game.phase !== "play" || waiting || status !== "open" || holdingNow) return;
+    if (view.revision === takenBackTo) return;
+    const mine = view.seats[view.yourSeat];
+    if ((mine.kind === "human" && mine.standIn !== undefined) || deciderOf(game, view.seats) !== view.yourSeat) return;
+    const card = forcedCard(game);
+    if (!card) return;
+    const timer = setTimeout(() => {
+      setWaiting(true);
+      setNotice(undefined);
+      connection.current?.send({ type: "act", handNumber: view.handNumber, revision: view.revision, action: { type: "play", seat: game.currentActor, card } });
+    }, FORCED_PLAY_MS);
+    return () => clearTimeout(timer);
+  }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo]);
+
   useEffect(() => {
     setExplainedCall((shown) => shown && (shown.handNumber !== view?.handNumber || shown.auctionLength !== view?.game?.auction.length) ? undefined : shown);
   }, [view?.handNumber, view?.game?.auction.length]);
@@ -311,8 +339,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",
-        onSelect: () => { if (!inputDisabled) { setWaiting(true); send({ type: "takeBack" }); } }
+        onSelect: () => { if (!inputDisabled) { setWaiting(true); takeBackSent.current = true; send({ type: "takeBack" }); } }
       },
+      ...(game.phase === "play" && !standIn ? [{ id: "auto-play", label: "Auto play this hand", disabled: status !== "open",
+        title: "A bot plays your cards until this hand ends, then you play again", onSelect: () => send({ type: "autoPlay" }) }] : []),
       ...(live && isHost ? [{ id: "cancel", label: "Cancel this hand", tone: "danger" as const, disabled: status !== "open",
         title: "Abandon the hand for everyone, unscored, and return to seating", onSelect: () => send({ type: "cancelHand" }) }] : []),
       { id: "leave", label: "Leave the table", tone: "danger", disabled: status !== "open" || leaving,
@@ -369,7 +399,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 {visiblePlayHint && game.phase === "play" ? <p role="status">{visiblePlayHint.reason}</p> : null}
                 <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
               </div> : null}
-              {standIn ? <div className="online-resume" role="group" aria-label="A bot is playing for you">
+              {standIn && mine.autoPlay ? <div className="online-resume" role="group" aria-label="Auto play is on">
+                <span>Auto play: a bot plays your cards until this hand ends.</span>
+                <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>Stop auto play</button>
+              </div> : standIn ? <div className="online-resume" role="group" aria-label="A bot is playing for you">
                 <span>A bot is playing for you.</span>
                 <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>Take my seat back</button>
               </div> : null}
@@ -394,6 +427,7 @@ function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatIn
   if (info.kind === "empty") return null;
   return <span className="online-seat-label">
     <span className="online-seat-name">{info.kind === "bot" ? "Bot" : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name}</span>
+    {info.kind === "human" && info.autoPlay ? <span className="online-badge">auto play</span> : null}
     {info.kind === "human" && info.away ? <span className="online-badge">away</span> : null}
     {isHost ? <span className="online-badge">host</span> : null}
     {onHandToBot ? <button className="secondary-button online-seat-button" type="button" aria-label={`Hand to a bot for ${seatNames[seat]}`} onClick={onHandToBot}>Hand to a bot</button> : null}

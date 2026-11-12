@@ -15,10 +15,14 @@ type Human = Extract<SeatState, { kind: "human" }>;
 const withoutStandIn = (seat: Human): Human =>
   ({ kind: "human", player: seat.player, name: seat.name, since: seat.since });
 
-/** A new connection: counts it, records the name, clears away and any stand-in, and marks a human as present. */
+/**
+ * A new connection: counts it, records the name, clears away and any stand-in put in while the player was away
+ * (an Auto play stand-in the player chose stays until the hand ends), and marks a human as present.
+ */
 export function connect(state: TableState, player: PlayerId, name: string, at: number): Outcome {
   const seat = seatOf(state, player);
-  const seats = seat ? { ...state.seats, [seat]: { ...withoutStandIn(state.seats[seat] as Human), name } } : state.seats;
+  const held = seat ? state.seats[seat] as Human : undefined;
+  const seats = seat && held ? { ...state.seats, [seat]: { ...(held.autoPlay ? held : withoutStandIn(held)), name } } : state.seats;
   const visited = Object.fromEntries(Object.entries(state).filter(([key]) => key !== "unvisited")) as TableState;
   return {
     state: {
@@ -64,6 +68,18 @@ export function handToBot(state: TableState, player: PlayerId, seat: Seat, at: n
   const idle = state.host === player && onTurn(state, seat) && at - state.turnSince >= IDLE_MS;
   if (!away && !idle) return refuse(state, "not-allowed");
   return accept(state, { seats: { ...state.seats, [seat]: { ...target, standIn: "intermediate" } } });
+}
+
+/**
+ * Auto play: during card play the sender hands their own cards to a bot for the rest of the hand. The stand-in
+ * ends by itself when the hand does, or sooner when the player takes the seat back.
+ */
+export function autoPlay(state: TableState, player: PlayerId): Outcome {
+  const seat = seatOf(state, player);
+  if (!seat) return refuse(state, "not-seated");
+  const held = state.seats[seat] as Human;
+  if (state.game?.phase !== "play" || held.standIn !== undefined) return refuse(state, "not-allowed");
+  return accept(state, { seats: { ...state.seats, [seat]: { ...held, standIn: "intermediate", autoPlay: true } } });
 }
 
 /** The sender takes their seat back from a stand-in. */

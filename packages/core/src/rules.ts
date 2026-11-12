@@ -17,7 +17,19 @@ export function legalCards(hand: Hand, ledSuit?: Suit): Hand {
   return hand.filter((card) => card.suit === ledSuit);
 }
 
-const rankValue = (rank: Card["rank"]): number => "23456789TJQKA".indexOf(rank);
+/**
+ * The card the player on turn must play because it is their only legal choice (a singleton in the led suit,
+ * or the last card in hand), or undefined when there is a real choice or no card is due.
+ */
+export function forcedCard(game: Readonly<{
+  phase: string; currentActor: Seat; hands: Readonly<Record<Seat, Hand>>; currentTrick: readonly TrickCard[];
+}>): Card | undefined {
+  if (game.phase !== "play") return undefined;
+  const legal = legalCards(game.hands[game.currentActor], game.currentTrick[0]?.card.suit);
+  return legal.length === 1 ? legal[0] : undefined;
+}
+
+const rankValue =(rank: Card["rank"]): number => "23456789TJQKA".indexOf(rank);
 
 /** Returns the winner for a trick; trump is optional for no-trump contracts. */
 export function trickWinner(plays: readonly TrickCard[], trump?: Suit): Seat {

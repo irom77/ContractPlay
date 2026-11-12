@@ -5,6 +5,7 @@ import {
   createGameState,
   deal,
   emptyRubber,
+  forcedCard,
   nextRubberDeal,
   recordRubberHand,
   redoAction,
@@ -30,6 +31,7 @@ import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, handNameFromId } from "./handNames.js";
 import { compactCallLabel, contractText, isCallAvailable, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
+import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
 import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
 import { serviceUrl } from "./online/connection.js";
 
@@ -74,6 +76,9 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [hintsOn, setHintsOn] = useState(() => {
     try { return persistence.storage.getItem(hintsStorageKey) === "on"; } catch { return false; }
   });
+  const [forcedPlayOn, setForcedPlayOn] = useState(() => forcedPlayEnabled(persistence.storage));
+  // The position a take-back returned to: a forced card there waits for the player instead of replaying at once.
+  const [takenBackTo, setTakenBackTo] = useState<GameState>();
   const [scoring, setScoring] = useState<ScoringFormat>(() => {
     try { return persistence.storage.getItem(scoringStorageKey) === "single" ? "single" : "rubber"; } catch { return "rubber"; }
   });
@@ -238,6 +243,18 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     return () => { cancelled = true; };
   }, [hintGame, biddingStyle, solver]);
 
+  // A card the user must play (the only legal one) is played for them after a short pause.
+  const forced = canShowHand && forcedPlayOn && !temporaryTrick && game !== takenBackTo && game ? forcedCard(game) : undefined;
+  useEffect(() => {
+    if (!forced || !game) return;
+    const turnState = game;
+    const timer = window.setTimeout(() => {
+      const result = applyAction(turnState, { type: "play", seat: turnState.currentActor, card: forced });
+      if (result.ok) setGame((current) => current === turnState ? result.state : current);
+    }, FORCED_PLAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [forced, game]);
+
   useEffect(() => {
     if (shownExplanation === undefined) return;
     const close = (event: Event) => {
@@ -256,6 +273,12 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     setHintsOn(next);
     setExplainedCall(undefined);
     try { persistence.storage.setItem(hintsStorageKey, next ? "on" : "off"); } catch { /* the choice just won't be remembered */ }
+  }
+
+  function toggleForcedPlay() {
+    const next = !forcedPlayOn;
+    setForcedPlayOn(next);
+    try { persistence.storage.setItem(forcedPlayStorageKey, next ? "on" : "off"); } catch { /* the choice just won't be remembered */ }
   }
 
   function chooseScoring(next: ScoringFormat) {
@@ -355,7 +378,9 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   function takeBack() {
     if (!game || game.history.cursor === 0) return;
     setBotsFinishHandId(undefined);
-    setGame(undoAction(game));
+    const previous = undoAction(game);
+    setTakenBackTo(previous);
+    setGame(previous);
     setMessage("");
   }
 
@@ -448,6 +473,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
     {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
+    <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
   const pbnImportForm = <details className="pbn-import">
     <summary>Import a PBN deal</summary>
@@ -559,6 +585,9 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       {hintsOn && phase === "auction" && auctionHandSeat ? <strong className="hand-points" aria-label={`${highCardPoints(shownGame.hands[auctionHandSeat])} high-card points`}>{highCardPoints(shownGame.hands[auctionHandSeat])} HCP</strong> : null}
       {visibleBidHint && phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
       {visibleHint && phase === "play" ? <p role="status">{visibleHint.reason}</p> : null}
+      {phase === "play" ? <button className="secondary-button auto-play-toggle" type="button" aria-pressed={botsFinishing}
+        title={botsFinishing ? "Take back control of your cards" : "Let the bots play your cards until this hand ends"}
+        onClick={() => setBotsFinishHandId(botsFinishing ? undefined : currentHandId)}>{botsFinishing ? "Stop auto play" : "Auto play"}</button> : null}
       <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
     </div> : null}
 

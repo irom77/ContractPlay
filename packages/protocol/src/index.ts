@@ -10,7 +10,9 @@ export type TableStyle = "SAYC" | "2/1";
 export type SeatInfo =
   | { kind: "empty" }
   | { kind: "bot"; skill: SkillLevel }
-  | { kind: "human"; name: string; away: boolean; standIn?: SkillLevel };
+  | { kind: "human"; name: string; away: boolean; standIn?: SkillLevel;
+    /** The player asked a bot to play their cards for the rest of this hand; they get the seat back when it ends. */
+    autoPlay?: true };
 
 export type TableSummary = { id: string; name: string; style: TableStyle; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
 
@@ -33,7 +35,7 @@ export type ClientMessage =
   | { type: "clearSeat"; seat: Seat }
   | { type: "deal" }
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
-  | { type: "handToBot"; seat: Seat } | { type: "resume" }
+  | { type: "handToBot"; seat: Seat } | { type: "resume" } | { type: "autoPlay" }
   | { type: "takeBack" } | { type: "cancelHand" };
 
 export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "already-seated" | "not-allowed" | "hand-in-progress" | "not-ready" | "stale" | "not-your-turn" | "illegal";
@@ -106,7 +108,7 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
       return seat && skill ? { type: "setBot", seat, skill } : undefined;
     }
-    case "leave": case "deal": case "resume": case "takeBack": case "cancelHand": return { type: data.type };
+    case "leave": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": return { type: data.type };
     case "act": {
       const handNumber = count(data.handNumber), revision = count(data.revision), action = parseAction(data.action);
       return handNumber !== undefined && revision !== undefined && action ? { type: "act", handNumber, revision, action } : undefined;

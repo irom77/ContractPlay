@@ -14,6 +14,7 @@ const valid: ClientMessage[] = [
   { type: "act", handNumber: 2, revision: 9, action: { type: "play", seat: "west", card: { suit: "hearts", rank: "T" } } },
   { type: "handToBot", seat: "south" },
   { type: "resume" },
+  { type: "autoPlay" },
   { type: "takeBack" },
   { type: "cancelHand" }
 ];

@@ -677,6 +677,54 @@ describe("OnlineTable connection", () => {
       expect(service.onLeave).toHaveBeenCalled();
     });
 
+    /** The last trick, with North (declaring for a bot dummy) to play a single remaining card. */
+    const forcedForNorth = () => {
+      let game = playCards(oneNoTrump(), 48);
+      while (game.currentActor !== "north" && game.currentActor !== "south") game = playOne(game);
+      return game;
+    };
+
+    it("plays a forced card for the viewer after a short pause", () => {
+      vi.useFakeTimers();
+      const service = setup();
+      const game = forcedForNorth();
+      service.push(live(game, { revision: 20, game: publicGame(game, ["north", "south"]) }));
+      act(() => { vi.advanceTimersByTime(499); });
+      expect(service.sent).toEqual([]);
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 20, action: { type: "play", seat: game.currentActor, card: game.hands[game.currentActor][0] } }]);
+    });
+
+    it("leaves a forced card the viewer just took back to the viewer", () => {
+      vi.useFakeTimers();
+      const service = setup();
+      const game = forcedForNorth();
+      service.push(live(game, { revision: 21, game: publicGame(game, ["north", "south"]) }));
+      fireEvent.click(item("Take back"));
+      expect(service.sent).toEqual([{ type: "takeBack" }]);
+      service.push(live(game, { revision: 22, game: publicGame(game, ["north", "south"]) }));
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(service.sent).toEqual([{ type: "takeBack" }]);
+    });
+
+    it("offers Auto play during card play only, and shows it until the viewer stops it", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      expect(within(menu()).queryByRole("button", { name: "Auto play this hand", hidden: true })).toBeNull();
+      service.push(live(oneNoTrump(), { revision: 4 }));
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(item("Auto play this hand"));
+      expect(service.sent.at(-1)).toEqual({ type: "autoPlay" });
+
+      const autoNorth: SeatInfo = { kind: "human", name: "Bob", away: false, standIn: "intermediate", autoPlay: true };
+      service.push(live(oneNoTrump(), { revision: 5, seats: { ...seatedNorth, north: autoNorth } }));
+      expect(within(menu()).queryByRole("button", { name: "Auto play this hand", hidden: true })).toBeNull();
+      expect(screen.getByText("auto play")).toBeTruthy();
+      await user.click(within(screen.getByRole("group", { name: "Auto play is on" })).getByRole("button", { name: "Stop auto play" }));
+      expect(service.sent.at(-1)).toEqual({ type: "resume" });
+    });
+
     it("does not offer a non-host Cancel this hand", () => {
       const service = setup();
       service.push(live(newGame(), { host: "east", seats: { ...seatedNorth, east: human("Ann") } }));

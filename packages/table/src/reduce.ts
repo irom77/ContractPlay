@@ -1,5 +1,5 @@
 import { act, applyBotEvent, cancelHand, dealHand, takeBack } from "./hand.js";
-import { connect, disconnect, handToBot, resume, tick } from "./presence.js";
+import { autoPlay, connect, disconnect, handToBot, resume, tick } from "./presence.js";
 import { clearSeat, leave, setBot, sit } from "./seats.js";
 import type { Outcome, TableEvent, TableState } from "./state.js";
 
@@ -25,6 +25,7 @@ export function reduce(state: TableState, event: TableEvent, random: () => numbe
     case "act": return act(state, player, message, at);
     case "handToBot": return handToBot(state, player, message.seat, at);
     case "resume": return resume(state, player);
+    case "autoPlay": return autoPlay(state, player);
     case "takeBack": return takeBack(state, player, at);
     case "cancelHand": return cancelHand(state, player, at);
   }

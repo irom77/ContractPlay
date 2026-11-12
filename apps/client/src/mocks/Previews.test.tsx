@@ -54,6 +54,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(menu).getByRole("button", { name: "Cancel this hand" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "Leave the table" })).toBeTruthy();
   },
+  "auto-play": () => {
+    expect(within(screen.getByRole("group", { name: "Auto play is on" })).getByRole("button", { name: "Stop auto play" })).toBeTruthy();
+    expect(screen.getByText("auto play")).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Play / }).filter((card) => !(card as HTMLButtonElement).disabled)).toHaveLength(0);
+  },
   result: () => { expect(screen.getByRole("region", { name: "Hand result" }).textContent).toMatch(/4♠ by North[\s\S]*420/); }
 };
 

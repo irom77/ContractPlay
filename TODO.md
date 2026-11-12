@@ -22,6 +22,7 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 - [x] Deploy the online tables to Cloudflare: live at https://contractplay.niuk.workers.dev; the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set, so pushes to `main` deploy automatically.
 - [x] Add solo-style bidding, card-play, and call-meaning hints to online tables; suggestions use only the viewer's visible cards and public play.
 - [x] Add a UI preview mode at `#/mocks` that steps through realistic lobby, seating, auction, declaring, dummy, defending, and result screens built from real table states, with tests that keep each screen in its state.
+- [x] Play forced cards automatically (the only legal card) in solo and online play, with a setting to turn it off, and add Auto play so a bot plays the user's cards for the rest of the deal.
 - [x] Gather online table controls into a collapsible game menu: Back to lobby, Take back (your last call or card, with any bot play since), Cancel this hand (host), and Leave the table at any time (a bot finishes the hand).
 - [x] Add a development-only `/admin` page to list and remove listed or unlisted online tables; its open access must be replaced with RBAC before public production use.
 - [ ] Repeat the two-window check on the deployed address and confirm the Workers free-plan CPU limit holds for bot decisions (if not, the paid Workers plan is the owner's decision).

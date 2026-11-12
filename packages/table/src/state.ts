@@ -6,7 +6,9 @@ export type PlayerId = string;
 export type SeatState =
   | { kind: "empty" }
   | { kind: "bot"; skill: SkillLevel }
-  | { kind: "human"; player: PlayerId; name: string; since: number; standIn?: SkillLevel };
+  | { kind: "human"; player: PlayerId; name: string; since: number; standIn?: SkillLevel;
+      /** The stand-in was asked for by the player (Auto play) and lasts only until the hand ends. */
+      autoPlay?: true };
 
 export type TableState = Readonly<{
   id: string; name: string; style: TableStyle; listed: boolean;
@@ -86,6 +88,15 @@ export function hostAfter(state: TableState, seats: TableState["seats"]): { host
 
 export const without = <T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> =>
   Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
+
+/** The seats with every Auto play stand-in removed, for when a hand ends: those players get their seats back. */
+export function withoutAutoPlay(seats: TableState["seats"]): TableState["seats"] {
+  if (!SEATS.some((seat) => { const s = seats[seat]; return s.kind === "human" && s.autoPlay; })) return seats;
+  return Object.fromEntries(SEATS.map((seat) => {
+    const s = seats[seat];
+    return [seat, s.kind === "human" && s.autoPlay ? { kind: "human", player: s.player, name: s.name, since: s.since } : s];
+  })) as TableState["seats"];
+}
 
 /** The state with no hand on the table, as before the first deal. */
 export const withoutGame = (state: TableState): TableState =>

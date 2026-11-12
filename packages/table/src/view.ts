@@ -6,7 +6,7 @@ import { betweenHands, seatOf, type PlayerId, type SeatState, type TableState } 
 
 const seatInfo = (state: TableState, s: SeatState): SeatInfo =>
   s.kind === "human"
-    ? { kind: "human", name: s.name, away: state.awaySince[s.player] !== undefined, ...(s.standIn ? { standIn: s.standIn } : {}) }
+    ? { kind: "human", name: s.name, away: state.awaySince[s.player] !== undefined, ...(s.standIn ? { standIn: s.standIn } : {}), ...(s.autoPlay ? { autoPlay: true as const } : {}) }
     : s;
 
 export function summaryOf(state: TableState): TableSummary {

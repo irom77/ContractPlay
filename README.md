@@ -4,14 +4,15 @@
 >
 > | # | Screen | # | Screen |
 > |---|---|---|---|
-> | 1 | Lobby | 6 | Dummy playing for a bot declarer |
-> | 2 | Seating | 7 | Defending, dummy on your left |
-> | 3 | Auction: your call | 8 | Defending, dummy on your right |
-> | 4 | Auction with hints | 9 | Game menu |
-> | 5 | Declaring 4♠ with dummy | 10 | Hand result |
+> | 1 | Lobby | 7 | Defending, dummy on your left |
+> | 2 | Seating | 8 | Defending, dummy on your right |
+> | 3 | Auction: your call | 9 | Game menu |
+> | 4 | Auction with hints | 10 | Auto play |
+> | 5 | Declaring 4♠ with dummy | 11 | Hand result |
+> | 6 | Dummy playing for a bot declarer | | |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/10` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/11` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
 > - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
@@ -36,7 +37,7 @@
 
 ## Status
 
-ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
+ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu, and during card play the **Auto play** button (online: **Auto play this hand** in the game menu) lets a bot play your cards until the deal ends, then gives them back. A card that is your only legal play (a singleton in the led suit, or your last card) is played for you after a short pause; turn this off with "Play forced cards automatically" in the deal settings. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
 Windows and macOS installer builds and an iOS app build/install/launch on an iPad simulator have passed on GitHub Actions. The web app and online tables are deployed together to Cloudflare at https://contractplay.niuk.workers.dev. The old GitHub Pages copy has no online entry and is no longer updated. Signed and physical-device builds remain pending their documented setup steps, and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 

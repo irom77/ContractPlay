@@ -4,7 +4,8 @@ import { botToAct, chooseBotAction } from "./hand.js";
 import { nextWake } from "./presence.js";
 import { reduce } from "./reduce.js";
 import { EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, UNVISITED_TABLE_MS, type TableEvent, type TableState } from "./state.js";
-import { fourHumans, newTable, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
+import { fourHumans, newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
+import { viewFor } from "./view.js";
 
 const random = seededRandom(1);
 const apply = (state: TableState, event: TableEvent) => reduce(state, event, random);
@@ -178,6 +179,38 @@ describe("stand-ins", () => {
     const resumed = sendOk(t, "p0", { type: "resume" });
     expect(resumed.seats.north).not.toHaveProperty("standIn");
     expect(resumed.revision).toBe(t.revision + 1);
+  });
+
+  it("auto play hands the sender's cards to a bot during card play only", () => {
+    const auction = sendOk(connectedFour(), "p0", { type: "deal" }, 1, seededRandom(5));
+    expect(send(auction, "p0", { type: "autoPlay" }).refused).toBe("not-allowed");
+    const t = northDeclares(connectedFour());
+    expect(send(t, "zed", { type: "autoPlay" }).refused).toBe("not-seated");
+    const auto = sendOk(t, "p1", { type: "autoPlay" });
+    expect(auto.seats.east).toMatchObject({ kind: "human", standIn: "intermediate", autoPlay: true });
+    expect(auto.revision).toBe(t.revision + 1);
+    expect(botToAct(auto)).toBe("east");
+    expect(send(auto, "p1", act(auto, { type: "play", seat: "east", card: auto.game!.hands.east[0]! })).refused).toBe("not-your-turn");
+    expect(send(auto, "p1", { type: "autoPlay" }).refused).toBe("not-allowed");
+    expect(viewFor(auto, "p2").seats.east).toMatchObject({ standIn: "intermediate", autoPlay: true });
+  });
+
+  it("gives an auto-played seat back when the hand ends, but keeps it through a reconnect", async () => {
+    let t = sendOk(northDeclares(connectedFour()), "p1", { type: "autoPlay" });
+    t = connect(disconnect(t, "p1", 5), "p1", 6);
+    expect(t.seats.east).toMatchObject({ standIn: "intermediate", autoPlay: true });
+    const done = await playOut(t);
+    expect(done.game!.phase).toBe("complete");
+    expect(done.seats.east).toEqual({ kind: "human", player: "p1", name: "P1", since: 1 });
+    expect(botToAct(done)).toBeUndefined();
+  });
+
+  it("ends auto play when the player takes the seat back or the host cancels the hand", () => {
+    const t = sendOk(northDeclares(connectedFour()), "p1", { type: "autoPlay" });
+    expect(sendOk(t, "p1", { type: "resume" }).seats.east).not.toHaveProperty("standIn");
+    const cancelled = sendOk(t, "p0", { type: "cancelHand" });
+    expect(cancelled.seats.east).not.toHaveProperty("standIn");
+    expect(cancelled.seats.east).not.toHaveProperty("autoPlay");
   });
 
   it("lets any seated human free an away seat between hands, dropping its stand-in", () => {

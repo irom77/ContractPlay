@@ -428,6 +428,66 @@ describe("bridge table", () => {
     expect(loadSoloData(window.localStorage).currentGame!.phase).toBe("complete");
   });
 
+  it("plays a forced card automatically after a short pause", async () => {
+    vi.useFakeTimers();
+    storeCurrentGame(gameAfterPlays(48));
+    render(<App />);
+    const trickCards = () => screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card").length;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(499); });
+    expect(trickCards()).toBe(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(trickCards()).toBe(1);
+    expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(1);
+  });
+
+  it("leaves forced cards to the player when that setting is off", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem("contractplay.forcedPlay", "off");
+    storeCurrentGame(gameAfterPlays(48));
+    render(<App />);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(0);
+    fireEvent.click(screen.getByLabelText("Table menu"));
+    const setting = screen.getByRole("checkbox", { name: "Play forced cards automatically" }) as HTMLInputElement;
+    expect(setting.checked).toBe(false);
+    fireEvent.click(setting);
+    expect(window.localStorage.getItem("contractplay.forcedPlay")).toBe("on");
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(1);
+  });
+
+  it("does not replay a forced card the player took back", async () => {
+    vi.useFakeTimers();
+    storeCurrentGame(gameAfterPlays(48));
+    render(<App />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Take back/ }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
+  });
+
+  it("auto plays the rest of the deal on request and hands the next deal back", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("contractplay.forcedPlay", "off");
+    storeCurrentGame(gameAfterPlays(44));
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Auto play" }));
+    expect(screen.getByRole("button", { name: "Stop auto play" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+    expect(document.querySelector(".status-pill")!.textContent).toContain("Bot ·");
+
+    await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 4000 });
+    await user.click(screen.getByRole("button", { name: "Next deal" }));
+    expect(screen.getByRole("group", { name: "Contract bids by level and strain" })).toBeTruthy();
+    expect(document.querySelector(".status-pill")!.textContent).not.toContain("Bot ·");
+  });
+
   it("has bots bid for every seat after a handover and returns control on request", async () => {
     const user = userEvent.setup();
     render(<App />);

@@ -2,7 +2,7 @@ import { applyAction, createDeck, createGameState, deal as dealCards, playContex
 import type { GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
-  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf, withoutGame,
+  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf, withoutAutoPlay, withoutGame,
   type Outcome, type PlayerId, type TableState
 } from "./state.js";
 
@@ -68,7 +68,9 @@ function record(state: TableState, action: GameAction, at: number, byHuman: bool
     const { score } = game.score;
     totals = score >= 0 ? { ...totals, ns: totals.ns + score } : { ...totals, ew: totals.ew - score };
   }
-  return accept(state, { game, totals, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
+  // Auto play lasts for one hand: when the last card is played, those players get their seats back.
+  const seats = game.phase === "complete" ? withoutAutoPlay(state.seats) : state.seats;
+  return accept(state, { game, totals, seats, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
 }
 
 export function act(state: TableState, player: PlayerId, message: { handNumber: number; revision: number; action: GameAction }, at: number): Outcome {
@@ -102,7 +104,7 @@ export function takeBack(state: TableState, player: PlayerId, at: number): Outco
 export function cancelHand(state: TableState, player: PlayerId, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (state.host !== player || betweenHands(state)) return refuse(state, "not-allowed");
-  return accept(withoutGame(state), { turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+  return accept(withoutGame(state), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
 export function applyBotEvent(state: TableState, revision: number, action: GameAction, at: number): Outcome {
