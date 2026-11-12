@@ -17,6 +17,7 @@
     "@contractplay/pbn": "workspace:*",
     "@contractplay/persistence": "workspace:*",
     "@contractplay/protocol": "workspace:*",
+    "@contractplay/table": "workspace:*",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.4",
     "@tauri-apps/plugin-fs": "^2.7.1",
@@ -24,7 +25,6 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@contractplay/table": "workspace:*",
     "@tauri-apps/cli": "^2.12.4",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.6.1",

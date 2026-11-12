@@ -7,6 +7,7 @@ import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSoloData, saveSoloData, type SavedHand, type SoloData } from "@contractplay/persistence";
 import App from "./App.js";
+import { suitSymbols } from "./table/labels.js";
 
 function completedGame() {
   let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
@@ -232,16 +233,16 @@ describe("bridge table", () => {
     delete (document as { fullscreenElement?: unknown }).fullscreenElement;
   });
 
-  it("always shows the last trick beside the table with its winner marked", () => {
+  it("keeps the last trick to a small badge showing the card that won it", () => {
     const game = gameAfterPlays(5);
     storeCurrentGame(game);
-    const { container } = render(<App />);
+    render(<App />);
     const winner = trickWinner(game.completedTricks[0]!, game.contract?.strain === "notrump" ? undefined : game.contract?.strain);
+    const { card } = game.completedTricks[0]!.find(({ seat }) => seat === winner)!;
     const lastTrick = screen.getByRole("button", { name: "Last trick" });
 
-    expect(lastTrick.querySelectorAll(".last-trick-card")).toHaveLength(4);
-    expect(lastTrick.querySelectorAll(".last-trick-winner")).toHaveLength(1);
-    expect(container.querySelector(`.seat-${winner}`)).toBeTruthy();
+    expect(lastTrick.querySelectorAll(".table-card")).toHaveLength(0);
+    expect(lastTrick.querySelector(".last-trick-chip")!.textContent).toBe(`${card.rank === "T" ? "10" : card.rank}${suitSymbols[card.suit]}`);
   });
 
   it("disables redo while the completed trick pause is active", () => {
@@ -804,7 +805,7 @@ describe("bridge table", () => {
     await waitFor(() => {
       // Dummy is played from across the table when partner declares, or from the user's own hand when the user is dummy.
       dummyHand = screen.queryByRole("region", { name: /'s dummy hand$/ })?.querySelector("button")?.closest("section")
-        ?? ["North", "South"].map((seat) => screen.queryByRole("region", { name: `${seat}'s hand` })).find((handPanel) => handPanel?.textContent?.includes("DUMMY"));
+        ?? ["North", "South"].map((seat) => screen.queryByRole("region", { name: `${seat}'s hand` })).find((handPanel) => handPanel?.querySelector(".dummy-compass"));
       expect(dummyHand).toBeTruthy();
     });
     const symbol = screen.getByRole("region", { name: "Current trick" }).textContent?.match(/[♠♥♦♣]/)?.[0];

@@ -1,3 +1,21 @@
+> ## 🔍 UI previews: every major screen without playing a hand
+>
+> Open **[`#/mocks`](https://contractplay.niuk.workers.dev/#/mocks)** on the live site, or `http://localhost:5173/#/mocks` after `pnpm web:dev` (`http://localhost:8787/#/mocks` after `pnpm server:dev`). One screen fills the window at a time, so you see the layout exactly as players do.
+>
+> | # | Screen | # | Screen |
+> |---|---|---|---|
+> | 1 | Lobby | 6 | Dummy playing for a bot declarer |
+> | 2 | Seating | 7 | Defending, dummy on your left |
+> | 3 | Auction: your call | 8 | Defending, dummy on your right |
+> | 4 | Auction with hints | 9 | Hand result |
+> | 5 | Declaring 4♠ with dummy | | |
+>
+> - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
+> - **Inspect without the bar:** × hides it; the small `N/9` button brings it back. **Exit** returns to the app.
+> - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
+> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
+
 <p align="center">
   <img src="docs/contractplay-logo.svg" alt="ContractPlay — play, learn, and review contract bridge" width="520" />
 </p>

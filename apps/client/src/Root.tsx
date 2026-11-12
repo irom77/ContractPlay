@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import App from "./App.js";
 import { serviceUrl } from "./online/connection.js";
 import { Lobby } from "./online/Lobby.js";
 import { OnlineTable } from "./online/OnlineTable.js";
 import { parseRoute, routeHash, type Route } from "./online/route.js";
 import { Admin } from "./admin/Admin.js";
+
+// The UI preview mode is loaded only when someone opens #/mocks.
+const Previews = lazy(() => import("./mocks/Previews.js").then((module) => ({ default: module.Previews })));
 
 export default function Root() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
@@ -23,6 +26,9 @@ export default function Root() {
     setRoute(next);
   };
 
+  if (route.screen === "mocks") {
+    return <Suspense fallback={<main className="app-shell" />}><Previews index={route.index} onIndex={(index) => navigate({ screen: "mocks", index })} /></Suspense>;
+  }
   const baseUrl = serviceUrl();
   if (location.pathname === "/admin") {
     if (baseUrl !== undefined) return <Admin baseUrl={baseUrl} />;

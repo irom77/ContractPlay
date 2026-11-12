@@ -21,6 +21,14 @@ describe("online routes", () => {
     expect(parseRoute("#/table/ab-c")).toEqual({ screen: "solo" });
   });
 
+  it("parses the UI preview route, numbered from 1", () => {
+    expect(parseRoute("#/mocks")).toEqual({ screen: "mocks", index: 0 });
+    expect(parseRoute("#/mocks/3")).toEqual({ screen: "mocks", index: 2 });
+    expect(parseRoute("#/mocks/0")).toEqual({ screen: "mocks", index: 0 });
+    expect(parseRoute("#/mocks/x")).toEqual({ screen: "solo" });
+    expect(routeHash({ screen: "mocks", index: 2 })).toBe("#/mocks/3");
+  });
+
   it("round-trips through routeHash", () => {
     expect(routeHash({ screen: "solo" })).toBe("");
     expect(routeHash({ screen: "lobby" })).toBe("#/online");

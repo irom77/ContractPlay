@@ -38,6 +38,9 @@ importers:
       '@contractplay/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
+      '@contractplay/table':
+        specifier: workspace:*
+        version: link:../../packages/table
       '@tauri-apps/api':
         specifier: ^2.12.4
         version: 2.12.4
@@ -54,9 +57,6 @@ importers:
         specifier: ^19.0.0
         version: 19.3.1(react@19.3.1)
     devDependencies:
-      '@contractplay/table':
-        specifier: workspace:*
-        version: link:../../packages/table
       '@tauri-apps/cli':
         specifier: ^2.12.4
         version: 2.12.4

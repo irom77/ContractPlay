@@ -114,8 +114,9 @@ export function TableView({
 
         <div className="table-tools">
           <div className="table-tools-row">{tools}</div>
-          {lastTrick ? <button className="last-trick-button" type="button" disabled={game.currentTrick.length > 0} aria-pressed={lastTrickOpen} aria-label={lastTrickOpen ? "Hide last trick" : "Last trick"} title={game.currentTrick.length > 0 ? "Last trick" : lastTrickOpen ? "Hide last trick" : "Show last trick on the table"} onClick={onToggleLastTrick}>
-            {lastTrick.map(({ seat, card }) => <span className={`table-card last-trick-card trick-pos-${positionOf(seat)} ${seat === lastTrickWinner ? "last-trick-winner" : ""} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={seat} aria-hidden="true">{cardFace(card)}</span>)}
+          {lastTrick && lastTrickWinner ? <button className="last-trick-button" type="button" disabled={game.currentTrick.length > 0} aria-pressed={lastTrickOpen} aria-label={lastTrickOpen ? "Hide last trick" : "Last trick"} title={game.currentTrick.length > 0 ? "The last trick can be shown once this trick is complete" : lastTrickOpen ? "Hide last trick" : "Show the last trick on the table"} onClick={onToggleLastTrick}>
+            <span className="last-trick-label" aria-hidden="true">Last trick</span>
+            {lastTrick.filter(({ seat }) => seat === lastTrickWinner).map(({ seat, card }) => <span className={`last-trick-chip ${isRedSuit(card.suit) ? "red-card" : ""}`} key={seat} aria-hidden="true">{card.rank === "T" ? "10" : card.rank}{suitSymbols[card.suit]}</span>)}
           </button> : null}
         </div>
 
@@ -131,16 +132,20 @@ export function TableView({
             ? sortHand(game.hands[seat])
             : dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : [];
           const seatHasCards = seatCards.length > 0;
+          // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
+          const isDummy = dummyVisible && seat === dummySeat;
           const seatCanPlay = fixedPlayHands ? canAct && shownActor === seat : playFromDummy && seat === dummySeat;
           return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards ? "has-dummy" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
-            <span className="seat-compass" role="img" aria-label={`${seatNames[seat]}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}`} title={`${seatNames[seat]}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
+            {/* The head row: one line beside a hand spread along the top or bottom, invisible (display: contents) elsewhere. */}
+            <div className="seat-head">
+            <span className={`seat-compass ${isDummy ? "dummy-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}`} title={`${seatNames[seat]}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
             {seatLabel?.(seat)}
             {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
               ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
               : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null}
+            </div>
             {explainedHere && explainCall ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainCall.text(explainedHere.index)}</p> : null}
             {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat ? "dummy " : ""}hand`}>
-              {fixedPlayHands && seat === dummySeat ? <span className="fixed-dummy-tag">DUMMY</span> : null}
               {SUITS.map((suit) => {
                 const suitCards = seatCards.filter((card) => card.suit === suit);
                 return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => seatCanPlay
@@ -176,7 +181,7 @@ export function TableView({
       {fixedPlayHands ? null : <div className="hand-zone">
         {handSeat && handCards.length ? <section className="hand-panel" aria-label={`${seatNames[handSeat]}'s ${handIsInteractive ? "hand" : "cards"}`}>
           <div className="cards-row">
-            {handSeat !== bottomSeat || handIsDummy ? <span className="hand-tag"><span className="seat-compass" aria-hidden="true">{handSeat[0]!.toUpperCase()}</span>{handIsDummy ? <span>DUMMY</span> : <span className="sr-only">{seatNames[handSeat]}</span>}</span> : null}
+            {handSeat !== bottomSeat || handIsDummy ? <span className="hand-tag" title={`${seatNames[handSeat]}${handIsDummy ? " · dummy" : ""}`}><span className={`seat-compass ${handIsDummy ? "dummy-compass" : ""}`} aria-hidden="true">{handSeat[0]!.toUpperCase()}</span><span className="sr-only">{seatNames[handSeat]}{handIsDummy ? ", dummy" : ""}</span></span> : null}
             {handCards.map((card, index) => {
               const className = `playing-card ${isRedSuit(card.suit) ? "red-card" : ""} ${index > 0 && handCards[index - 1]!.suit !== card.suit ? "suit-gap" : ""}`;
               return handIsInteractive && phase === "play"

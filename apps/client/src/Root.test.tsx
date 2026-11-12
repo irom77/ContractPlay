@@ -55,6 +55,18 @@ describe("Root", () => {
     expect(location.hash).toBe("#/online");
   });
 
+  it.each([["https://x.test"], [undefined]])("opens the UI previews at #/mocks/N with service URL %s, steps the hash, and leaves storage alone", async (url) => {
+    service.url = url;
+    location.hash = "#/mocks/2";
+    render(<Root />);
+    const bar = await screen.findByRole("navigation", { name: "UI previews" });
+    expect(bar.textContent).toContain("2 / ");
+    await userEvent.setup().click(screen.getByRole("button", { name: "Next screen" }));
+    expect(location.hash).toBe("#/mocks/3");
+    expect((await screen.findByRole("navigation", { name: "UI previews" })).textContent).toContain("3 / ");
+    expect(window.localStorage.length).toBe(0);
+  });
+
   it.each(["", "#/online", "#/table/ABC234"])("renders solo for %j with no service URL", (hash) => {
     service.url = undefined;
     location.hash = hash;

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added a UI preview mode at `#/mocks`: nine full-window screens (lobby, seating, the auction with and without hints, declaring with dummy, dummy playing for a bot declarer, defending with dummy on either side, and the hand result) to step through with Previous/Next or the arrow keys, without playing a hand. The screens use the real rules engine, server view, and table components, so they follow layout changes; how to use them is at the top of the README.
+- In online play, your hand now sits on the bottom edge of the window, so it no longer runs into the cards played to the trick. Your seat letter and name sit on one row above its left end. A hand along the top has its name row underneath. Hands along the top or bottom stay clear of the score, Back to lobby, and Hints corners.
+- Dummy is now shown by its seat badge instead of a separate DUMMY text tag: the badge turns from a circle into a rounded square inside a gold ring, in online and solo play. Screen readers announce the seat as dummy.
+- The last trick is now a small "Last trick" badge showing the card that won it, instead of a permanent thumbnail of all four cards. Clicking it lays the trick out on the table; clicking again hides it.
+- During an online auction, the bidding box and your hand are a size smaller, so the box no longer covers the seats above and below it.
 - Clarified the online table creation limit in the lobby and documentation: 10 tables per public IP in a rolling hour, shared across users behind that IP, and deleting tables does not reset it.
 - Removed automatic GitHub Pages deployments; Cloudflare is the only maintained web deployment.
 - In online play, Dummy's hand is face-up at its seat for everyone after the opening lead, marked clearly as DUMMY; when the human controls a bot partner's contract, the card belonging to the seat whose turn it is remains playable in either hand.

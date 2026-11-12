@@ -338,13 +338,30 @@ describe("OnlineTable play", () => {
     expect(document.querySelector(".table-surface")!.classList.contains("hand-on-top")).toBe(false);
   });
 
+  it("marks dummy by its seat badge shape, with no DUMMY text, and keeps names in one head row beside a hand along the edge", () => {
+    const service = setup();
+    const game = playCards(oneNoTrump(), 1);
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats: { north: bot, east: bot, south: human("Bob"), west: bot }, game: publicGame(game, ["north", "south"]) }));
+    for (const position of ["top", "bottom"]) {
+      const head = document.querySelector(`.pos-${position}.has-fixed-hand > .seat-head`)!;
+      expect(head.querySelector(".seat-compass")).toBeTruthy();
+      expect(head.querySelector(".online-seat-label")).toBeTruthy();
+    }
+    expect(screen.queryByText("DUMMY")).toBeNull();
+    expect(screen.getByRole("img", { name: "South, dummy" }).classList.contains("dummy-compass")).toBe(true);
+    expect(document.querySelectorAll(".dummy-compass")).toHaveLength(1);
+
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "east", seats: { north: bot, east: human("Bob"), south: bot, west: bot }, game: publicGame(game, ["east", "south"]) }));
+    expect(document.querySelector(".pos-left .seat-compass")!.classList.contains("dummy-compass")).toBe(true);
+  });
+
   it("lets a human dummy play both hands when the bot partner declares", async () => {
     const user = userEvent.setup();
     const service = setup();
     const seats = { north: bot, east: bot, south: human("Bob"), west: bot };
     const dummyTurn = playCards(oneNoTrump(), 1);
     service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats, game: publicGame(dummyTurn, ["north", "south"]) }));
-    expect(screen.getByText("DUMMY")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "South, dummy" })).toBeTruthy();
     // Every hand sits at its seat on the felt, so no empty bottom strip shrinks the table.
     expect(document.querySelector(".hand-zone")).toBeNull();
     expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll('[role="img"]')).toHaveLength(1);
@@ -354,7 +371,7 @@ describe("OnlineTable play", () => {
 
     const declarerTurn = playCards(oneNoTrump(), 3);
     service.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "south", seats, game: publicGame(declarerTurn, ["north", "south"]) }));
-    expect(screen.getByText("DUMMY")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "South, dummy" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll('[role="img"]')).toHaveLength(3);
     const declarerHand = within(screen.getByRole("region", { name: "North's hand" }));
     const declarerCard = declarerHand.getAllByRole("button", { name: /^Play / })[0]!;
