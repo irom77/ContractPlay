@@ -1,5 +1,6 @@
 import { createGameState, legalCards, RANKS, SEATS, SUITS, type Bid, type Card, type Deal, type GameAction, type GameState, type Rank, type Seat } from "@contractplay/core";
 import type { TableSummary, TableView } from "@contractplay/protocol";
+import type { QueuedCard } from "../table/queuedCard.js";
 import { botToAct, createTable, reduce, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
 
 /*
@@ -120,7 +121,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean };
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; initialQueued?: QueuedCard };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
 
@@ -174,6 +175,15 @@ export const previewScreens: readonly PreviewScreen[] = [
     build: () => playUntilView({ west: "Alex" }, "west", moment(["west"], 2))
   },
   {
+    id: "queued", title: "Card queued", detail: "You are West and East is to play; you clicked a card to queue it, and it plays when your turn comes.",
+    build: () => {
+      const people: People = { west: "Alex" };
+      const data = playUntilView(people, "west", moment(["east"], 2));
+      const held = viewHeld(data);
+      return { ...data, initialQueued: { handKey: "1", seat: "west", card: lowest(held) } } as PreviewData;
+    }
+  },
+  {
     id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, take back your last card, cancel the hand, or leave.",
     build: () => ({ ...playUntilView({ east: "Alex" }, "east", moment(["east"], 2)), menuOpen: true })
   },
@@ -186,6 +196,14 @@ export const previewScreens: readonly PreviewScreen[] = [
     }
   },
   {
+    id: "claim-answer", title: "Claim waiting on you", detail: "North, the declarer, claims all the remaining tricks; as an opponent you accept or reject, and the claimer's hand is face-up.",
+    build: () => {
+      const people: People = { north: "Maria", east: "Alex", west: "Priya" };
+      const playing = playUntil(bid(dealt(table("Friday club", people, ["south"])), 8), moment(["south"], 2));
+      return view(run(playing, { type: "message", player: player("north"), message: { type: "claim", tricks: 13 - playing.game!.completedTricks.length }, at: AT }), "east", people);
+    }
+  },
+  {
     id: "result", title: "Hand result", detail: "All 52 cards played: the contract, the score, and every hand revealed.",
     build: () => playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete")
   }
@@ -195,4 +213,10 @@ function playUntilView(people: People, seat: Seat, stop: (game: GameState) => bo
   const humans = Object.keys(people) as Seat[];
   const state = playUntil(bid(dealt(table("Friday club", people, SEATS.filter((s) => !humans.includes(s)))), 8), stop);
   return view(state, seat, people);
+}
+
+/** West's own cards as the viewer sees them. */
+function viewHeld(data: PreviewData): Card[] {
+  if (data.kind !== "table" || !data.view.game) throw new Error("Expected a table preview with a game.");
+  return [...data.view.game.hands.west];
 }

@@ -6,8 +6,10 @@ import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractpl
 import { createHandName, handNameFromId } from "../handNames.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
+import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { TableView } from "../table/TableView.js";
-import { compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
+import { ClaimPanel } from "../table/ClaimPanel.js";
+import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
@@ -25,6 +27,8 @@ export type OnlineTableProps = {
   baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect;
   /** Opens the game menu on arrival (the UI previews show it this way). */
   menuOpen?: boolean;
+  /** Starts with this card queued (the UI previews show a queued card this way). */
+  initialQueued?: QueuedCard;
 };
 
 function refusalText(reason: RefusalReason): string | undefined {
@@ -35,6 +39,10 @@ function refusalText(reason: RefusalReason): string | undefined {
 }
 
 const isLive = (game: PublicGame | undefined): boolean => game?.phase === "auction" || game?.phase === "play";
+
+/** Calls and cards so far in the hand; it goes down only when someone takes an action back. */
+const actionCount = (game: PublicGame | undefined): number =>
+  game ? game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length : 0;
 
 /** The seat that decides a card for `seat`, including a human dummy taking over for a bot declarer. */
 function cardDecider(game: PublicGame, seats: TableViewData["seats"], seat: Seat): Seat {
@@ -51,6 +59,20 @@ function cardDecider(game: PublicGame, seats: TableViewData["seats"], seat: Seat
 /** The seat that decides the current turn. */
 function deciderOf(game: PublicGame, seats: TableViewData["seats"]): Seat {
   return game.phase === "play" ? cardDecider(game, seats, game.currentActor) : game.currentActor;
+}
+
+/**
+ * Seats whose queued card the viewer keeps during play: every seat whose cards the viewer decides (their own, dummy's
+ * as declarer, or both declaring hands as a human dummy for a bot declarer). None while a bot plays for the viewer or
+ * a claim is pending.
+ */
+function queueOwnerSeats(view: TableViewData): Seat[] {
+  const game = view.game;
+  const yourSeat = view.yourSeat;
+  if (!game || !yourSeat || game.phase !== "play" || view.claim) return [];
+  const mine = view.seats[yourSeat];
+  if (mine.kind === "human" && mine.standIn !== undefined) return [];
+  return seatOrder.filter((seat) => cardDecider(game, view.seats, seat) === yourSeat);
 }
 
 /**
@@ -129,7 +151,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={identity} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false }: OnlineTableProps & { identity: Identity }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -154,6 +176,14 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   // A take-back is on its way; the view it brings is remembered so a forced card there waits for the player.
   const takeBackSent = useRef(false);
   const [takenBackTo, setTakenBackTo] = useState<number>();
+  // A card picked before the viewer's turn, sent for them when it comes.
+  const [queued, setQueued] = useState<QueuedCard | undefined>(initialQueued);
+  // The hand and action count of the last view: a lower count in the same hand is a take-back, by anyone.
+  const lastActions = useRef<{ handNumber: number; count: number } | undefined>(undefined);
+  // The revision the claim picker was opened at; it closes when the table moves on.
+  const [claimPickedAt, setClaimPickedAt] = useState<number>();
+  const queueOwners = view ? queueOwnerSeats(view) : [];
+  const activeQueued = queued && view?.game && queueOwners.includes(queued.seat) && queueStillValid(view.game, queued, String(view.handNumber), !!view.claim) ? queued : undefined;
 
   useEffect(() => {
     const current = connect({
@@ -161,6 +191,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       onView: (next) => {
         setReceived((previous) => receive(previous, next));
         setWaiting(false);
+        // A take-back by anyone clears the queue: the card was picked for a position that no longer exists.
+        const count = actionCount(next.game);
+        if (lastActions.current?.handNumber === next.handNumber && count < lastActions.current.count) setQueued(undefined);
+        lastActions.current = { handNumber: next.handNumber, count };
         if (takeBackSent.current) { takeBackSent.current = false; setTakenBackTo(next.revision); }
       },
       onRefused: (reason) => {
@@ -170,7 +204,11 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
         const text = refusalText(reason);
         setNotice(text === undefined ? undefined : { text });
       },
-      onStatus: setStatus
+      onStatus: (next) => {
+        setStatus(next);
+        // Dropped on any break in the connection: the table may have moved on while this client was away.
+        if (next !== "open") setQueued(undefined);
+      }
     });
     connection.current = current;
     return () => { current.close(); if (connection.current === current) connection.current = undefined; };
@@ -250,8 +288,9 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const holdingNow = hold !== undefined && hold.handNumber === view?.handNumber;
   useEffect(() => {
     const game = view?.game;
-    if (!forcedPlayOn || !game || !view.yourSeat || game.phase !== "play" || waiting || status !== "open" || holdingNow) return;
-    if (view.revision === takenBackTo) return;
+    if (!forcedPlayOn || !game || !view.yourSeat || game.phase !== "play" || view.claim || waiting || status !== "open" || holdingNow) return;
+    // Not while the claim picker is open: the player is deciding whether to play on at all.
+    if (view.revision === takenBackTo || view.revision === claimPickedAt) return;
     const mine = view.seats[view.yourSeat];
     if ((mine.kind === "human" && mine.standIn !== undefined) || deciderOf(game, view.seats) !== view.yourSeat) return;
     const card = forcedCard(game);
@@ -262,7 +301,29 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       connection.current?.send({ type: "act", handNumber: view.handNumber, revision: view.revision, action: { type: "play", seat: game.currentActor, card } });
     }, FORCED_PLAY_MS);
     return () => clearTimeout(timer);
-  }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo]);
+  }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo, claimPickedAt]);
+
+  useEffect(() => {
+    if (view && queued && !activeQueued) setQueued(undefined);
+  }, [view, queued, activeQueued]);
+
+  // The queued card is sent like a forced one, after the same pause. A forced card is that same card, so when the
+  // forced-card effect sends this turn's card, this one stays out of it.
+  useEffect(() => {
+    const game = view?.game;
+    if (!activeQueued || !game || !view.yourSeat || game.phase !== "play" || waiting || status !== "open" || holdingNow) return;
+    const mine = view.seats[view.yourSeat];
+    if ((mine.kind === "human" && mine.standIn !== undefined) || deciderOf(game, view.seats) !== view.yourSeat) return;
+    if (view.revision === claimPickedAt || (forcedPlayOn && view.revision !== takenBackTo && forcedCard(game))) return;
+    const card = queuedPlay(game, activeQueued, game.currentActor);
+    if (!card) return;
+    const timer = setTimeout(() => {
+      setWaiting(true);
+      setNotice(undefined);
+      connection.current?.send({ type: "act", handNumber: view.handNumber, revision: view.revision, action: { type: "play", seat: game.currentActor, card } });
+    }, FORCED_PLAY_MS);
+    return () => clearTimeout(timer);
+  }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo, activeQueued, claimPickedAt]);
 
   useEffect(() => {
     setExplainedCall((shown) => shown && (shown.handNumber !== view?.handNumber || shown.auctionLength !== view?.game?.auction.length) ? undefined : shown);
@@ -334,12 +395,37 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       return info.away || (view.host === yourSeat && decider === seat && idleTurn === turn?.key);
     };
     const isHost = view.host === yourSeat;
+    const pendingClaim = view.claim;
+    const remaining = 13 - game.completedTricks.length;
+    // The service allows one claim per side per trick, and clears `claimRejected` with the next card.
+    const ownSideRejected = !!view.claimRejected && samePartnership(view.claimRejected.seat, yourSeat);
+    const canClaim = actingSeat !== undefined && game.phase === "play" && !pendingClaim && !ownSideRejected;
+    const pickingClaim = canClaim && claimPickedAt === view.revision;
+    // The claimer is whoever decides for the claiming side's seat; the opponents asked to answer are in `waitingOn`.
+    const isClaimer = !!pendingClaim && cardDecider(game, view.seats, pendingClaim.seat) === yourSeat;
+    const answeringClaim = !!pendingClaim && !standIn && pendingClaim.waitingOn.includes(yourSeat);
+    const sendClaimMessage = (message: Outgoing) => {
+      if (inputDisabled) return;
+      setWaiting(true);
+      send(message);
+    };
+    const claimPanel = answeringClaim ? <ClaimPanel mode="answer" text={pendingClaimText(pendingClaim, remaining, false)}
+      onAccept={() => sendClaimMessage({ type: "answerClaim", accept: true, claimId: pendingClaim.madeAt })}
+      onReject={() => sendClaimMessage({ type: "answerClaim", accept: false, claimId: pendingClaim.madeAt })} />
+      : pendingClaim ? <ClaimPanel mode="pending"
+        text={`${pendingClaimText(pendingClaim, remaining, isClaimer)}. Waiting for ${pendingClaim.waitingOn.map((seat) => seatNames[seat]).join(", ")}`}
+        {...(isClaimer ? { onWithdraw: () => sendClaimMessage({ type: "withdrawClaim" }) } : {})} />
+      : pickingClaim ? <ClaimPanel key={view.revision} mode="pick" remaining={remaining} onCancel={() => setClaimPickedAt(undefined)}
+        onClaim={(tricks) => { setClaimPickedAt(undefined); sendClaimMessage({ type: "claim", tricks }); }} />
+      : null;
     const menuItems: GameMenuItem[] = [
       { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: "Keep your seat and return to the lobby" },
+      ...(canClaim && !pickingClaim ? [{ id: "claim", label: "Claim", disabled: inputDisabled,
+        title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(view.revision) }] : []),
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",
-        onSelect: () => { if (!inputDisabled) { setWaiting(true); takeBackSent.current = true; send({ type: "takeBack" }); } }
+        onSelect: () => { if (!inputDisabled) { setWaiting(true); setQueued(undefined); takeBackSent.current = true; send({ type: "takeBack" }); } }
       },
       ...(game.phase === "play" && !standIn ? [{ id: "auto-play", label: "Auto play this hand", disabled: status !== "open",
         title: "A bot plays your cards until this hand ends, then you play again", onSelect: () => send({ type: "autoPlay" }) }] : []),
@@ -354,6 +440,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       : game.currentTrick.length ? game.currentTrick : lastTrickOpen ? game.completedTricks.at(-1) ?? [] : [];
     const statusText = !live ? (game.phase === "complete" ? "Hand complete" : "Passed out")
       : actingSeat ? (game.phase === "auction" ? "Your call" : actingSeat === yourSeat ? "Your play" : game.currentActor === game.contract?.declarer ? "Play declarer's hand" : "Play from dummy")
+        : activeQueued ? `Queued: ${cardLabel(activeQueued.card)}`
         : `${seatNames[game.currentActor]} to ${game.phase === "auction" ? "bid" : "play"}`;
 
     return (
@@ -370,8 +457,12 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
             showBottomHand
             fixedSeatHands
-            cardsDisabled={inputDisabled}
+            cardsDisabled={inputDisabled || !!pendingClaim || pickingClaim}
+            exposedSeat={pendingClaim?.seat}
             bidsDisabled={inputDisabled}
+            queueSeats={actingSeat ? [] : queueOwners}
+            queuedCard={activeQueued}
+            onQueue={(seat, card) => setQueued((current) => current?.seat === seat && cardId(current.card) === cardId(card) ? undefined : { handKey: String(view.handNumber), seat, card })}
             statusText={statusText}
             ariaLabel={`Bridge table ${view.name}`}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat}
@@ -393,7 +484,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             matchScore={view.totals}
             tools={<GameMenu items={menuItems} defaultOpen={menuOpen} />}
             overlay={<>
-              {live ? <div className="hint-controls">
+              {claimPanel}
+              {live && !claimPanel ? <div className="hint-controls">
                 {hintsOn && actingSeat && game.phase === "auction" ? <strong className="hand-points" aria-label={`${highCardPoints(game.hands[game.currentActor])} high-card points`}>{highCardPoints(game.hands[game.currentActor])} HCP</strong> : null}
                 {visibleBidHint && game.phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
                 {visiblePlayHint && game.phase === "play" ? <p role="status">{visiblePlayHint.reason}</p> : null}
@@ -406,6 +498,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 <span>A bot is playing for you.</span>
                 <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>Take my seat back</button>
               </div> : null}
+              {view.claimRejected ? <p className="claim-notice" role="status">{claimRejectedText(view.claimRejected)}</p> : null}
               {statusLine}
             </>}
           />

@@ -2,7 +2,7 @@
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { applyAction, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
+import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
 import { loadSoloData, type StorageLike } from "@contractplay/persistence";
 import type { ClientMessage, PublicGame, RefusalReason, SeatInfo, TableView } from "@contractplay/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,7 +58,7 @@ function publicGame(game: GameState, visible: readonly Seat[]): PublicGame {
   return {
     phase: game.phase, dealer: game.dealer, vulnerability: game.vulnerability, currentActor: game.currentActor, auction: game.auction,
     ...(game.contract ? { contract: game.contract } : {}), hands, currentTrick: game.currentTrick, completedTricks: game.completedTricks,
-    ...(game.score ? { score: game.score } : {}), trickLeader: game.trickLeader
+    ...(game.score ? { score: game.score } : {}), ...(game.claim ? { claim: game.claim } : {}), trickLeader: game.trickLeader
   };
 }
 
@@ -525,6 +525,120 @@ describe("OnlineTable play", () => {
     expect(service.sent).toEqual([{ type: "resume" }]);
   });
 
+  describe("claims", () => {
+    const menuItem = (name: string) => within(screen.getByRole("group", { name: "Game menu", hidden: true })).queryByRole("button", { name, hidden: true }) as HTMLButtonElement | null;
+    const humanDefenders = { north: human("Bob"), east: human("Ann"), south: bot, west: human("Cy") };
+
+    it("offers Claim on the viewer's turn and sends a claim for all remaining tricks", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(inHand(oneNoTrump(), ["north"]));
+      expect(menuItem("Claim")).toBeNull();
+
+      const game = playCards(oneNoTrump(), 1);
+      service.push(inHand(game, ["north", "south"], { revision: 13 }));
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(menuItem("Claim")!);
+      await user.click(screen.getByRole("button", { name: "Claim all 13" }));
+      expect(service.sent).toEqual([{ type: "claim", tricks: 13 }]);
+      expect(screen.queryByRole("button", { name: "Claim all 13" })).toBeNull();
+    });
+
+    it("sends a smaller claim chosen with the stepper", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(inHand(playCards(oneNoTrump(), 1), ["north", "south"], { revision: 13 }));
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(menuItem("Claim")!);
+      await user.click(screen.getByRole("button", { name: "Fewer tricks" }));
+      await user.click(screen.getByRole("button", { name: "Claim" }));
+      expect(service.sent).toEqual([{ type: "claim", tricks: 12 }]);
+    });
+
+    it("shows the claimer Waiting for the opponents with Withdraw, and no Claim or playable cards meanwhile", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      const game = playCards(oneNoTrump(), 1);
+      service.push(inHand(game, ["north", "south"], { revision: 14, seats: humanDefenders, claim: { seat: "north", tricks: 13, waitingOn: ["east", "west"], madeAt: 14 } }));
+      expect(screen.getByText(/Waiting for East, West/)).toBeTruthy();
+      expect(menuItem("Claim")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+      const cards = screen.getAllByRole("button", { name: /^Play / }) as HTMLButtonElement[];
+      expect(cards.every((button) => button.disabled)).toBe(true);
+      await user.click(screen.getByRole("button", { name: "Withdraw" }));
+      expect(service.sent).toEqual([{ type: "withdrawClaim" }]);
+    });
+
+    it("asks a responder to accept or reject, naming the claim, and shows the claimer's cards face-up", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      // East (a defender) claims on the opening lead, before dummy is down, so only the claim shows East's cards.
+      const game = oneNoTrump();
+      const view = inHand(game, ["north", "east"], { revision: 9, seats: humanDefenders, claim: { seat: "east", tricks: 2, waitingOn: ["north"], madeAt: 9 } });
+      service.push(view);
+      expect(screen.getByText("East claims 2 of the remaining 13 tricks")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
+      expect(within(screen.getByRole("region", { name: "East's hand" })).getAllByRole("img")).toHaveLength(13);
+
+      await user.click(screen.getByRole("button", { name: "Accept" }));
+      expect(service.sent).toEqual([{ type: "answerClaim", accept: true, claimId: 9 }]);
+      service.push(view);
+      await user.click(screen.getByRole("button", { name: "Reject" }));
+      expect(service.sent.at(-1)).toEqual({ type: "answerClaim", accept: false, claimId: 9 });
+    });
+
+    it("shows the claimer's partner the pending claim without answers or Withdraw", () => {
+      const service = setup();
+      const game = playCards(oneNoTrump(), 1);
+      service.push(inHand(game, ["west", "south"], { yourSeat: "west", revision: 14, seats: humanDefenders, claim: { seat: "east", tricks: 13, waitingOn: ["north"], madeAt: 14 } }));
+      expect(screen.getByText(/East claims 13 of the remaining 13 tricks.*Waiting for North/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Withdraw" })).toBeNull();
+    });
+
+    it("shows who rejected a claim", () => {
+      const service = setup();
+      service.push(inHand(playCards(oneNoTrump(), 1), ["north", "south"], { revision: 15, claimRejected: { seat: "north", tricks: 13, by: "east" } }));
+      expect(screen.getByText("East rejected the claim of 13 tricks")).toBeTruthy();
+      // The service allows one claim per side per trick, so Claim waits for the next card.
+      expect(menuItem("Claim")).toBeNull();
+      service.push(inHand(playCards(oneNoTrump(), 1), ["north", "south"], { revision: 16, claimRejected: { seat: "east", tricks: 13, by: "north" } }));
+      expect(menuItem("Claim")).toBeTruthy();
+    });
+
+    it("sends no forced card while a claim is pending", () => {
+      vi.useFakeTimers();
+      const service = setup();
+      let game = playCards(oneNoTrump(), 48);
+      while (game.currentActor !== "north" && game.currentActor !== "south") game = playOne(game);
+      service.push(inHand(game, ["north", "south"], { revision: 20, seats: humanDefenders, claim: { seat: "north", tricks: 1, waitingOn: ["east", "west"], madeAt: 20 } }));
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(service.sent).toEqual([]);
+    });
+
+    it("names the claim in the hand result", () => {
+      const service = setup();
+      const played = playCards(oneNoTrump(), 4);
+      const finished = apply(played, { type: "claim", seat: claimSeatFor(played)!, tricks: 5 });
+      service.push(tableView({ handNumber: 1, revision: 30, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+      const declarer = claimSeatFor(played) === "north" ? "North (declarer)" : { east: "East", west: "West" }[claimSeatFor(played) as "east" | "west"];
+      expect(within(screen.getByRole("region", { name: "Hand result" })).getByText(`Claimed by ${declarer}: 5 of the remaining 12 tricks`)).toBeTruthy();
+    });
+
+    it("holds a forced card while the viewer has the claim picker open", () => {
+      vi.useFakeTimers();
+      const service = setup();
+      let game = playCards(oneNoTrump(), 48);
+      while (game.currentActor !== "north" && game.currentActor !== "south") game = playOne(game);
+      service.push(inHand(game, ["north", "south"], { revision: 20 }));
+      fireEvent.click(menuItem("Claim")!);
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(service.sent).toEqual([]);
+      fireEvent.click(screen.getByRole("button", { name: "Claim all 1" }));
+      expect(service.sent).toEqual([{ type: "claim", tricks: 1 }]);
+    });
+  });
+
   it("saves a finished hand to history once, even when the view repeats", () => {
     const service = setup();
     const finished = playCards(oneNoTrump(), 52);
@@ -705,6 +819,127 @@ describe("OnlineTable connection", () => {
       service.push(live(game, { revision: 22, game: publicGame(game, ["north", "south"]) }));
       act(() => { vi.advanceTimersByTime(2000); });
       expect(service.sent).toEqual([{ type: "takeBack" }]);
+    });
+
+    describe("queueing the next card", () => {
+      /** Forced cards are left to the player, so only the queue can send a card. */
+      const setupQueue = () => {
+        const storage = memoryStorage();
+        storage.setItem("contractplay.forcedPlay", "off");
+        return setup({ storage });
+      };
+
+      it("plays declarer's queued card on declarer's turn, not on dummy's", () => {
+        vi.useFakeTimers();
+        const service = setupQueue();
+        const start = oneNoTrump(); // North declares, East leads, South is a bot dummy North plays for.
+        const southToPlay = playOne(start);
+        const northToPlay = playCards(southToPlay, 2);
+        expect(northToPlay.currentActor).toBe("north");
+        const card = legalCards(northToPlay.hands.north, northToPlay.currentTrick[0]!.card.suit)[0]!;
+
+        service.push(live(start, { revision: 10 }));
+        fireEvent.click(screen.getByRole("button", { name: `Queue ${cardLabel(card)}` }));
+        expect(screen.getByText(`Queued: ${cardLabel(card)}`)).toBeTruthy();
+
+        service.push(live(southToPlay, { revision: 11, game: publicGame(southToPlay, ["north", "south"]) }));
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(service.sent).toEqual([]);
+
+        service.push(live(northToPlay, { revision: 13, game: publicGame(northToPlay, ["north", "south"]) }));
+        act(() => { vi.advanceTimersByTime(499); });
+        expect(service.sent).toEqual([]);
+        act(() => { vi.advanceTimersByTime(1); });
+        expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 13, action: { type: "play", seat: "north", card } }]);
+      });
+
+      it("sends a queued card that is also the forced card only once", () => {
+        vi.useFakeTimers();
+        const service = setup(); // Forced play stays on.
+        // The last trick with West to play and North (the viewer, holding one card) next.
+        let westToPlay: GameState | undefined;
+        while (!westToPlay) {
+          let game = playCards(oneNoTrump(), 48);
+          while (game.currentActor !== "west" && game.currentTrick.length < 4 && game.hands.north.length === 1) game = playOne(game);
+          if (game.currentActor === "west" && game.hands.north.length === 1) westToPlay = game;
+        }
+        const northToPlay = playOne(westToPlay);
+        expect(northToPlay.currentActor).toBe("north");
+        const card = northToPlay.hands.north[0]!;
+
+        service.push(live(westToPlay, { revision: 30, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getByRole("button", { name: `Queue ${cardLabel(card)}` }));
+        service.push(live(northToPlay, { revision: 31, game: publicGame(northToPlay, ["north", "south"]) }));
+        const acts = () => service.sent.filter((message) => message.type === "act");
+        act(() => { vi.advanceTimersByTime(500); });
+        expect(acts()).toEqual([{ type: "act", handNumber: 1, revision: 31, action: { type: "play", seat: "north", card } }]);
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(acts()).toHaveLength(1);
+      });
+
+      it("lets a human dummy queue for both declaring hands when the bot partner declares", () => {
+        const service = setupQueue();
+        const seats = { north: bot, east: bot, south: human("Bob"), west: bot };
+        const westToPlay = playCards(oneNoTrump(), 2); // East led and South (dummy) played; West is to play.
+        service.push(tableView({ handInProgress: true, handNumber: 1, revision: 14, yourSeat: "south", seats, game: publicGame(westToPlay, ["north", "south"]) }));
+        expect(within(screen.getByRole("region", { name: "North's hand" })).getAllByRole("button", { name: /^Queue / })).toHaveLength(13);
+        expect(within(screen.getByRole("region", { name: "South's dummy hand" })).getAllByRole("button", { name: /^Queue / })).toHaveLength(12);
+      });
+
+      it("drops the queue when another player takes an action back", () => {
+        vi.useFakeTimers();
+        const service = setupQueue();
+        const start = oneNoTrump();
+        const southToPlay = playOne(start);
+        const northToPlay = playCards(southToPlay, 2);
+        const card = legalCards(northToPlay.hands.north, northToPlay.currentTrick[0]!.card.suit)[0]!;
+        service.push(live(southToPlay, { revision: 11, game: publicGame(southToPlay, ["north", "south"]) }));
+        const westToPlay = playOne(southToPlay);
+        service.push(live(westToPlay, { revision: 12, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getByRole("button", { name: `Queue ${cardLabel(card)}` }));
+        expect(screen.getByText(`Queued: ${cardLabel(card)}`)).toBeTruthy();
+
+        // East takes back the opening lead: fewer cards played in the same hand.
+        service.push(live(start, { revision: 13 }));
+        expect(screen.queryByText(/^Queued:/)).toBeNull();
+        service.push(live(northToPlay, { revision: 14, game: publicGame(northToPlay, ["north", "south"]) }));
+        expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+        act(() => { vi.advanceTimersByTime(2000); });
+        expect(service.sent).toEqual([]);
+      });
+
+      it("drops the queue when the connection breaks", () => {
+        const service = setupQueue();
+        const westToPlay = playCards(oneNoTrump(), 2);
+        service.push(live(westToPlay, { revision: 15, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getAllByRole("button", { name: /^Queue / })[0]!);
+        expect(screen.getAllByRole("button", { name: /^Unqueue / })).toHaveLength(1);
+        service.status("reconnecting");
+        service.status("open");
+        service.push(live(westToPlay, { revision: 15, game: publicGame(westToPlay, ["north", "south"]) }));
+        expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+        expect(screen.getAllByRole("button", { name: /^Queue / }).length).toBeGreaterThan(0);
+      });
+
+      it("offers no queue while a bot plays for the viewer", () => {
+        const service = setupQueue();
+        const autoNorth: SeatInfo = { kind: "human", name: "Bob", away: false, standIn: "intermediate", autoPlay: true };
+        service.push(live(oneNoTrump(), { revision: 10 }));
+        expect(screen.getAllByRole("button", { name: /^Queue / }).length).toBeGreaterThan(0);
+        service.push(live(oneNoTrump(), { revision: 11, seats: { ...seatedNorth, north: autoNorth } }));
+        expect(screen.queryAllByRole("button", { name: /^Queue / })).toHaveLength(0);
+      });
+
+      it("drops the queue when the viewer takes a card back", () => {
+        const service = setupQueue();
+        const westToPlay = playCards(oneNoTrump(), 2); // East led, North played dummy's card; West is to play.
+        service.push(live(westToPlay, { revision: 15, game: publicGame(westToPlay, ["north", "south"]) }));
+        fireEvent.click(screen.getAllByRole("button", { name: /^Queue / })[0]!);
+        expect(screen.getAllByRole("button", { name: /^Unqueue / })).toHaveLength(1);
+        fireEvent.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+        fireEvent.click(item("Take back"));
+        expect(screen.queryAllByRole("button", { name: /^Unqueue / })).toHaveLength(0);
+      });
     });
 
     it("offers Auto play during card play only, and shows it until the viewer stops it", async () => {

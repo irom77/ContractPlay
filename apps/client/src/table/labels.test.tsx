@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Card, Rank, Suit } from "@contractplay/core";
-import { cardFace, handSuitOrder, isRedSuit, sortHand, suitGapShare } from "./labels.js";
+import { cardFace, claimText, handSuitOrder, isRedSuit, sortHand, suitGapShare } from "./labels.js";
 
 afterEach(cleanup);
 
@@ -62,5 +62,12 @@ describe("card faces", () => {
       return glyph!.innerHTML;
     });
     expect(new Set(shapes).size).toBe(4);
+  });
+});
+
+describe("claimText", () => {
+  it("names the claimer and counts the remaining tricks", () => {
+    expect(claimText({ seat: "south", tricks: 3 }, "south", 4)).toBe("Claimed by South (declarer): 3 of the remaining 4 tricks");
+    expect(claimText({ seat: "west", tricks: 1 }, "south", 4)).toBe("Claimed by West: 1 of the remaining 4 tricks");
   });
 });

@@ -11,7 +11,8 @@ export function savedHandFrom(view: TableView, id: string, savedAt: string): Sav
   if (!game || !view.revealed) return undefined;
   const actions: GameAction[] = [
     ...game.auction.map(({ seat, bid }): GameAction => ({ type: "bid", seat, bid })),
-    ...[...game.completedTricks.flat(), ...game.currentTrick].map(({ seat, card }): GameAction => ({ type: "play", seat, card }))
+    ...[...game.completedTricks.flat(), ...game.currentTrick].map(({ seat, card }): GameAction => ({ type: "play", seat, card })),
+    ...(game.claim ? [{ type: "claim", ...game.claim } as const] : [])
   ];
   let state;
   try {

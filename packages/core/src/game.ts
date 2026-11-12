@@ -13,7 +13,7 @@ export type Contract = Readonly<{
 }>;
 
 export type RuleError = Readonly<{
-  code: "wrong-phase" | "wrong-actor" | "invalid-bid" | "illegal-double" | "illegal-redouble" | "card-not-held" | "must-follow-suit";
+  code: "wrong-phase" | "wrong-actor" | "invalid-bid" | "illegal-double" | "illegal-redouble" | "card-not-held" | "must-follow-suit" | "invalid-claim";
   message: string;
 }>;
 
@@ -29,6 +29,7 @@ export type GameState = Readonly<{
   currentTrick: readonly TrickCard[];
   completedTricks: readonly (readonly TrickCard[])[];
   score?: ContractScore;
+  claim?: Readonly<{ seat: Seat; tricks: number }>;
   trickLeader: Seat;
   history: GameHistory;
 }>;
@@ -192,8 +193,46 @@ function applyPlay(state: GameState, action: Extract<GameAction, { type: "play" 
   };
 }
 
+/** Tricks not yet completed, counting the one in progress. */
+export function remainingTricks(state: GameState): number {
+  return 13 - state.completedTricks.length;
+}
+
+/** The seat a claim made on this turn is recorded under: declarer when declarer or dummy is to act, else the actor. */
+export function claimSeatFor(state: GameState): Seat | undefined {
+  if (state.phase !== "play" || !state.contract) return undefined;
+  const declarer = state.contract.declarer;
+  const dummy = SEATS[(seatIndex(declarer) + 2) % 4]!;
+  return state.currentActor === declarer || state.currentActor === dummy ? declarer : state.currentActor;
+}
+
+function applyClaim(state: GameState, action: Extract<GameAction, { type: "claim" }>): ApplyActionResult {
+  if (state.phase !== "play" || !state.contract) return error("wrong-phase", "Tricks can only be claimed during the play");
+  const remaining = remainingTricks(state);
+  if (action.seat !== claimSeatFor(state)) return error("invalid-claim", "This player cannot claim on this turn");
+  if (!Number.isInteger(action.tricks) || action.tricks < 0 || action.tricks > remaining) {
+    return error("invalid-claim", "A claim must be a whole number of the remaining tricks");
+  }
+  const trump = state.contract.strain === "notrump" ? undefined : state.contract.strain;
+  const contractSide = partnership(state.contract.declarer);
+  const wonSoFar = state.completedTricks.filter((trick) => partnership(trickWinner(trick, trump)) === contractSide).length;
+  const claimed = partnership(action.seat) === contractSide ? action.tricks : remaining - action.tricks;
+  const claim = { seat: action.seat, tricks: action.tricks };
+  return {
+    ok: true,
+    state: {
+      ...state,
+      phase: "complete",
+      claim,
+      score: scoreContract(state.contract, wonSoFar + claimed, state.vulnerability),
+      history: recordAction(state.history, action)
+    }
+  };
+}
+
 export function applyAction(state: GameState, action: GameAction): ApplyActionResult {
-  return action.type === "bid" ? applyBid(state, action) : applyPlay(state, action);
+  if (action.type === "bid") return applyBid(state, action);
+  return action.type === "play" ? applyPlay(state, action) : applyClaim(state, action);
 }
 
 function rebuild(state: GameState, count: number): GameState {

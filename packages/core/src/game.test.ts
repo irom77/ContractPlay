@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal, type Card, type Seat } from "./cards.js";
-import { applyAction, createGameState, playContextFor, redoAction, replayActions, rewindTo, undoAction } from "./game.js";
+import { applyAction, claimSeatFor, createGameState, playContextFor, remainingTricks, redoAction, replayActions, rewindTo, undoAction } from "./game.js";
 import { trickWinner } from "./rules.js";
 
 const initial = () => createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" });
@@ -140,5 +140,83 @@ describe("playContextFor", () => {
     expect(dummyToPlay.visibleHand).toEqual(afterLead.hands.north);
     expect(dummyToPlay.ledSuit).toBe(lead.suit);
     expect(playContextFor(afterLead, "west").visibleHand).toEqual(afterLead.hands.south);
+  });
+});
+
+describe("claims", () => {
+  const toPlay = () => {
+    let state = initial();
+    const calls: [Seat, "pass" | "4spades"][] = [["north", "pass"], ["east", "pass"], ["south", "4spades"], ["west", "pass"], ["north", "pass"], ["east", "pass"]];
+    for (const [seat, call] of calls) {
+      const result = applyAction(state, { type: "bid", seat, bid: call });
+      if (!result.ok) throw new Error(result.error.message);
+      state = result.state;
+    }
+    return state;
+  };
+  const lowestLegal = (state: ReturnType<typeof initial>) => {
+    const hand = state.hands[state.currentActor];
+    const led = state.currentTrick[0]?.card.suit;
+    const pool = (led ? hand.filter((card) => card.suit === led) : []);
+    return (pool.length ? pool : hand)[0]!;
+  };
+  const playOne = (state: ReturnType<typeof initial>) => play(state, state.currentActor, lowestLegal(state));
+  const isDeclaringSide = (seat: Seat) => seat === "north" || seat === "south";
+
+  it("lets declarer claim all remaining tricks when dummy is to play", () => {
+    const state = playOne(toPlay());
+    expect(state.currentActor).toBe("north");
+    expect(claimSeatFor(state)).toBe("south");
+    const result = applyAction(state, { type: "claim", seat: "south", tricks: remainingTricks(state) });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.state.phase).toBe("complete");
+    expect(result.state.claim).toEqual({ seat: "south", tricks: 13 });
+    expect(result.state.score?.tricksTaken).toBe(13);
+  });
+
+  it("counts the trick in progress as remaining", () => {
+    let state = toPlay();
+    // Play tricks until the defence wins one, then lead two cards of the next.
+    while (state.completedTricks.length === 0) state = playOne(state);
+    if (isDeclaringSide(state.trickLeader)) {
+      throw new Error("fixture deal: declarer won the first trick, pick a different lowestLegal strategy");
+    }
+    state = playOne(playOne(state));
+    expect(state.completedTricks).toHaveLength(1);
+    expect(state.currentTrick).toHaveLength(2);
+    expect(remainingTricks(state)).toBe(12);
+    const defender = state.currentActor;
+    expect(isDeclaringSide(defender)).toBe(false);
+    const result = applyAction(state, { type: "claim", seat: defender, tricks: 2 });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(result.state.score?.tricksTaken).toBe(10);
+  });
+
+  it("refuses dummy's seat, an off-turn defender, and an out-of-range count", () => {
+    const auction = initial();
+    expect(applyAction(auction, { type: "claim", seat: "north", tricks: 0 })).toMatchObject({ ok: false, error: { code: "wrong-phase" } });
+    const state = playOne(toPlay());
+    const remaining = remainingTricks(state);
+    for (const claim of [
+      { seat: "north", tricks: 1 },
+      { seat: "east", tricks: 1 },
+      { seat: "west", tricks: 1 },
+      { seat: "south", tricks: -1 },
+      { seat: "south", tricks: remaining + 1 },
+      { seat: "south", tricks: 1.5 }
+    ] as const) {
+      expect(applyAction(state, { type: "claim", ...claim })).toMatchObject({ ok: false, error: { code: "invalid-claim" } });
+    }
+  });
+
+  it("undoes a claim like any action", () => {
+    const state = playOne(toPlay());
+    const result = applyAction(state, { type: "claim", seat: "south", tricks: 5 });
+    if (!result.ok) throw new Error(result.error.message);
+    const undone = undoAction(result.state);
+    expect(undone.phase).toBe("play");
+    expect("claim" in undone).toBe(false);
+    expect(undone.hands).toEqual(state.hands);
+    expect(redoAction(undone).claim).toEqual({ seat: "south", tricks: 5 });
   });
 });

@@ -11,6 +11,7 @@
   --panel: #14352f;
   --line: rgba(232, 237, 223, .16);
   --gold: #f2c14e;
+  --queued: #7fd0ff;
   --card-black: #15171b;
   --card-red: #d0141e;
   --suit-font: "Segoe UI Symbol", "Apple Symbols", "Noto Sans Symbols2", "DejaVu Sans", "Arial Unicode MS", sans-serif;
@@ -179,6 +180,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 button.playing-card { cursor: pointer; }
 button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var(--u))); }
 .playing-card.hinted-card { transform: translateY(calc(-1.6 * var(--u))); box-shadow: 0 0 0 max(3px, calc(.5 * var(--u))) var(--gold), 0 0 calc(3 * var(--u)) var(--gold); }
+/* A queued card is raised and outlined until its turn comes or it is clicked again. */
+.playing-card.queued-card, button.playing-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-3 * var(--u))); outline: max(3px, calc(.5 * var(--u))) solid var(--queued); outline-offset: 1px; }
 .hand-tag { display: grid; justify-items: center; gap: calc(.6 * var(--u)); margin-right: calc(1.2 * var(--u)); color: var(--gold); font-size: var(--text-s); font-weight: 800; letter-spacing: .06em; }
 .hand-tag .seat-compass { border-color: var(--gold); background: var(--gold); color: var(--deep); }
 
@@ -249,7 +252,24 @@ button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max
 button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.2 * var(--u))); }
 .dummy-card.hinted-card { z-index: 1; box-shadow: 0 0 0 max(2px, calc(.4 * var(--u))) var(--gold), 0 0 calc(2 * var(--u)) var(--gold); }
+.dummy-card.queued-card, button.dummy-card.queued-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.6 * var(--u))); outline: max(2px, calc(.4 * var(--u))) solid var(--queued); outline-offset: 1px; }
+.pos-bottom .dummy-card.queued-card, .pos-bottom button.dummy-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-1.6 * var(--u))); }
 .dummy-card + .dummy-card { margin-left: calc(var(--step) - var(--w)); }
+
+/* ---------- Card backs at hidden seats ---------- */
+/* Overlapping backs show how many cards a seat holds: a row along the top, a column down either side. */
+.hidden-hand { display: flex; --h: calc(7.6 * var(--u)); --w: calc(var(--h) * .7); --step: calc(2.1 * var(--u)); }
+.card-back { display: block; flex: none; width: var(--w); height: var(--h); border: 1px solid #b3aea2; border-radius: calc(var(--h) * .08); box-shadow: 0 calc(var(--h) * .02) calc(var(--h) * .05) #0009;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .16) 0 12%, transparent 12% 24%), #1f55b5; background-clip: padding-box; }
+.card-back + .card-back { margin-left: calc(var(--step) - var(--w)); }
+.pos-top.has-backs { flex-wrap: wrap; justify-content: center; width: max-content; max-width: 100%; }
+.pos-top.has-backs .hidden-hand { order: 2; }
+.pos-top.has-backs .seat-auction-calls { order: 1; }
+.pos-left .hidden-hand, .pos-right .hidden-hand { flex-direction: column; --step: calc(1.6 * var(--u)); }
+.pos-left .card-back, .pos-right .card-back { width: var(--h); height: var(--w); }
+.pos-left .card-back + .card-back, .pos-right .card-back + .card-back { margin-left: 0; margin-top: calc(var(--step) - var(--w)); }
+.pos-right .hidden-hand { align-self: flex-end; }
+.pos-left .hidden-hand { align-self: flex-start; }
 
 /* ---------- Centre of the table ---------- */
 .trick-area { position: absolute; z-index: 2; inset: 0; pointer-events: none; --h: calc(19 * var(--u)); --dx: calc(11 * var(--u)); --dy: calc(8 * var(--u)); }
@@ -299,6 +319,16 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 
 .error-message { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: calc(2 * var(--u)); max-width: min(420px, calc(100% - 4 * var(--u))); margin: 0; border-left: 3px solid #ff8a78; border-radius: 6px; padding: 9px 13px; background: rgba(60, 16, 14, .94); color: #ffd9d0; font-size: var(--text-m); box-shadow: 0 6px 18px #0008; }
 .app-shell > .error-message { bottom: 16px; left: 16px; }
+
+/* ---------- Claims ---------- */
+/* The picker, a pending claim, or the answer asked of an opponent, centred over the trick. */
+.claim-panel { position: absolute; z-index: 8; top: 50%; left: 50%; display: grid; justify-items: center; gap: calc(1.2 * var(--u)); width: max-content; max-width: min(400px, calc(100% - 32px)); border: 1px solid rgba(242, 193, 78, .45); border-radius: calc(1.4 * var(--u)); padding: calc(2.4 * var(--u)) calc(3 * var(--u)); background: rgba(12, 40, 34, .96); box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) #0007; text-align: center; transform: translate(-50%, -50%); }
+.claim-panel p { margin: 0; color: #e6ede4; font-size: var(--text-m); }
+.claim-actions, .claim-stepper { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
+.claim-stepper output { min-width: 2.2em; color: var(--gold); font-size: var(--text-l); font-weight: 800; font-variant-numeric: tabular-nums; }
+.claim-stepper .secondary-button[aria-label] { min-width: 40px; padding: 0 10px; }
+.claim-line { color: var(--gold); }
+.claim-notice { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: 50%; max-width: min(420px, calc(100% - 32px)); margin: 0; border-left: 3px solid var(--gold); border-radius: 6px; padding: 9px 13px; background: rgba(12, 40, 34, .94); color: var(--ink); font-size: var(--text-m); box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
 
 /* Tall, narrow windows: the corner clusters keep a readable size, so seats along the top start below them. */
 @media (max-aspect-ratio: 4/5) {

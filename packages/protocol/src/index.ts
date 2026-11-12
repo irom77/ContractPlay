@@ -1,7 +1,7 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -17,7 +17,7 @@ export type SeatInfo =
 export type TableSummary = { id: string; name: string; style: TableStyle; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
 
 /** GameState without history or the original deal; hands the viewer may not see are empty arrays. */
-export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader">;
+export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader" | "claim">;
 
 export type TableView = TableSummary & {
   /** `revision` is the staleness token to send with `act`, not a change counter: views can differ at the same revision, so never dedupe views by it. */
@@ -26,6 +26,13 @@ export type TableView = TableSummary & {
   host?: Seat; yourSeat?: Seat; canDeal: boolean;
   game?: PublicGame;
   revealed?: Deal;
+  /**
+   * A claim waiting for answers: `seat` is the claiming side's seat (declarer for the declaring side), `waitingOn`
+   * the seats yet to accept. `madeAt` identifies the claim: send it as `claimId` with `answerClaim`.
+   */
+  claim?: { seat: Seat; tricks: number; waitingOn: Seat[]; madeAt: number };
+  /** The last claim, rejected by `by`; shown until the next card or call. */
+  claimRejected?: { seat: Seat; tricks: number; by: Seat };
 };
 
 export type ClientMessage =
@@ -36,7 +43,8 @@ export type ClientMessage =
   | { type: "deal" }
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
   | { type: "handToBot"; seat: Seat } | { type: "resume" } | { type: "autoPlay" }
-  | { type: "takeBack" } | { type: "cancelHand" };
+  | { type: "takeBack" } | { type: "cancelHand" }
+  | { type: "claim"; tricks: number } | { type: "answerClaim"; accept: boolean; claimId: number } | { type: "withdrawClaim" };
 
 export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "already-seated" | "not-allowed" | "hand-in-progress" | "not-ready" | "stale" | "not-your-turn" | "illegal";
 
@@ -108,7 +116,15 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
       return seat && skill ? { type: "setBot", seat, skill } : undefined;
     }
-    case "leave": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": return { type: data.type };
+    case "leave": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": case "withdrawClaim": return { type: data.type };
+    case "claim": {
+      const tricks = count(data.tricks);
+      return tricks !== undefined && tricks <= 13 ? { type: "claim", tricks } : undefined;
+    }
+    case "answerClaim": {
+      const claimId = count(data.claimId);
+      return typeof data.accept === "boolean" && claimId !== undefined ? { type: "answerClaim", accept: data.accept, claimId } : undefined;
+    }
     case "act": {
       const handNumber = count(data.handNumber), revision = count(data.revision), action = parseAction(data.action);
       return handNumber !== undefined && revision !== undefined && action ? { type: "act", handNumber, revision, action } : undefined;

@@ -2,7 +2,7 @@ import { applyAction, createDeck, createGameState, deal as dealCards, playContex
 import type { GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
-  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf, withoutAutoPlay, withoutGame,
+  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf, withoutAutoPlay, withoutClaim, withoutGame,
   type Outcome, type PlayerId, type TableState
 } from "./state.js";
 
@@ -55,8 +55,8 @@ function controls(state: TableState, player: PlayerId, seat: Seat): boolean {
   return s.kind === "human" && s.player === player && s.standIn === undefined && actingSeat === seatOf(state, player);
 }
 
-/** Records an action that already passed the controller check; refuses when the rules do. */
-function record(state: TableState, action: GameAction, at: number, byHuman: boolean): Outcome {
+/** Records an action that already passed the controller check; refuses when the rules do. Clears any claim notice. */
+export function record(state: TableState, action: GameAction, at: number, byHuman: boolean): Outcome {
   if (!state.game) return refuse(state, "illegal");
   const result = applyAction(state.game, action);
   if (!result.ok) return refuse(state, result.error.code === "wrong-actor" ? "not-your-turn" : "illegal");
@@ -70,11 +70,12 @@ function record(state: TableState, action: GameAction, at: number, byHuman: bool
   }
   // Auto play lasts for one hand: when the last card is played, those players get their seats back.
   const seats = game.phase === "complete" ? withoutAutoPlay(state.seats) : state.seats;
-  return accept(state, { game, totals, seats, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
+  return accept(withoutClaim(state), { game, totals, seats, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
 }
 
 export function act(state: TableState, player: PlayerId, message: { handNumber: number; revision: number; action: GameAction }, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
+  if (state.pendingClaim) return refuse(state, "not-allowed");
   if (message.handNumber !== state.handNumber || message.revision !== state.revision) return refuse(state, "stale");
   if (!controls(state, player, message.action.seat)) return refuse(state, "not-your-turn");
   return record(state, message.action, at, true);
@@ -93,7 +94,7 @@ export function takeBack(state: TableState, player: PlayerId, at: number): Outco
   for (let count = game.history.cursor - 1; count >= 0; count--) {
     const before = rewindTo(game, count);
     const decider = deciderOf({ ...state, game: before }, game.history.actions[count]!.seat);
-    if (decider === mine) return accept(state, { game: before, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+    if (decider === mine) return accept(withoutClaim(state), { game: before, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
     const s = state.seats[decider];
     if (s.kind === "human" && s.standIn === undefined) return refuse(state, "not-allowed");
   }
@@ -104,7 +105,7 @@ export function takeBack(state: TableState, player: PlayerId, at: number): Outco
 export function cancelHand(state: TableState, player: PlayerId, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (state.host !== player || betweenHands(state)) return refuse(state, "not-allowed");
-  return accept(withoutGame(state), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+  return accept(withoutGame(withoutClaim(state)), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
 export function applyBotEvent(state: TableState, revision: number, action: GameAction, at: number): Outcome {
@@ -121,7 +122,7 @@ function botSkill(state: TableState, seat: Seat): SkillLevel | undefined {
 
 export function botToAct(state: TableState): Seat | undefined {
   const game = state.game;
-  if (!game || (game.phase !== "auction" && game.phase !== "play")) return undefined;
+  if (!game || (game.phase !== "auction" && game.phase !== "play") || state.pendingClaim) return undefined;
   return botSkill(state, game.currentActor) === undefined ? undefined : game.currentActor;
 }
 

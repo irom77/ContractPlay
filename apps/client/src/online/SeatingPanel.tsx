@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { SUITS, type Seat, type SkillLevel } from "@contractplay/core";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
-import { contractText, samePartnership, seatNames, seats, sortHand, suitSymbols } from "../table/labels.js";
+import { claimText, contractText, samePartnership, seatNames, seats, sortHand, suitSymbols } from "../table/labels.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
@@ -94,6 +94,7 @@ function HandResult({ game, revealed }: { game: PublicGame; revealed: NonNullabl
     <section className="online-result" aria-label="Hand result">
       <h2>{contract ? <>{contractText(contract)} by {seatNames[contract.declarer]}</> : "Passed out"}</h2>
       {contract && score && declaringSide && result ? <p>{declaringSide} took {score.tricksTaken} of {score.tricksRequired} required tricks — {result} · {score.score > 0 ? "+" : ""}{score.score} NS</p> : null}
+      {contract && game.claim ? <p>{claimText(game.claim, contract.declarer, 13 - game.completedTricks.length)}</p> : null}
       <div className="online-hands">
         {seats.map((seat) => {
           const hand = sortHand(revealed[seat]);

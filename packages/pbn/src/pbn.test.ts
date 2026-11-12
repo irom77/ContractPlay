@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyAction, createDeck, createGameState, deal, validatePlay } from "@contractplay/core";
+import { applyAction, claimSeatFor, createDeck, createGameState, deal, validatePlay } from "@contractplay/core";
 import { exportPbn, parsePbn, pbnBoardToHand, serializePbn } from "./pbn.js";
 
 const normalizedDeal = (value: ReturnType<typeof deal>) => Object.fromEntries(
@@ -90,5 +90,60 @@ describe("PBN import and export", () => {
     expect(board.diagnostics).toContainEqual(expect.objectContaining({
       severity: "warning", message: "Unrecognized auction call: mystery", line: 4
     }));
+  });
+
+  describe("claims", () => {
+    function claimed(tricks: number) {
+      let game = createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" });
+      for (const bid of ["1clubs", "pass", "pass", "pass"] as const) {
+        const result = applyAction(game, { type: "bid", seat: game.currentActor, bid });
+        if (!result.ok) throw new Error(result.error.message);
+        game = result.state;
+      }
+      for (let played = 0; played < 8; played++) {
+        const seat = game.currentActor;
+        const ledSuit = game.currentTrick[0]?.card.suit;
+        const card = game.hands[seat].find((candidate) => validatePlay(game.hands[seat], candidate, ledSuit).legal)!;
+        const result = applyAction(game, { type: "play", seat, card });
+        if (!result.ok) throw new Error(result.error.message);
+        game = result.state;
+      }
+      const result = applyAction(game, { type: "claim", seat: claimSeatFor(game)!, tricks });
+      if (!result.ok) throw new Error(result.error.message);
+      return result.state;
+    }
+
+    it("writes a claim as * with a Result tag and parses it back", () => {
+      const game = claimed(3);
+      const pbn = exportPbn({ dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal, actions: game.history.actions });
+      expect(pbn).toMatch(new RegExp(`\\[Result "${game.score!.tricksTaken}"\\]`));
+      expect(pbn.trimEnd().endsWith(" *")).toBe(true);
+      const board = parsePbn(pbn).boards[0]!;
+      expect(board.diagnostics).toEqual([]);
+      expect(board.actions).toEqual(game.history.actions);
+    });
+
+    it("round-trips a defender's claim", () => {
+      let game = createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" });
+      for (const bid of ["1clubs", "pass", "pass", "pass"] as const) {
+        const result = applyAction(game, { type: "bid", seat: game.currentActor, bid });
+        if (!result.ok) throw new Error(result.error.message);
+        game = result.state;
+      }
+      const seat = game.currentActor;
+      const result = applyAction(game, { type: "claim", seat, tricks: 1 });
+      if (!result.ok) throw new Error(result.error.message);
+      const pbn = exportPbn({ dealer: "north", vulnerability: "None", deal: game.initialDeal, actions: result.state.history.actions });
+      expect(parsePbn(pbn).boards[0]!.actions).toEqual(result.state.history.actions);
+    });
+
+    it("keeps the plays and warns when the Result cannot be a claim", () => {
+      const game = claimed(3);
+      const pbn = exportPbn({ dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal, actions: game.history.actions })
+        .replace(/\[Result "\d+"\]/, '[Result "13"]');
+      const board = parsePbn(pbn).boards[0]!;
+      expect(board.actions.some((action) => action.type === "claim")).toBe(false);
+      expect(board.diagnostics.some((entry) => entry.severity === "warning" && entry.message.includes("Result"))).toBe(true);
+    });
   });
 });

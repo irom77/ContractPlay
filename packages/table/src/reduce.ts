@@ -1,3 +1,4 @@
+import { answerClaim, claim, withdrawClaim } from "./claim.js";
 import { act, applyBotEvent, cancelHand, dealHand, takeBack } from "./hand.js";
 import { autoPlay, connect, disconnect, handToBot, resume, tick } from "./presence.js";
 import { clearSeat, leave, setBot, sit } from "./seats.js";
@@ -28,5 +29,8 @@ export function reduce(state: TableState, event: TableEvent, random: () => numbe
     case "autoPlay": return autoPlay(state, player);
     case "takeBack": return takeBack(state, player, at);
     case "cancelHand": return cancelHand(state, player, at);
+    case "claim": return claim(state, player, message.tricks, at);
+    case "answerClaim": return answerClaim(state, player, message.accept, message.claimId, at);
+    case "withdrawClaim": return withdrawClaim(state, player, at);
   }
 }

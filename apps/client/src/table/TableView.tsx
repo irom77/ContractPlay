@@ -6,6 +6,7 @@ import {
   callChipClass,
   callLabel,
   cardFace,
+  cardsHeld,
   cardLabel,
   compactCallLabel,
   contractText,
@@ -36,6 +37,13 @@ export type TableViewProps = {
   showBottomHand: boolean;
   /** During online play, keep every visible hand at its seat for the whole play. */
   fixedSeatHands?: boolean;
+  /** A seat to show face-up at its place, such as the claimer's hand while a claim is pending; backs stay if its cards were not sent. */
+  exposedSeat?: Seat | undefined;
+  /** Seats whose cards the viewer may queue now, to play when that seat's turn comes. */
+  queueSeats?: readonly Seat[] | undefined;
+  /** The card queued to play, raised and outlined; clicking it again un-queues it. */
+  queuedCard?: { seat: Seat; card: Card } | undefined;
+  onQueue?(seat: Seat, card: Card): void;
   /** Keep playable cards disabled, for example while a completed trick is still on the table. */
   cardsDisabled?: boolean;
   /** Keep every call in the bid picker disabled, for example while a sent call awaits the service. */
@@ -59,8 +67,8 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
-  game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false,
-  cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, tools, overlay
+  game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, exposedSeat,
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -100,6 +108,12 @@ export function TableView({
   const lastTrickWinner = lastTrick ? trickWinner(lastTrick, trump) : undefined;
   const shownExplanation = explainCall?.shown;
   const auctionList = game.auction.length ? <ol className="sr-only" ref={auctionListRef} aria-label="Auction calls">{game.auction.map(({ seat, bid }, index) => <li key={`${seat}-${index}`}><span>{seatNames[seat]}</span><strong>{callLabel(bid)}</strong></li>)}</ol> : null;
+  const isQueued = (seat: Seat, card: Card) => queuedCard?.seat === seat && cardId(queuedCard.card) === cardId(card);
+  const canQueue = (seat: Seat) => phase === "play" && !!onQueue && !!queueSeats?.includes(seat);
+  const queueButton = (seat: Seat, card: Card, className: string) => {
+    const queued = isQueued(seat, card);
+    return <button type="button" className={`${className} ${queued ? "queued-card" : ""}`} key={cardId(card)} aria-label={`${queued ? "Unqueue" : "Queue"} ${cardLabel(card)}`} title={queued ? "Queued: plays when your turn comes. Click to cancel" : "Queue this card to play when your turn comes"} onClick={() => onQueue?.(seat, card)}>{cardFace(card)}</button>;
+  };
   const tableCard = (card: Card, className: string, label: string) => <span className={`${className} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={cardId(card)} role="img" aria-label={label}>{cardFace(card)}</span>;
 
   return (
@@ -140,26 +154,31 @@ export function TableView({
           const isDealer = game.dealer === seat;
           const seatCards = fixedPlayHands
             ? sortHand(game.hands[seat])
-            : dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : [];
+            : dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : exposedSeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : [];
           const seatHasCards = seatCards.length > 0;
+          const held = cardsHeld(game, seat);
+          // Hands the viewer cannot see are backs; the bottom position never shows backs, as the hand zone is the viewer's own.
+          const showBacks = phase === "play" && !seatHasCards && held > 0 && position !== "bottom";
           // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
           const isDummy = dummyVisible && seat === dummySeat;
           const seatCanPlay = fixedPlayHands ? canAct && shownActor === seat : playFromDummy && seat === dummySeat;
-          return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards ? "has-dummy" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
+          return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards ? "has-dummy" : ""} ${showBacks ? "has-backs" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
             {/* The head row: one line beside a hand spread along the top or bottom, invisible (display: contents) elsewhere. */}
             <div className="seat-head">
-            <span className={`seat-compass ${isDummy ? "dummy-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}`} title={`${seatNames[seat]}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
+            <span className={`seat-compass ${isDummy ? "dummy-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}${showBacks ? `, ${held} cards` : ""}`} title={`${seatNames[seat]}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
             {seatLabel?.(seat)}
             {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
               ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
               : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null}
             </div>
             {explainedHere && explainCall ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainCall.text(explainedHere.index)}</p> : null}
+            {showBacks ? <div className="hidden-hand" aria-hidden="true">{Array.from({ length: held }, (_, index) => <span className="card-back" key={index} />)}</div> : null}
             {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat ? "dummy " : ""}hand`}>
               {handSuitOrder(seatCards).map((suit) => {
                 const suitCards = seatCards.filter((card) => card.suit === suit);
                 return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => seatCanPlay
-                  ? <button className={`table-card dummy-card ${isRedSuit(card.suit) ? "red-card" : ""} ${hintedCards?.has(cardId(card)) ? "hinted-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={cardsDisabled} onClick={() => onPlay?.(seat, card)}>{cardFace(card)}</button>
+                  ? <button className={`table-card dummy-card ${isRedSuit(card.suit) ? "red-card" : ""} ${hintedCards?.has(cardId(card)) ? "hinted-card" : ""} ${isQueued(seat, card) ? "queued-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={cardsDisabled} onClick={() => onPlay?.(seat, card)}>{cardFace(card)}</button>
+                  : canQueue(seat) ? queueButton(seat, card, `table-card dummy-card ${isRedSuit(card.suit) ? "red-card" : ""}`)
                   : tableCard(card, "table-card dummy-card", cardLabel(card)))}</div> : null;
               })}
             </section> : null}
@@ -195,7 +214,8 @@ export function TableView({
             {handCards.map((card, index) => {
               const className = `playing-card ${isRedSuit(card.suit) ? "red-card" : ""} ${index > 0 && handCards[index - 1]!.suit !== card.suit ? "suit-gap" : ""}`;
               return handIsInteractive && phase === "play"
-                ? <button className={`${className} ${hintedCards?.has(cardId(card)) ? "hinted-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={cardsDisabled} onClick={() => onPlay?.(handSeat, card)}>{cardFace(card)}</button>
+                ? <button className={`${className} ${hintedCards?.has(cardId(card)) ? "hinted-card" : ""} ${isQueued(handSeat, card) ? "queued-card" : ""}`} key={cardId(card)} aria-label={`Play ${cardLabel(card)}`} disabled={cardsDisabled} onClick={() => onPlay?.(handSeat, card)}>{cardFace(card)}</button>
+                : canQueue(handSeat) ? queueButton(handSeat, card, className)
                 : tableCard(card, `${className} auction-card`, cardLabel(card));
             })}
           </div>

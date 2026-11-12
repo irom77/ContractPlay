@@ -1,4 +1,4 @@
-import { applyAction, createGameState, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction } from "@contractplay/core";
+import { applyAction, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction } from "@contractplay/core";
 
 export type PbnTag = Readonly<{ name: string; value: string; line?: number }>;
 export type PbnDiagnostic = Readonly<{ severity: "error" | "warning"; message: string; line: number }>;
@@ -56,9 +56,29 @@ function serializeCard(card: Card): string {
   return `${suitLetter[card.suit]}${card.rank}`;
 }
 
+/** The state after replaying the hand's actions on its deal, or undefined when it cannot be replayed. */
+function replay(hand: PbnHand, deal: Deal, upTo: (action: GameAction) => boolean = () => true) {
+  let state = createGameState({ deal, dealer: hand.dealer, vulnerability: hand.vulnerability });
+  for (const action of hand.actions) {
+    if (!upTo(action)) break;
+    const result = applyAction(state, action);
+    if (!result.ok) return undefined;
+    state = result.state;
+  }
+  return state;
+}
+
+function openingLeader(hand: PbnHand): Seat | undefined {
+  if (!hand.deal) return undefined;
+  const state = replay(hand, hand.deal, (action) => action.type === "bid");
+  return state?.phase === "play" ? state.currentActor : undefined;
+}
+
 /** Serializes one board as standard PBN tags, followed by Auction and Play sections. */
 export function exportPbn(hand: PbnHand): string {
-  const tags = [...(hand.tags ?? []).filter((tag) => !["dealer", "vulnerable", "deal"].includes(tag.name.toLowerCase()))];
+  const claim = hand.actions.find((action): action is Extract<GameAction, { type: "claim" }> => action.type === "claim");
+  const claimed = claim && hand.deal ? replay(hand, hand.deal) : undefined;
+  const tags = [...(hand.tags ?? []).filter((tag) => !["dealer", "vulnerable", "deal", ...(claimed?.score ? ["result"] : [])].includes(tag.name.toLowerCase()))];
   tags.push({ name: "Dealer", value: seatLetter[hand.dealer] });
   tags.push({ name: "Vulnerable", value: hand.vulnerability === "Both" ? "All" : hand.vulnerability });
   if (hand.deal) {
@@ -68,6 +88,8 @@ export function exportPbn(hand: PbnHand): string {
     tags.push({ name: "Deal", value: `${seatLetter[hand.dealer]}:${clockwise.map((seat) => dealHand(hand.deal![seat])).join(" ")}` });
   }
 
+  if (claimed?.score) tags.push({ name: "Result", value: String(claimed.score.tricksTaken) });
+
   const sections = tags.map(({ name, value }) => `[${name} "${escapeTag(value)}"]`);
   if (hand.comments?.length) sections.push(...hand.comments.map((comment) => `{${comment}}`));
   const bids = hand.actions.filter((action): action is Extract<GameAction, { type: "bid" }> => action.type === "bid");
@@ -75,8 +97,11 @@ export function exportPbn(hand: PbnHand): string {
   if (bids.length) {
     sections.push(`[Auction "${seatLetter[bids[0]!.seat]}"]\n${bids.map((action) => serializeBid(action.bid)).join(" ")}`);
   }
-  if (plays.length) {
-    sections.push(`[Play "${seatLetter[plays[0]!.seat]}"]\n${plays.map((action) => serializeCard(action.card)).join(" ")}`);
+  // A claim is written as the play section's `*`; the Result tag carries the tricks it settles.
+  const playTokens = [...plays.map((action) => serializeCard(action.card)), ...(claim ? ["*"] : [])];
+  const playSeat = plays[0]?.seat ?? (claim ? openingLeader(hand) : undefined);
+  if (playTokens.length && playSeat) {
+    sections.push(`[Play "${seatLetter[playSeat]}"]\n${playTokens.join(" ")}`);
   }
   return sections.join("\n\n");
 }
@@ -162,16 +187,17 @@ function parseCard(token: string): Card | undefined {
   return { suit: letterSuit[suitCode]!, rank: rank as Card["rank"] };
 }
 
-function parseSection(board: RawBoard, section: RawSection | undefined, type: "bid" | "play", actions: GameAction[], resolvePlaySeat?: (card: Card) => Seat | undefined): void {
-  if (!section) return;
+function parseSection(board: RawBoard, section: RawSection | undefined, type: "bid" | "play", actions: GameAction[], resolvePlaySeat?: (card: Card) => Seat | undefined): boolean {
+  if (!section) return false;
   if (!section.seat) {
     board.diagnostics.push({ severity: "error", message: `Invalid ${type === "bid" ? "Auction" : "Play"} starting seat`, line: section.line });
-    return;
+    return false;
   }
   let seat = section.seat;
   let consecutivePasses = 0;
   let contractStarted = false;
   let stopped = false;
+  let starred = false;
   const content = stripComments(section.text, board, section.line);
   for (const rawToken of content.split(/\s+/).filter(Boolean)) {
     if (stopped) break;
@@ -202,6 +228,7 @@ function parseSection(board: RawBoard, section: RawSection | undefined, type: "b
       if ((!contractStarted && consecutivePasses === 4) || (contractStarted && consecutivePasses === 3)) stopped = true;
     } else {
       if (rawToken === "*") {
+        starred = true;
         stopped = true;
         continue;
       }
@@ -219,6 +246,7 @@ function parseSection(board: RawBoard, section: RawSection | undefined, type: "b
       seat = nextSeat(playSeat);
     }
   }
+  return starred;
 }
 
 function materializeBoard(raw: RawBoard): PbnBoard {
@@ -265,7 +293,23 @@ function materializeBoard(raw: RawBoard): PbnBoard {
   if (raw.play?.seat && playState?.phase === "play" && raw.play.seat !== playState.currentActor) {
     raw.diagnostics.push({ severity: "error", message: "Play starting seat does not match the opening leader", line: raw.play.line });
   }
-  parseSection(raw, raw.play, "play", actions, resolvePlaySeat);
+  const starred = parseSection(raw, raw.play, "play", actions, resolvePlaySeat);
+  // A `*` that ends the play early with a Result is a claim of the tricks that settle that result.
+  const result = Number(tagValue("Result"));
+  if (starred && playState?.phase === "play" && tagValue("Result") !== undefined && Number.isInteger(result)) {
+    const claimSeat = claimSeatFor(playState);
+    const contract = playState.contract!;
+    const declaringSide = SEATS.indexOf(contract.declarer) % 2;
+    const trump = contract.strain === "notrump" ? undefined : contract.strain;
+    const won = playState.completedTricks.filter((trick) => SEATS.indexOf(trickWinner(trick, trump)) % 2 === declaringSide).length;
+    const more = result - won;
+    const remaining = remainingTricks(playState);
+    const claim: GameAction | undefined = claimSeat && more >= 0 && more <= remaining
+      ? { type: "claim", seat: claimSeat, tricks: SEATS.indexOf(claimSeat) % 2 === declaringSide ? more : remaining - more }
+      : undefined;
+    if (claim && applyAction(playState, claim).ok) actions.push(claim);
+    else raw.diagnostics.push({ severity: "warning", message: "Play ends with * but the Result tag does not match a claim", line: raw.play?.line ?? 1 });
+  }
   return {
     tags: raw.tags,
     comments: raw.comments,

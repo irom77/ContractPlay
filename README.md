@@ -4,15 +4,16 @@
 >
 > | # | Screen | # | Screen |
 > |---|---|---|---|
-> | 1 | Lobby | 7 | Defending, dummy on your left |
-> | 2 | Seating | 8 | Defending, dummy on your right |
-> | 3 | Auction: your call | 9 | Game menu |
-> | 4 | Auction with hints | 10 | Auto play |
-> | 5 | Declaring 4♠ with dummy | 11 | Hand result |
-> | 6 | Dummy playing for a bot declarer | | |
+> | 1 | Lobby | 8 | Defending, dummy on your right |
+> | 2 | Seating | 9 | Card queued |
+> | 3 | Auction: your call | 10 | Game menu |
+> | 4 | Auction with hints | 11 | Auto play |
+> | 5 | Declaring 4♠ with dummy | 12 | Claim waiting on you |
+> | 6 | Dummy playing for a bot declarer | 13 | Hand result |
+> | 7 | Defending, dummy on your left | | |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/11` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/13` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
 > - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
@@ -37,7 +38,7 @@
 
 ## Status
 
-ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu, and during card play the **Auto play** button (online: **Auto play this hand** in the game menu) lets a bot play your cards until the deal ends, then gives them back. A card that is your only legal play (a singleton in the led suit, or your last card) is played for you after a short pause; turn this off with "Play forced cards automatically" in the deal settings. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
+ContractPlay currently provides a responsive browser table for local deals, configurable bots, PBN import/export, autosaved play, take-back, named hand history and review, hints, and, once the service is deployed, online tables. At any point in a deal you can hand the rest of the hand to the bots from the table menu, and during card play the **Auto play** button (online: **Auto play this hand** in the game menu) lets a bot play your cards until the deal ends, then gives them back. A card that is your only legal play (a singleton in the led suit, or your last card) is played for you after a short pause; turn this off with "Play forced cards automatically" in the deal settings. You can claim the remaining tricks on your turn, either all of them or a number: against robots they check the claim with an exact search, online every human opponent must accept it, and a claimed hand is saved, reviewed, and exported to PBN with its result. While another player is to act you can click one of your cards (or dummy's, if you control it) to queue it; it plays half a second after your turn starts if still legal, and clicking it again unqueues it. Seats whose cards you cannot see show one card back per card held, during card play. With the Hints switch on, the table shows your high-card points, the suggested call or card with a reason, and the meaning of any call you click.
 
 Windows and macOS installer builds pass on GitHub Actions. iOS and iPadOS are paused: the Tauri host still supports them, but CI no longer builds them (see the [platform delivery guide](docs/platform-delivery.md) to resume). The web app and online tables are deployed together to Cloudflare at https://contractplay.niuk.workers.dev. The old GitHub Pages copy has no online entry and is no longer updated. Signed and physical-device builds remain pending their documented setup steps, and `bridge.romaniuk.us` is not set up. Voice and video chat remain planned. See the [platform delivery guide](docs/platform-delivery.md), [roadmap](TODO.md), and [change history](CHANGES.md).
 
@@ -70,7 +71,7 @@ Online tables let four people, with bots filling any empty seats, play one table
 
 - **Lobby.** The lobby lists open tables. A table can be unlisted and then is reachable only by its link, `<address>/#/table/<id>`. There are no accounts: you choose a display name (1-20 characters), and the browser keeps a device secret in local storage that the service stores only as a hash. Clearing browser data or switching device loses your seat.
 - **Seats.** Each of the four seats is empty, a person, or a bot at a skill level you choose. A hand needs all four seats filled and at least one person. The first person to sit is the host and can remove a person between hands; any seated person can free an away player's seat between hands. A newcomer can only take an empty seat.
-- **Play.** The service shuffles with a cryptographically secure generator and enforces every action with the same rules as the solo app. Each player receives only their own cards, dummy after the opening lead, and every hand when the hand ends; when Declarer is a bot, a present human partner in dummy controls both declaring-side hands. Someone not seated sees seats and score only. Bots act on the service after about a second. Each table keeps running totals, with each hand's points going to the side that scored them.
+- **Play.** The service shuffles with a cryptographically secure generator and enforces every action with the same rules as the solo app. Each player receives only their own cards, dummy after the opening lead, and every hand when the hand ends; when Declarer is a bot, a present human partner in dummy controls both declaring-side hands. Someone not seated sees seats and score only. **Claims:** on their turn, whoever controls the hand to act (the declarer for both declaring hands, a defender for their own) can claim "all remaining" or a number of the remaining tricks. Every human opponent must Accept; one Reject cancels it. A robot opponent accepts only when an exact search proves the claim, and rejects if the search cannot finish. The claimer can withdraw. While a claim is pending, play stops and the claimer's hand is shown to the opponents only (not to partner). After a rejection or withdrawal that side cannot claim again until the trick ends, and answers carry the claim's id, so a stale answer is ignored. The accepted claim ends the hand, and the result reads for example "Claimed by South (declarer): 3 of the remaining 4 tricks". Online tables use protocol version 3. Bots act on the service after about a second. Each table keeps running totals, with each hand's points going to the side that scored them.
 - **Away players.** The seat waits. Another seated player can hand it to an Intermediate bot, and the player takes it back on return. The host can hand a present but idle player to a bot after two minutes.
 - **History.** Finished online hands are saved to the device's hand history for review and PBN export; passed-out hands are not saved.
 - **Development admin.** Visit `/admin` on the Cloudflare-hosted app to see listed and unlisted tables and remove a table. This page and its API are currently open without sign-in; add RBAC before public production use.
