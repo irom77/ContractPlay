@@ -318,6 +318,26 @@ describe("OnlineTable play", () => {
     expect(screen.queryByRole("region", { name: "West's hand" })).toBeNull();
   });
 
+  it.each([["east", "left"], ["west", "right"]] as const)("keeps %s's hand clear of a dummy on the %s", (yourSeat, side) => {
+    const service = setup();
+    const game = playCards(oneNoTrump(), 1);
+    const seats = { north: bot, east: bot, south: bot, west: bot, [yourSeat]: human("Bob") };
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat, seats, game: publicGame(game, [yourSeat, "south"]) }));
+    const surface = document.querySelector(".table-surface") as HTMLElement;
+    const longestSuit = Math.max(...(["clubs", "diamonds", "hearts", "spades"] as const).map((suit) => game.hands.south.filter((card) => card.suit === suit).length));
+    expect(surface.classList.contains(`dummy-on-${side}`)).toBe(true);
+    expect(surface.style.getPropertyValue("--dummy-span")).toBe(String(longestSuit));
+  });
+
+  it("marks a hand spread along the top so it clears the status corner", () => {
+    const service = setup();
+    const game = playCards(oneNoTrump(), 1);
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "south", seats: { north: bot, east: bot, south: human("Bob"), west: bot }, game: publicGame(game, ["north", "south"]) }));
+    expect(document.querySelector(".table-surface")!.classList.contains("hand-on-top")).toBe(true);
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 13, yourSeat: "east", seats: { north: bot, east: human("Bob"), south: bot, west: bot }, game: publicGame(game, ["east", "south"]) }));
+    expect(document.querySelector(".table-surface")!.classList.contains("hand-on-top")).toBe(false);
+  });
+
   it("lets a human dummy play both hands when the bot partner declares", async () => {
     const user = userEvent.setup();
     const service = setup();

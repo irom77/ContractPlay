@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import { cardId, SUITS, trickWinner, type Bid, type Card, type Seat, type TrickCard } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import {
@@ -75,6 +75,11 @@ export function TableView({
   const dummyPosition = dummySeat ? tablePositions[(seats.indexOf(dummySeat) - seats.indexOf(bottomSeat) + 4) % 4]! : undefined;
   const dummyVisible = !!contract && (game.currentTrick.length > 0 || game.completedTricks.length > 0 || phase === "complete");
   const fixedPlayHands = fixedSeatHands && phase === "play" && dummyVisible;
+  // A dummy at a side seat is a column as wide as its longest suit; the bottom hand is laid out beside it.
+  const sideDummy = fixedPlayHands && dummySeat && (dummyPosition === "left" || dummyPosition === "right") ? dummyPosition : undefined;
+  // A hand spread along the top shares its height with the status corner, so it starts to the right of it.
+  const handOnTop = fixedPlayHands && game.hands[seats[(seats.indexOf(bottomSeat) + 2) % 4]!].length > 0;
+  const sideDummySpan = sideDummy && dummySeat ? Math.max(1, ...SUITS.map((suit) => game.hands[dummySeat].filter((card) => card.suit === suit).length)) : undefined;
   const completedNsTricks = contract
     ? game.completedTricks.filter((trick) => samePartnership(trickWinner(trick, trump), "north")).length
     : 0;
@@ -95,7 +100,7 @@ export function TableView({
 
   return (
     <section className="table-panel" aria-label={ariaLabel}>
-      <div className={`table-surface ${phase === "play" && showCalls ? "calls-shown" : ""} ${fixedPlayHands && dummyPosition === "right" ? "dummy-on-right" : ""}`}>
+      <div className={`table-surface ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
         {tableWatermark}
         <div className="table-status">
           {contract ? <button className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${game.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={onToggleCalls}>

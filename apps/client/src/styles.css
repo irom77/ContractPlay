@@ -214,6 +214,8 @@ button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max
 .dummy-table-hand { display: flex; gap: calc(.8 * var(--u)); --h: calc(14 * var(--u)); --step: calc(4.2 * var(--u)); }
 .fixed-seat-hand { position: relative; z-index: 4; }
 .fixed-dummy-tag { align-self: center; border-radius: 999px; padding: calc(.4 * var(--u)) calc(1 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-s); font-weight: 900; letter-spacing: .06em; }
+/* In a row of cards the tag hangs just under the hand's left end, so it adds nothing to the width the cards are spread over. */
+.pos-top .fixed-dummy-tag, .pos-bottom .fixed-dummy-tag { position: absolute; top: calc(100% + .6 * var(--u)); left: 0; }
 .pos-left .dummy-table-hand, .pos-right .dummy-table-hand { flex-direction: column; gap: calc(.5 * var(--u)); --h: calc(8.2 * var(--u)); --step: calc(2.7 * var(--u)); }
 .pos-right .dummy-table-hand { align-items: flex-end; }
 .dummy-suit-row { display: flex; }
@@ -321,6 +323,16 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-table { --u: min(1.25vh, .9vw); }
 .online-table .hand-panel { --step: min(calc(16 * var(--u)), calc((94vw - 18.2 * var(--u)) / 12)); }
 .online-table .pos-top .dummy-table-hand, .online-table .pos-bottom .dummy-table-hand { --step: max(calc(4.2 * var(--u)), calc((94vw - 42 * var(--u)) / 9)); }
+/* A dummy at a side seat is a column of 8.2u cards stepped 2.7u, as wide as its longest suit (--dummy-span). The bottom hand
+   takes the rest of the width, so it never runs under that column. */
+.online-table .table-surface { --side-dummy: calc((2 + 8.2 * .7 + 1.5) * var(--u) + (var(--dummy-span, 1) - 1) * 2.7 * var(--u)); }
+.online-table .dummy-on-left .pos-bottom.has-fixed-hand { right: calc(2 * var(--u)); left: var(--side-dummy); transform: none; }
+.online-table .dummy-on-right .pos-bottom.has-fixed-hand { right: var(--side-dummy); left: calc(2 * var(--u)); transform: none; }
+.online-table .dummy-on-left .pos-bottom .dummy-table-hand, .online-table .dummy-on-right .pos-bottom .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--side-dummy) - 44 * var(--u)) / 9)); }
+/* The status corner is capped at 20u wide (longer status text wraps), and a hand spread along the top starts at 24u, clear of it. */
+.online-table .table-status { max-width: calc(20 * var(--u)); }
+.online-table .hand-on-top .pos-top.has-fixed-hand { right: calc(2 * var(--u)); left: calc(24 * var(--u)); width: auto; transform: none; }
+.online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - 68 * var(--u)) / 9)); }
 .online-table .table-surface.dummy-on-right .hint-controls { right: auto; left: calc(2 * var(--u)); align-items: flex-start; }
 .online-table .table-surface.dummy-on-right .hint-controls p { text-align: left; }
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
