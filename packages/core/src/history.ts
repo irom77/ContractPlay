@@ -3,7 +3,8 @@ import type { Card, Seat } from "./cards.js";
 export type Bid = "pass" | "double" | "redouble" | `${1 | 2 | 3 | 4 | 5 | 6 | 7}${"clubs" | "diamonds" | "hearts" | "spades" | "notrump"}`;
 export type GameAction =
   | Readonly<{ type: "bid"; seat: Seat; bid: Bid }>
-  | Readonly<{ type: "play"; seat: Seat; card: Card }>;
+  | Readonly<{ type: "play"; seat: Seat; card: Card }>
+  | Readonly<{ type: "claim"; seat: Seat; tricks: number }>;
 export type GameHistory = Readonly<{ actions: readonly GameAction[]; cursor: number }>;
 
 export const emptyHistory = (): GameHistory => ({ actions: [], cursor: 0 });
