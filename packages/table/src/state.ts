@@ -87,6 +87,10 @@ export function hostAfter(state: TableState, seats: TableState["seats"]): { host
 export const without = <T>(record: Readonly<Record<string, T>>, key: string): Record<string, T> =>
   Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
 
+/** The state with no hand on the table, as before the first deal. */
+export const withoutGame = (state: TableState): TableState =>
+  Object.fromEntries(Object.entries(state).filter(([k]) => k !== "game")) as TableState;
+
 /** The state with its host removed (so a new host, if any, can be added without a stale one). */
 export const withoutHost = (state: TableState): TableState =>
   Object.fromEntries(Object.entries(state).filter(([k]) => k !== "host")) as TableState;

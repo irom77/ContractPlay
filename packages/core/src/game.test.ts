@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal, type Card, type Seat } from "./cards.js";
-import { applyAction, createGameState, playContextFor, redoAction, replayActions, undoAction } from "./game.js";
+import { applyAction, createGameState, playContextFor, redoAction, replayActions, rewindTo, undoAction } from "./game.js";
 import { trickWinner } from "./rules.js";
 
 const initial = () => createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" });
@@ -74,6 +74,15 @@ describe("immutable bridge game transitions", () => {
     expect(redoAction(undone).auction).toEqual(afterTwo.auction);
     const branched = bid(undone, "east", "double");
     expect(replayActions(branched).map((action) => action.type === "bid" ? action.bid : "play")).toEqual(["1clubs", "double"]);
+  });
+
+  it("rewinds several actions at once, keeping them redoable", () => {
+    const afterThree = bid(bid(bid(initial(), "north", "1clubs"), "east", "pass"), "south", "1hearts");
+    const rewound = rewindTo(afterThree, 1);
+    expect(rewound.auction).toEqual(bid(initial(), "north", "1clubs").auction);
+    expect(rewound.history).toEqual({ actions: afterThree.history.actions, cursor: 1 });
+    expect(redoAction(redoAction(rewound)).auction).toEqual(afterThree.auction);
+    expect(rewindTo(afterThree, 9).history.cursor).toBe(3);
   });
 
   it("allows a discard only when a player is void in the led suit", () => {

@@ -183,6 +183,17 @@ describe("OnlineTable seating", () => {
     expect(screen.getByText("NS 420 · EW 50")).toBeTruthy();
   });
 
+  it("groups the running score with the contract and trick count in the top-left status corner during a hand", () => {
+    const service = setup();
+    service.push(tableView({ yourSeat: "north", seats: seatedNorth, handNumber: 1, handInProgress: true, totals: { ns: 420, ew: 50 }, game: publicGame(oneNoTrump(), ["north", "south"]) }));
+    const score = screen.getByRole("group", { name: "Score NS 420 · EW 50" });
+    expect(score.textContent).toBe("42050");
+    expect(score.closest(".table-status")!.querySelector(".trick-count")).toBeTruthy();
+    expect(score.closest(".table-tools")).toBeNull();
+    expect(screen.getByRole("group", { name: "NS 0 · EW 0 tricks" })).toBeTruthy();
+    expect(document.querySelector(".table-status")!.textContent).not.toMatch(/score/i);
+  });
+
   it("copies the table link", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(() => Promise.resolve());
@@ -612,5 +623,64 @@ describe("OnlineTable connection", () => {
     expect(screen.getByRole("alert").textContent).toBe("It isn't your turn.");
     service.refuse("hand-in-progress", view);
     expect(screen.getByRole("alert").textContent).toBe("That isn't possible right now.");
+  });
+
+  describe("game menu", () => {
+    const live = (game: GameState, overrides: Partial<TableView> = {}) => tableView({
+      yourSeat: "north", seats: seatedNorth, host: "north", handNumber: 1, handInProgress: true, game: publicGame(game, ["north"]), ...overrides
+    });
+    const menu = () => screen.getByRole("group", { name: "Game menu", hidden: true });
+    const item = (name: string) => within(menu()).getByRole("button", { name, hidden: true }) as HTMLButtonElement;
+
+    it("is collapsed by default and opens from its toggle", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      const details = menu().closest("details")!;
+      expect(details.open).toBe(false);
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      expect(details.open).toBe(true);
+      await user.click(item("Back to lobby"));
+      expect(service.onLeave).toHaveBeenCalled();
+      expect(details.open).toBe(false);
+    });
+
+    it("offers Take back only after the viewer's own call with only bots since, and sends it", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      expect(item("Take back").disabled).toBe(true);
+      const afterBots = apply(newGame(), { type: "bid", seat: "north", bid: "1clubs" }, { type: "bid", seat: "east", bid: "pass" }, { type: "bid", seat: "south", bid: "pass" });
+      service.push(live(afterBots, { revision: 4 }));
+      expect(item("Take back").disabled).toBe(false);
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(item("Take back"));
+      expect(service.sent.at(-1)).toEqual({ type: "takeBack" });
+      expect(item("Take back").disabled).toBe(true);
+      const humanEast = { ...seatedNorth, east: human("Ann") };
+      service.push(live(afterBots, { revision: 5, seats: humanEast }));
+      expect(item("Take back").disabled).toBe(true);
+    });
+
+    it("offers the host Cancel this hand, and leaves only once the service frees the seat", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(item("Cancel this hand"));
+      expect(service.sent.at(-1)).toEqual({ type: "cancelHand" });
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(item("Leave the table"));
+      expect(service.sent.at(-1)).toEqual({ type: "leave" });
+      expect(service.onLeave).not.toHaveBeenCalled();
+      service.push(tableView({ seats: { ...seatedNorth, north: { kind: "bot", skill: "intermediate" } }, handNumber: 1, handInProgress: true }));
+      expect(service.onLeave).toHaveBeenCalled();
+    });
+
+    it("does not offer a non-host Cancel this hand", () => {
+      const service = setup();
+      service.push(live(newGame(), { host: "east", seats: { ...seatedNorth, east: human("Ann") } }));
+      expect(within(menu()).queryByRole("button", { name: "Cancel this hand", hidden: true })).toBeNull();
+    });
   });
 });

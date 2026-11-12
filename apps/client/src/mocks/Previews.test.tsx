@@ -41,6 +41,14 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(surface()!.classList.contains("dummy-on-right")).toBe(true);
     expect(screen.getByText("Your play")).toBeTruthy();
   },
+  "game-menu": () => {
+    const menu = screen.getByRole("group", { name: "Game menu" });
+    expect(menu.closest("details")!.open).toBe(true);
+    expect(within(menu).getByRole("button", { name: "Back to lobby" })).toBeTruthy();
+    expect((within(menu).getByRole("button", { name: "Take back" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(within(menu).getByRole("button", { name: "Cancel this hand" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Leave the table" })).toBeTruthy();
+  },
   result: () => { expect(screen.getByRole("region", { name: "Hand result" }).textContent).toMatch(/4♠ by North[\s\S]*420/); }
 };
 

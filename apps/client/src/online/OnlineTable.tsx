@@ -4,6 +4,7 @@ import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/pers
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createHandName, handNameFromId } from "../handNames.js";
+import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { TableView } from "../table/TableView.js";
 import { compactCallLabel, isCallAvailable, partnerOf, seatNames } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
@@ -19,7 +20,11 @@ const NOTICE_MS = 5000;
 const HISTORY_LIMIT = 25;
 const HINTS_STORAGE_KEY = "contractplay.hints";
 
-export type OnlineTableProps = { baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect };
+export type OnlineTableProps = {
+  baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect;
+  /** Opens the game menu on arrival (the UI previews show it this way). */
+  menuOpen?: boolean;
+};
 
 function refusalText(reason: RefusalReason): string | undefined {
   if (reason === "stale") return undefined;
@@ -30,16 +35,40 @@ function refusalText(reason: RefusalReason): string | undefined {
 
 const isLive = (game: PublicGame | undefined): boolean => game?.phase === "auction" || game?.phase === "play";
 
-/** The seat that decides the current turn, including a human dummy taking over for a bot declarer. */
-function deciderOf(game: PublicGame, seats: TableViewData["seats"]): Seat {
+/** The seat that decides a card for `seat`, including a human dummy taking over for a bot declarer. */
+function cardDecider(game: PublicGame, seats: TableViewData["seats"], seat: Seat): Seat {
   const declarer = game.contract?.declarer;
-  if (game.phase !== "play" || !declarer) return game.currentActor;
+  if (!declarer) return seat;
   const dummy = partnerOf(declarer);
   const dummyInfo = seats[dummy];
   const humanDummyControls = seats[declarer].kind === "bot" && dummyInfo.kind === "human" &&
     (dummyInfo.standIn !== undefined || !dummyInfo.away);
-  if (humanDummyControls && (game.currentActor === declarer || game.currentActor === dummy)) return dummy;
-  return game.currentActor === dummy ? declarer : game.currentActor;
+  if (humanDummyControls && (seat === declarer || seat === dummy)) return dummy;
+  return seat === dummy ? declarer : seat;
+}
+
+/** The seat that decides the current turn. */
+function deciderOf(game: PublicGame, seats: TableViewData["seats"]): Seat {
+  return game.phase === "play" ? cardDecider(game, seats, game.currentActor) : game.currentActor;
+}
+
+/**
+ * Whether `yourSeat` has a call or card the service would let them take back: their most recent decision,
+ * with only bots (or stand-ins) acting since. Mirrors the service's rule so the menu entry is enabled only when it works.
+ */
+function canTakeBack(game: PublicGame, seats: TableViewData["seats"], yourSeat: Seat): boolean {
+  const mine = seats[yourSeat];
+  if (!isLive(game) || (mine.kind === "human" && mine.standIn !== undefined)) return false;
+  const deciders = [
+    ...game.auction.map((call) => call.seat),
+    ...[...game.completedTricks.flat(), ...game.currentTrick].map((play) => cardDecider(game, seats, play.seat))
+  ];
+  for (const decider of deciders.reverse()) {
+    if (decider === yourSeat) return true;
+    const info = seats[decider];
+    if (info.kind === "human" && info.standIn === undefined) return false;
+  }
+  return false;
 }
 
 /** Adds the finished hand to the device's hand history unless a hand with its id is already there. */
@@ -99,7 +128,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={identity} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect }: OnlineTableProps & { identity: Identity }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false }: OnlineTableProps & { identity: Identity }) {
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -115,6 +144,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   });
   const [bidHint, setBidHint] = useState<{ view: TableViewData; bid: Bid; reason: string }>();
   const [playHint, setPlayHint] = useState<{ view: TableViewData; cardIds: ReadonlySet<string>; reason: string }>();
+  // True from asking to leave the seat until the service confirms it (a view without a seat) or refuses.
+  const [leaving, setLeaving] = useState(false);
   const [explainedCall, setExplainedCall] = useState<{ handNumber: number; auctionLength: number; index: number }>();
   const connection = useRef<TableConnection | undefined>(undefined);
   const previousHand = useRef<number | undefined>(undefined);
@@ -125,6 +156,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       onView: (next) => { setReceived((previous) => receive(previous, next)); setWaiting(false); },
       onRefused: (reason) => {
         setWaiting(false);
+        setLeaving(false);
         const text = refusalText(reason);
         setNotice(text === undefined ? undefined : { text });
       },
@@ -171,6 +203,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     const timer = setTimeout(() => setIdleTurn(turn.key), Math.max(0, turn.since + IDLE_MS - Date.now()));
     return () => clearTimeout(timer);
   }, [turn]);
+
+  useEffect(() => {
+    if (leaving && view && !view.yourSeat) onLeave();
+  }, [leaving, view, onLeave]);
 
   const toggleHints = () => setHintsOn((current) => {
     const next = !current;
@@ -269,6 +305,20 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       if (!live || seat === yourSeat || info.kind !== "human" || info.standIn !== undefined) return false;
       return info.away || (view.host === yourSeat && decider === seat && idleTurn === turn?.key);
     };
+    const isHost = view.host === yourSeat;
+    const menuItems: GameMenuItem[] = [
+      { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: "Keep your seat and return to the lobby" },
+      {
+        id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
+        title: "Undo your last call or card, and any bot play since, to choose again",
+        onSelect: () => { if (!inputDisabled) { setWaiting(true); send({ type: "takeBack" }); } }
+      },
+      ...(live && isHost ? [{ id: "cancel", label: "Cancel this hand", tone: "danger" as const, disabled: status !== "open",
+        title: "Abandon the hand for everyone, unscored, and return to seating", onSelect: () => send({ type: "cancelHand" }) }] : []),
+      { id: "leave", label: "Leave the table", tone: "danger", disabled: status !== "open" || leaving,
+        title: live ? "Give up your seat; a bot finishes the hand for you" : "Give up your seat and return to the lobby",
+        onSelect: () => { setLeaving(true); send({ type: "leave" }); } }
+    ];
     const displayedTrick = holding && game.currentTrick.length === 0
       ? hold.cards
       : game.currentTrick.length ? game.currentTrick : lastTrickOpen ? game.completedTricks.at(-1) ?? [] : [];
@@ -310,7 +360,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 return explainBid(game.auction, index, view.style, skill);
               }
             } : undefined}
-            tools={<><span className="online-totals">{totals}</span>{backButton}</>}
+            matchScore={view.totals}
+            tools={<GameMenu items={menuItems} defaultOpen={menuOpen} />}
             overlay={<>
               {live ? <div className="hint-controls">
                 {hintsOn && actingSeat && game.phase === "auction" ? <strong className="hand-points" aria-label={`${highCardPoints(game.hands[game.currentActor])} high-card points`}>{highCardPoints(game.hands[game.currentActor])} HCP</strong> : null}

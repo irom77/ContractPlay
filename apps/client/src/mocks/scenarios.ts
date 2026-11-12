@@ -120,7 +120,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean };
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
 
@@ -172,6 +172,10 @@ export const previewScreens: readonly PreviewScreen[] = [
   {
     id: "defending-right", title: "Defending, dummy on your right", detail: "You are West; dummy South sits on your right and the hint corner moves to the left.",
     build: () => playUntilView({ west: "Alex" }, "west", moment(["west"], 2))
+  },
+  {
+    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, take back your last card, cancel the hand, or leave.",
+    build: () => ({ ...playUntilView({ east: "Alex" }, "east", moment(["east"], 2)), menuOpen: true })
   },
   {
     id: "result", title: "Hand result", detail: "All 52 cards played: the contract, the score, and every hand revealed.",

@@ -49,7 +49,6 @@ describe("dealing", () => {
   it("passes out, allows the next deal, and refuses seat changes during a hand", () => {
     let t = fourHumans();
     t = sendOk(t, "p0", { type: "deal" }, 1, seededRandom(2));
-    expect(send(t, "p0", { type: "leave" }).refused).toBe("hand-in-progress");
     expect(send(t, "p0", { type: "setBot", seat: "east", skill: "expert" }).refused).toBe("hand-in-progress");
     expect(send(t, "p0", { type: "clearSeat", seat: "east" }).refused).toBe("hand-in-progress");
     expect(send(t, "p0", { type: "deal" }).refused).toBe("not-ready");
@@ -175,5 +174,90 @@ describe("bots", () => {
       }
     });
     expect(sawTrick).toBe(true);
+  });
+});
+
+/** Plays bots until a human is to act, so the table rests on a human decision. */
+async function botsUntilHuman(state: TableState): Promise<TableState> {
+  let t = state;
+  for (let seat = botToAct(t); seat !== undefined; seat = botToAct(t)) {
+    const { chooseBotAction } = await import("./hand.js");
+    t = reduce(t, { type: "bot", revision: t.revision, action: (await chooseBotAction(t))!, at: 5 }, seededRandom(1)).state;
+  }
+  return t;
+}
+
+describe("taking back", () => {
+  it("rewinds the sender's last call along with every bot action since", async () => {
+    let t = await botsUntilHuman(sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(7)));
+    const before = t;
+    const seat = t.game!.currentActor;
+    expect(seat).toBe("north");
+    t = sendOk(t, "alice", act(t, pass("north")));
+    t = await botsUntilHuman(t);
+    expect(t.game!.auction.length).toBeGreaterThan(before.game!.auction.length + 1);
+    const back = sendOk(t, "alice", { type: "takeBack" }, 9);
+    expect(back.game!.auction).toEqual(before.game!.auction);
+    expect(back.game!.currentActor).toBe("north");
+    expect(back.revision).toBe(t.revision + 1);
+    expect(botToAct(back)).toBeUndefined();
+    // the new call replaces the taken-back one
+    const again = sendOk(back, "alice", act(back, { type: "bid", seat: "north", bid: "7notrump" }));
+    expect(again.game!.auction.at(-1)!.bid).toBe("7notrump");
+  });
+
+  it("takes back a card played to a trick", async () => {
+    let t = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(7));
+    t = await playOut(t, undefined, (state) => state.game!.phase === "play" && state.game!.currentTrick.length > 0 && botToAct(state) === undefined);
+    const before = t;
+    const seat = t.game!.currentActor;
+    const card = before.game!.hands[seat].find((c) => validatePlay(before.game!.hands[seat], c, before.game!.currentTrick[0]?.card.suit).legal)!;
+    t = sendOk(t, "alice", act(t, { type: "play", seat, card }));
+    const back = sendOk(t, "alice", { type: "takeBack" });
+    expect(back.game!.currentTrick).toEqual(before.game!.currentTrick);
+    expect(back.game!.hands[seat]).toEqual(before.game!.hands[seat]);
+  });
+
+  it("never undoes another human's decision, and refuses with nothing of yours to take back", () => {
+    let t = sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(4));
+    expect(send(t, "p0", { type: "takeBack" }).refused).toBe("not-allowed");
+    t = sendOk(t, "p0", act(t, pass("north")));
+    t = sendOk(t, "p1", act(t, pass("east")));
+    expect(send(t, "p0", { type: "takeBack" }).refused).toBe("not-allowed");
+    expect(send(t, "zed", { type: "takeBack" }).refused).toBe("not-seated");
+    const back = sendOk(t, "p1", { type: "takeBack" });
+    expect(back.game!.auction).toHaveLength(1);
+    expect(back.game!.currentActor).toBe("east");
+  });
+});
+
+describe("cancelling and leaving a hand", () => {
+  it("lets only the host cancel the hand in progress, unscored", () => {
+    let t = sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(4));
+    t = sendOk(t, "p0", act(t, { type: "bid", seat: "north", bid: "1clubs" }));
+    expect(send(t, "p1", { type: "cancelHand" }).refused).toBe("not-allowed");
+    const cancelled = sendOk(t, "p0", { type: "cancelHand" });
+    expect(cancelled.game).toBeUndefined();
+    expect(cancelled.totals).toEqual({ ns: 0, ew: 0 });
+    expect(viewFor(cancelled, "p0").canDeal).toBe(true);
+    expect(send(cancelled, "p0", { type: "cancelHand" }).refused).toBe("not-allowed");
+    expect(sendOk(cancelled, "p2", { type: "deal" }, 1, seededRandom(5)).handNumber).toBe(2);
+  });
+
+  it("hands a leaving player's seat to a bot mid-hand and passes host on", () => {
+    const t = sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(4));
+    const left = sendOk(t, "p0", { type: "leave" });
+    expect(left.seats.north).toEqual({ kind: "bot", skill: "intermediate" });
+    expect(left.host).toBe("p1");
+    expect(left.game).toBe(t.game);
+    expect(botToAct(left)).toBe("north");
+  });
+
+  it("abandons the hand when the last human leaves it", () => {
+    const t = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(4));
+    const left = sendOk(t, "alice", { type: "leave" });
+    expect(left.game).toBeUndefined();
+    expect(left.seats.north).toEqual({ kind: "empty" });
+    expect(botToAct(left)).toBeUndefined();
   });
 });

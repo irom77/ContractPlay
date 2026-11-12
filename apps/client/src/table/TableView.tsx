@@ -43,6 +43,8 @@ export type TableViewProps = {
   onBid?(bid: Bid): void; onPlay?(seat: Seat, card: Card): void;
   hintedBid?: Bid | undefined; hintedCards?: ReadonlySet<string> | undefined;
   explainCall?: { shown?: number | undefined; onToggle(index: number): void; text(index: number): string } | undefined;
+  /** Running match score, shown under the trick count in the top-left status card. */
+  matchScore?: { ns: number; ew: number } | undefined;
   tools?: React.ReactNode;               // menu + fullscreen (top-right)
   overlay?: React.ReactNode;             // score panel, review/history controls, hint controls, messages
 };
@@ -56,7 +58,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false,
-  cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, tools, overlay
+  cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -102,12 +104,18 @@ export function TableView({
     <section className="table-panel" aria-label={ariaLabel}>
       <div className={`table-surface ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
         {tableWatermark}
-        <div className="table-status">
-          {contract ? <button className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${game.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={onToggleCalls}>
+        <div className={`table-status${contract ? " has-contract" : ""}`}>
+          {contract ? <button style={{ gridRow: `1 / span ${1 + (contract ? 1 : 0) + (matchScore ? 1 : 0)}` }} className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${game.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={onToggleCalls}>
             <strong>{contractText(contract)}</strong><span>{seatNames[contract.declarer][0]}</span>
           </button> : null}
-          {contract ? <span className="trick-count" role="group" aria-label={`NS ${completedNsTricks} · EW ${completedEwTricks} tricks`} aria-live="polite">
-            <span>NS<b>{completedNsTricks}</b></span><span>EW<b>{completedEwTricks}</b></span>
+          {contract || matchScore ? <>
+            <span className="hud-side hud-ns" aria-hidden="true">NS</span><span className="hud-side hud-ew" aria-hidden="true">EW</span>
+          </> : null}
+          {contract ? <span className="hud-row trick-count" role="group" aria-label={`NS ${completedNsTricks} · EW ${completedEwTricks} tricks`} aria-live="polite" title="Tricks won this hand">
+            <b className="hud-ns">{completedNsTricks}</b><b className="hud-ew">{completedEwTricks}</b>
+          </span> : null}
+          {matchScore ? <span className="hud-row match-score" role="group" aria-label={`Score NS ${matchScore.ns} · EW ${matchScore.ew}`} title="Running score at this table">
+            <span className="hud-ns">{matchScore.ns}</span><span className="hud-ew">{matchScore.ew}</span>
           </span> : null}
           <span className="status-pill" aria-live="polite">{statusText}</span>
         </div>

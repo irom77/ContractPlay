@@ -53,7 +53,16 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 
 /* ---------- Corners of the table ---------- */
 .table-status, .table-tools, .history-controls, .hint-controls { position: absolute; z-index: 6; display: flex; gap: var(--u); }
-.table-status { top: calc(1.5 * var(--u)); left: calc(2 * var(--u)); flex-direction: column; align-items: flex-start; }
+/* The status card: contract on the left; NS and EW columns with tricks won (gold) over the running score; whose turn underneath. */
+.table-status { top: calc(1.5 * var(--u)); left: calc(2 * var(--u)); display: grid; grid-template-columns: repeat(2, minmax(2.6em, auto)); grid-auto-flow: row; align-items: center; justify-items: center; column-gap: calc(.4 * var(--u)); row-gap: calc(.2 * var(--u)); border: 1px solid var(--line); border-radius: 10px; padding: calc(.9 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .62); box-shadow: 0 4px 12px #0005; font-variant-numeric: tabular-nums; }
+.table-status.has-contract { grid-template-columns: auto repeat(2, minmax(2.6em, auto)); }
+.table-status .contract-badge { grid-column: 1; align-self: center; margin-right: calc(.8 * var(--u)); }
+.hud-row { display: contents; }
+.hud-ns { grid-column: -3; }
+.hud-ew { grid-column: -2; }
+.hud-side { color: var(--muted); font-size: var(--text-s); font-weight: 700; letter-spacing: .08em; line-height: 1; }
+.trick-count b { color: var(--gold); font-size: var(--text-l); font-weight: 800; line-height: 1.1; }
+.match-score span { color: var(--ink); font-size: var(--text-s); font-weight: 600; opacity: .85; }
 .table-tools { top: calc(1.5 * var(--u)); right: calc(2 * var(--u)); flex-direction: column; align-items: flex-end; }
 .table-tools-row { display: flex; align-items: center; gap: var(--u); }
 .history-controls { bottom: var(--u); left: calc(2 * var(--u)); }
@@ -73,10 +82,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .contract-badge > span { font-size: var(--text-m); font-weight: 700; color: #4b5953; }
 .contract-badge:disabled { cursor: default; }
 .contract-badge[aria-expanded="true"]:not(:disabled) { box-shadow: 0 0 0 3px var(--gold); }
-.trick-count { display: flex; gap: calc(.7 * var(--u)); }
-.trick-count span { border-radius: 7px; padding: calc(.5 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; }
-.trick-count b { margin-left: .4em; color: var(--gold); font-size: var(--text-l); }
-.status-pill { border-radius: 99px; padding: calc(.6 * var(--u)) calc(1.4 * var(--u)); background: rgba(8, 28, 24, .55); color: var(--gold); font-size: var(--text-m); font-weight: 600; }
+.status-pill { grid-column: 1 / -1; justify-self: stretch; color: var(--gold); font-size: var(--text-m); font-weight: 600; text-align: left; }
+.table-status:is(.has-contract, :has(.hud-side)) .status-pill { margin-top: calc(.5 * var(--u)); border-top: 1px solid var(--line); padding-top: calc(.6 * var(--u)); }
 
 /* The last trick is a small badge with the card that won it; a click lays the whole trick out on the table, another clears it. */
 .last-trick-button { display: flex; align-items: center; gap: calc(.8 * var(--u)); border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px; padding: calc(.4 * var(--u)) calc(.5 * var(--u)) calc(.4 * var(--u)) calc(1.2 * var(--u)); background: rgba(8, 28, 24, .55); color: var(--ink); font-size: var(--text-s); font-weight: 700; white-space: nowrap; cursor: pointer; }
@@ -89,6 +96,10 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .table-menu { position: relative; z-index: 8; }
 .table-menu-content { position: absolute; top: calc(100% + 8px); right: 0; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--panel); box-shadow: 0 14px 36px #061815cc; }
 .menu-deal { width: 100%; margin-bottom: 14px; }
+.game-menu-content { width: min(260px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; }
+.game-menu-content .menu-deal { margin-bottom: 0; }
+.game-menu-content .menu-danger { margin-top: 6px; color: #ffb3a7; }
+.game-menu-content .menu-danger + .menu-danger { margin-top: 0; }
 .menu-settings, .setup-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
 .menu-settings label, .setup-controls label { display: grid; flex: 1 1 130px; gap: 5px; color: #cfdbd1; font-size: 12px; font-weight: 600; text-align: left; }
 .menu-settings select, .setup-controls select { min-width: 0; height: 38px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 10px; background: #21483e; color: var(--ink); font-size: 13px; }
@@ -354,10 +365,10 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-table .pos-bottom.has-fixed-hand { right: var(--bottom-right); left: var(--bottom-left); transform: none; }
 .online-table .pos-bottom .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--bottom-left) - var(--bottom-right) - 42 * var(--u)) / 9)); }
 .online-table.play-layout .hint-controls p { max-width: calc(var(--hint-room) - 2 * var(--u)); }
-.online-table .table-status { max-width: calc(20 * var(--u)); }
+.online-table .table-status { max-width: calc(25 * var(--u)); }
 .online-table .table-tools-row { flex-direction: column; align-items: flex-end; }
-.online-table .hand-on-top .pos-top.has-fixed-hand { right: var(--tools-room); left: calc(24 * var(--u)); width: auto; transform: none; }
-.online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--tools-room) - 66 * var(--u)) / 9)); }
+.online-table .hand-on-top .pos-top.has-fixed-hand { right: var(--tools-room); left: calc(28 * var(--u)); width: auto; transform: none; }
+.online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--tools-room) - 70 * var(--u)) / 9)); }
 .online-table .table-surface.dummy-on-right .hint-controls { right: auto; left: calc(2 * var(--u)); align-items: flex-start; }
 .online-table .table-surface.dummy-on-right .hint-controls p { text-align: left; }
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

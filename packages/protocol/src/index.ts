@@ -33,7 +33,8 @@ export type ClientMessage =
   | { type: "clearSeat"; seat: Seat }
   | { type: "deal" }
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
-  | { type: "handToBot"; seat: Seat } | { type: "resume" };
+  | { type: "handToBot"; seat: Seat } | { type: "resume" }
+  | { type: "takeBack" } | { type: "cancelHand" };
 
 export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "already-seated" | "not-allowed" | "hand-in-progress" | "not-ready" | "stale" | "not-your-turn" | "illegal";
 
@@ -105,7 +106,7 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
       return seat && skill ? { type: "setBot", seat, skill } : undefined;
     }
-    case "leave": case "deal": case "resume": return { type: data.type };
+    case "leave": case "deal": case "resume": case "takeBack": case "cancelHand": return { type: data.type };
     case "act": {
       const handNumber = count(data.handNumber), revision = count(data.revision), action = parseAction(data.action);
       return handNumber !== undefined && revision !== undefined && action ? { type: "act", handNumber, revision, action } : undefined;

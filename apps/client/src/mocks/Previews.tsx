@@ -33,7 +33,7 @@ function PreviewScreen({ data }: { data: PreviewData }) {
     ? { listTables: () => Promise.resolve(data.tables), createTable: () => Promise.resolve({ error: "preview" }) }
     : undefined, [data]);
   if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} onOpenTable={() => {}} onSolo={() => {}} />;
-  return <OnlineTable baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} connect={connect!} />;
+  return <OnlineTable baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} />;
 }
 
 export type PreviewsProps = { index: number; onIndex(next: number): void };

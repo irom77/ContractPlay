@@ -210,6 +210,11 @@ export function undoAction(state: GameState): GameState {
   return rebuild(state, Math.max(0, state.history.cursor - 1));
 }
 
+/** The game as it stood after its first `count` recorded actions, keeping the later ones as redoable history. */
+export function rewindTo(state: GameState, count: number): GameState {
+  return rebuild(state, Math.min(Math.max(0, count), state.history.cursor));
+}
+
 export function redoAction(state: GameState): GameState {
   return rebuild(state, Math.min(state.history.actions.length, state.history.cursor + 1));
 }

@@ -1,8 +1,8 @@
-import { applyAction, createDeck, createGameState, deal as dealCards, playContextFor, SEATS, shuffle } from "@contractplay/core";
+import { applyAction, createDeck, createGameState, deal as dealCards, playContextFor, rewindTo, SEATS, shuffle } from "@contractplay/core";
 import type { GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
-  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf,
+  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf, withoutGame,
   type Outcome, type PlayerId, type TableState
 } from "./state.js";
 
@@ -76,6 +76,33 @@ export function act(state: TableState, player: PlayerId, message: { handNumber: 
   if (message.handNumber !== state.handNumber || message.revision !== state.revision) return refuse(state, "stale");
   if (!controls(state, player, message.action.seat)) return refuse(state, "not-your-turn");
   return record(state, message.action, at, true);
+}
+
+/**
+ * Takes back the sender's most recent call or card in the live hand, together with every bot action made since.
+ * Refused when another human (not a stand-in bot) has acted after it, so nobody else's decision is ever undone.
+ */
+export function takeBack(state: TableState, player: PlayerId, at: number): Outcome {
+  const mine = seatOf(state, player);
+  if (!mine) return refuse(state, "not-seated");
+  const game = state.game;
+  const own = state.seats[mine];
+  if (!game || betweenHands(state) || (own.kind === "human" && own.standIn !== undefined)) return refuse(state, "not-allowed");
+  for (let count = game.history.cursor - 1; count >= 0; count--) {
+    const before = rewindTo(game, count);
+    const decider = deciderOf({ ...state, game: before }, game.history.actions[count]!.seat);
+    if (decider === mine) return accept(state, { game: before, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+    const s = state.seats[decider];
+    if (s.kind === "human" && s.standIn === undefined) return refuse(state, "not-allowed");
+  }
+  return refuse(state, "not-allowed");
+}
+
+/** The host abandons the hand in progress: it is not scored and the table returns to seating. */
+export function cancelHand(state: TableState, player: PlayerId, at: number): Outcome {
+  if (!seatOf(state, player)) return refuse(state, "not-seated");
+  if (state.host !== player || betweenHands(state)) return refuse(state, "not-allowed");
+  return accept(withoutGame(state), { turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
 export function applyBotEvent(state: TableState, revision: number, action: GameAction, at: number): Outcome {

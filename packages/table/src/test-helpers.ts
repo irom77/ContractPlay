@@ -36,11 +36,11 @@ export function tableWithBots(): TableState {
   return state;
 }
 
-/** Plays the hand to its end: bots through `bot` events, human seats by asking a bot and sending `act`. Calls `onStep` after each accepted action. */
-export async function playOut(start: TableState, onStep?: (state: TableState, action: GameAction) => void): Promise<TableState> {
+/** Plays the hand to its end (or until `until` holds): bots through `bot` events, human seats by asking a bot and sending `act`. Calls `onStep` after each accepted action. */
+export async function playOut(start: TableState, onStep?: (state: TableState, action: GameAction) => void, until?: (state: TableState) => boolean): Promise<TableState> {
   let state = start;
   let at = 10;
-  while (state.game && state.game.phase !== "complete" && state.game.phase !== "passed-out") {
+  while (state.game && state.game.phase !== "complete" && state.game.phase !== "passed-out" && !until?.(state)) {
     const game = state.game;
     at += 1;
     const botAction = await chooseBotAction(state);

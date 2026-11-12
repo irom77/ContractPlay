@@ -13,7 +13,9 @@ const valid: ClientMessage[] = [
   { type: "act", handNumber: 1, revision: 5, action: { type: "bid", seat: "south", bid: "pass" } },
   { type: "act", handNumber: 2, revision: 9, action: { type: "play", seat: "west", card: { suit: "hearts", rank: "T" } } },
   { type: "handToBot", seat: "south" },
-  { type: "resume" }
+  { type: "resume" },
+  { type: "takeBack" },
+  { type: "cancelHand" }
 ];
 const parse = (v: unknown) => parseClientMessage(JSON.stringify(v));
 
