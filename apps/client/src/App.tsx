@@ -693,6 +693,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
           lastTrickOpen={lastTrickOpen}
           onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
           showBottomHand={showBottomHand}
+          // Once the last trick has cleared, the whole deal is laid face-up around the result.
+          revealedHands={displayedTrick.length ? undefined : shownGame.initialDeal}
           cardsDisabled={!!temporaryTrick || pickingClaim || soloClaimPending}
           queueSeats={canAct ? [] : queueOwnerSeats}
           queuedCard={activeQueued}

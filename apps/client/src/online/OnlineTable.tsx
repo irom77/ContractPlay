@@ -9,12 +9,13 @@ import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { TableView } from "../table/TableView.js";
 import { ClaimPanel } from "../table/ClaimPanel.js";
+import { DraggableBanner } from "../table/DraggableBanner.js";
 import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
-import { SeatingPanel, type Outgoing } from "./SeatingPanel.js";
+import { HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.js";
 
 /** How long the host waits on a present player's turn before "Hand to a bot" is offered (the service's limit). */
 const IDLE_MS = 120_000;
@@ -22,6 +23,8 @@ const TRICK_HOLD_MS = 2000;
 const NOTICE_MS = 5000;
 const HISTORY_LIMIT = 25;
 const HINTS_STORAGE_KEY = "contractplay.hints";
+/** Where the player last dragged the Auto play / bot-playing banner. */
+const resumeBannerKey = "contractplay.resumeBanner";
 
 export type OnlineTableProps = {
   baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect;
@@ -182,6 +185,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const lastActions = useRef<{ handNumber: number; count: number } | undefined>(undefined);
   // The revision the claim picker was opened at; it closes when the table moves on.
   const [claimPickedAt, setClaimPickedAt] = useState<number>();
+  // The finished hand whose result table the viewer left for the seating screen.
+  const [seatingAfter, setSeatingAfter] = useState<number>();
   const queueOwners = view ? queueOwnerSeats(view) : [];
   const activeQueued = queued && view?.game && queueOwners.includes(queued.seat) && queueStillValid(view.game, queued, String(view.handNumber), !!view.claim) ? queued : undefined;
 
@@ -491,13 +496,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 {visiblePlayHint && game.phase === "play" ? <p role="status">{visiblePlayHint.reason}</p> : null}
                 <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
               </div> : null}
-              {standIn && mine.autoPlay ? <div className="online-resume" role="group" aria-label="Auto play is on">
-                <span>Auto play: a bot plays your cards until this hand ends.</span>
-                <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>Stop auto play</button>
-              </div> : standIn ? <div className="online-resume" role="group" aria-label="A bot is playing for you">
-                <span>A bot is playing for you.</span>
-                <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>Take my seat back</button>
-              </div> : null}
+              {standIn ? <DraggableBanner className="online-resume" storageKey={resumeBannerKey} label={mine.autoPlay ? "Auto play is on" : "A bot is playing for you"}>
+                <span>{mine.autoPlay ? "Auto play: a bot plays your cards until this hand ends." : "A bot is playing for you."}</span>
+                <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>{mine.autoPlay ? "Stop auto play" : "Take my seat back"}</button>
+              </DraggableBanner> : null}
               {view.claimRejected ? <p className="claim-notice" role="status">{claimRejectedText(view.claimRejected)}</p> : null}
               {statusLine}
             </>}
@@ -507,7 +509,52 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     );
   }
 
+  // A finished hand: all 52 cards face-up at their seats, with the result, score, and Deal in the middle of the table.
+  if (game && view.revealed && !view.handInProgress && seatingAfter !== view.handNumber) {
+    const openSeating = () => setSeatingAfter(view.handNumber);
+    const resultMenu: GameMenuItem[] = [
+      { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: yourSeat ? "Keep your seat and return to the lobby" : "Return to the lobby" },
+      { id: "seating", label: "Seating", onSelect: openSeating, title: "Change seats, bots, and skill levels before the next deal" },
+      ...(yourSeat ? [{ id: "leave", label: "Leave the table", tone: "danger" as const, disabled: status !== "open" || leaving,
+        title: "Give up your seat and return to the lobby", onSelect: () => { setLeaving(true); send({ type: "leave" }); } }] : [])
+    ];
+    return (
+      <main className="app-shell">
+        <div className="game-layout online-table play-layout result-layout">
+          <TableView
+            game={game}
+            bottomSeat={yourSeat ?? "south"}
+            displayedTrick={[]}
+            showCalls={false}
+            onToggleCalls={() => undefined}
+            lastTrickOpen={false}
+            onToggleLastTrick={() => undefined}
+            showBottomHand={false}
+            revealedHands={view.revealed}
+            statusText={game.phase === "complete" ? "Hand complete" : "Passed out"}
+            ariaLabel={`Bridge table ${view.name}, hand result`}
+            seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat} onHandToBot={undefined} seat={seat} />}
+            matchScore={view.totals}
+            tools={<GameMenu items={resultMenu} />}
+            overlay={<>
+              <section className="score-panel result-panel" aria-label="Hand result">
+                <HandResultSummary game={game} />
+                <p className="result-totals">Table score: {totals}</p>
+                <div className="result-actions">
+                  {yourSeat ? <button className="primary-button" type="button" disabled={!view.canDeal} title={view.canDeal ? "Deal the next hand" : "Every seat needs a player or a bot before the next deal"} onClick={() => send({ type: "deal" })}>Deal</button> : null}
+                  <button className="secondary-button" type="button" onClick={openSeating}>{yourSeat ? "Seating" : "Take a seat"}</button>
+                </div>
+              </section>
+              {statusLine}
+            </>}
+          />
+        </div>
+      </main>
+    );
+  }
+
   return <SeatingPanel view={view} totals={totals} statusLine={statusLine} backButton={backButton} copyNote={copyNote}
+    onShowResult={game && view.revealed && !view.handInProgress ? () => setSeatingAfter(undefined) : undefined}
     onCopy={() => {
       const link = `${location.origin}${location.pathname}#/table/${view.id}`;
       const shown = () => setCopyNote(`Copy this link: ${link}`);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { cardId, SUITS, trickWinner, type Bid, type Card, type Seat, type TrickCard } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
+import { highCardPoints } from "@contractplay/bots";
 import {
   biddingStrains,
   callChipClass,
@@ -55,6 +56,8 @@ export type TableViewProps = {
   explainCall?: { shown?: number | undefined; onToggle(index: number): void; text(index: number): string } | undefined;
   /** Running match score, shown under the trick count in the top-left status card. */
   matchScore?: { ns: number; ew: number } | undefined;
+  /** Once the hand is over: the whole deal, laid face-up at each seat with its high-card points. Nothing is playable. */
+  revealedHands?: Readonly<Record<Seat, readonly Card[]>> | undefined;
   tools?: React.ReactNode;               // menu + fullscreen (top-right)
   overlay?: React.ReactNode;             // score panel, review/history controls, hint controls, messages
 };
@@ -68,7 +71,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, exposedSeat,
-  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, tools, overlay
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -86,6 +89,7 @@ export function TableView({
   const dummySeat = contract ? partnerOf(contract.declarer) : undefined;
   const dummyPosition = dummySeat ? tablePositions[(seats.indexOf(dummySeat) - seats.indexOf(bottomSeat) + 4) % 4]! : undefined;
   const dummyVisible = !!contract && (game.currentTrick.length > 0 || game.completedTricks.length > 0 || phase === "complete");
+  const revealed = revealedHands && (phase === "complete" || phase === "passed-out") ? revealedHands : undefined;
   const fixedPlayHands = fixedSeatHands && phase === "play" && dummyVisible;
   // A dummy at a side seat is a column as wide as its longest suit; the bottom hand is laid out beside it.
   const sideDummy = fixedPlayHands && dummySeat && (dummyPosition === "left" || dummyPosition === "right") ? dummyPosition : undefined;
@@ -101,7 +105,7 @@ export function TableView({
   // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.
   const playFromDummy = canAct && phase === "play" && dummyVisible && actingSeat === dummySeat && positionOf(actingSeat) !== "bottom";
   const handIsInteractive = canAct && !playFromDummy;
-  const handSeat: Seat | undefined = fixedPlayHands ? undefined : handIsInteractive ? actingSeat : showBottomHand || playFromDummy ? bottomSeat : undefined;
+  const handSeat: Seat | undefined = fixedPlayHands || revealed ? undefined : handIsInteractive ? actingSeat : showBottomHand || playFromDummy ? bottomSeat : undefined;
   const handCards = handSeat ? sortHand(game.hands[handSeat]) : [];
   const handIsDummy = dummyVisible && handSeat === dummySeat;
   const lastTrick = game.completedTricks.at(-1);
@@ -118,7 +122,7 @@ export function TableView({
 
   return (
     <section className="table-panel" aria-label={ariaLabel}>
-      <div className={`table-surface ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
+      <div className={`table-surface ${revealed ? "hands-revealed" : ""} ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
         {tableWatermark}
         <div className={`table-status${contract ? " has-contract" : ""}`}>
           {contract ? <button style={{ gridRow: `1 / span ${1 + (contract ? 1 : 0) + (matchScore ? 1 : 0)}` }} className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${game.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={onToggleCalls}>
@@ -148,11 +152,12 @@ export function TableView({
           const position = positionOf(seat);
           const hasPlayed = phase === "play" && game.currentTrick.some((play) => play.seat === seat);
           const isActor = shownActor === seat && liveTurn;
-          const seatCalls = showCalls ? game.auction.map((entry, index) => ({ ...entry, index })).filter((entry) => entry.seat === seat) : [];
+          // The result table keeps the felt to the deal and the score; the auction stays in the hand's review.
+          const seatCalls = showCalls && !revealed ? game.auction.map((entry, index) => ({ ...entry, index })).filter((entry) => entry.seat === seat) : [];
           const explainedHere = seatCalls.find(({ index }) => index === shownExplanation);
           const vulnerable = game.vulnerability === "Both" || (game.vulnerability === "NS" && samePartnership(seat, "north")) || (game.vulnerability === "EW" && samePartnership(seat, "east"));
           const isDealer = game.dealer === seat;
-          const seatCards = fixedPlayHands
+          const seatCards = revealed ? sortHand([...revealed[seat]]) : fixedPlayHands
             ? sortHand(game.hands[seat])
             : dummyVisible && dummySeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : exposedSeat === seat && position !== "bottom" ? sortHand(game.hands[seat]) : [];
           const seatHasCards = seatCards.length > 0;
@@ -161,19 +166,21 @@ export function TableView({
           const showBacks = phase === "play" && !seatHasCards && held > 0 && position !== "bottom";
           // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
           const isDummy = dummyVisible && seat === dummySeat;
+          const points = revealed ? highCardPoints([...revealed[seat]]) : undefined;
           const seatCanPlay = fixedPlayHands ? canAct && shownActor === seat : playFromDummy && seat === dummySeat;
-          return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards ? "has-dummy" : ""} ${showBacks ? "has-backs" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
+          return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards && !revealed ? "has-dummy" : ""} ${revealed ? "has-revealed-hand" : ""} ${showBacks ? "has-backs" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
             {/* The head row: one line beside a hand spread along the top or bottom, invisible (display: contents) elsewhere. */}
             <div className="seat-head">
             <span className={`seat-compass ${isDummy ? "dummy-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}${showBacks ? `, ${held} cards` : ""}`} title={`${seatNames[seat]}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
             {seatLabel?.(seat)}
+            {points !== undefined ? <span className="hcp-badge" title="High-card points: A 4, K 3, Q 2, J 1">{points} HCP</span> : null}
             {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
               ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
               : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null}
             </div>
             {explainedHere && explainCall ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainCall.text(explainedHere.index)}</p> : null}
             {showBacks ? <div className="hidden-hand" aria-hidden="true">{Array.from({ length: held }, (_, index) => <span className="card-back" key={index} />)}</div> : null}
-            {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat ? "dummy " : ""}hand`}>
+            {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat && !revealed ? "dummy " : ""}hand`}>
               {handSuitOrder(seatCards).map((suit) => {
                 const suitCards = seatCards.filter((card) => card.suit === suit);
                 return suitCards.length ? <div className="dummy-suit-row" key={suit}>{suitCards.map((card) => seatCanPlay
@@ -207,7 +214,7 @@ export function TableView({
         {overlay}
       </div>
 
-      {fixedPlayHands ? null : <div className="hand-zone">
+      {fixedPlayHands || revealed ? null : <div className="hand-zone">
         {handSeat && handCards.length ? <section className="hand-panel" aria-label={`${seatNames[handSeat]}'s ${handIsInteractive ? "hand" : "cards"}`}>
           <div className="cards-row" style={{ "--gap-share": suitGapShare(handCards) } as CSSProperties}>
             {handSeat !== bottomSeat || handIsDummy ? <span className="hand-tag" title={`${seatNames[handSeat]}${handIsDummy ? " · dummy" : ""}`}><span className={`seat-compass ${handIsDummy ? "dummy-compass" : ""}`} aria-hidden="true">{handSeat[0]!.toUpperCase()}</span><span className="sr-only">{seatNames[handSeat]}{handIsDummy ? ", dummy" : ""}</span></span> : null}

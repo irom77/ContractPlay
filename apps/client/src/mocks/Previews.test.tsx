@@ -60,7 +60,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(menu).getByRole("button", { name: "Leave the table" })).toBeTruthy();
   },
   "auto-play": () => {
-    expect(within(screen.getByRole("group", { name: "Auto play is on" })).getByRole("button", { name: "Stop auto play" })).toBeTruthy();
+    const banner = screen.getByRole("group", { name: "Auto play is on" });
+    expect(within(banner).getByRole("button", { name: "Stop auto play" })).toBeTruthy();
+    // The banner floats clear of the hand and can be dragged anywhere on the table.
+    expect(banner.closest(".hand-zone, .pos-bottom")).toBeNull();
+    expect(within(banner).getByRole("button", { name: "Move this banner" })).toBeTruthy();
     expect(screen.getByText("auto play")).toBeTruthy();
     expect(screen.queryAllByRole("button", { name: /^Play / }).filter((card) => !(card as HTMLButtonElement).disabled)).toHaveLength(0);
   },
@@ -69,7 +73,14 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "North's hand" }).querySelectorAll(".table-card").length).toBe(10);
   },
-  result: () => { expect(screen.getByRole("region", { name: "Hand result" }).textContent).toMatch(/4♠ by North[\s\S]*420/); }
+  result: () => {
+    const result = screen.getByRole("region", { name: "Hand result" });
+    expect(result.textContent).toMatch(/4♠ by North[\s\S]*420/);
+    expect(within(result).getByRole("button", { name: "Deal" })).toBeTruthy();
+    // All 52 cards face-up at their seats around the result, each hand with its high-card points.
+    for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
+    expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
+  }
 };
 
 describe("UI previews", () => {

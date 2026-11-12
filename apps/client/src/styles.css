@@ -256,6 +256,37 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .pos-bottom .dummy-card.queued-card, .pos-bottom button.dummy-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-1.6 * var(--u))); }
 .dummy-card + .dummy-card { margin-left: calc(var(--step) - var(--w)); }
 
+/* ---------- Hand result: the whole deal face-up around the table ---------- */
+/* Each seat keeps its place: a row of suits along the top and bottom edges, a column of suit rows down either side,
+   each with its seat head and HCP badge on the side facing the middle, where the result panel sits. */
+.hands-revealed { --edge-h: calc(10 * var(--u)); --edge-step: calc(2.9 * var(--u)); --side-h: calc(7.4 * var(--u)); --side-step: calc(2.4 * var(--u)); }
+.hands-revealed .seat.has-revealed-hand { display: grid; gap: calc(.6 * var(--u)); }
+.hands-revealed .has-revealed-hand .seat-head { display: flex; align-items: center; gap: var(--u); min-width: 0; }
+.hands-revealed .pos-top, .hands-revealed .pos-bottom { left: 50%; justify-items: center; transform: translateX(-50%); }
+.hands-revealed .pos-top { top: calc(1.5 * var(--u)); }
+.hands-revealed .pos-top .seat-head { order: 1; }
+.hands-revealed .pos-bottom { bottom: var(--u); }
+.hands-revealed .pos-top .dummy-table-hand, .hands-revealed .pos-bottom .dummy-table-hand { --h: var(--edge-h); --step: var(--edge-step); }
+.hands-revealed .pos-left, .hands-revealed .pos-right { top: 50%; transform: translateY(-50%); }
+.hands-revealed .pos-left { justify-items: start; }
+.hands-revealed .pos-right { justify-items: end; }
+.hands-revealed .pos-right .seat-head { flex-direction: row-reverse; }
+.hands-revealed .pos-left .dummy-table-hand, .hands-revealed .pos-right .dummy-table-hand { --h: var(--side-h); --step: var(--side-step); }
+.hcp-badge { flex: none; border-radius: 999px; padding: calc(.25 * var(--u)) calc(1 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-s); font-weight: 800; white-space: nowrap; }
+.hands-revealed .score-panel { z-index: 5; gap: var(--u); min-width: 0; width: max-content; max-width: calc(100% - 2 * (var(--side-room) + 2 * var(--u))); padding: calc(2 * var(--u)) calc(3 * var(--u)); --side-room: calc(4 * var(--u) + var(--side-h) * .7 + 4 * var(--side-step)); }
+.result-totals { font-size: var(--text-m) !important; }
+.result-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--u); }
+.online-result .contract-outcome { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin: 0; }
+.online-result > .secondary-button { justify-self: start; }
+/* Tall, narrow windows: more height than width, so the edge hands grow and the top one clears the status card. */
+@media (max-aspect-ratio: 4/5) {
+  .hands-revealed { --edge-h: calc(17 * var(--u)); --edge-step: calc(4 * var(--u)); --side-h: calc(11 * var(--u)); --side-step: calc(3 * var(--u)); }
+  .hands-revealed .pos-top { top: calc(21 * var(--u)); }
+  .hands-revealed .pos-bottom { bottom: calc(2 * var(--u)); }
+  .hands-revealed .pos-left, .hands-revealed .pos-right { top: 44%; }
+  .hands-revealed .score-panel { top: 73%; max-width: calc(100% - 4 * var(--u)); }
+}
+
 /* ---------- Card backs at hidden seats ---------- */
 /* Overlapping backs show how many cards a seat holds: a row along the top, a column down either side. */
 .hidden-hand { display: flex; --h: calc(7.6 * var(--u)); --w: calc(var(--h) * .7); --step: calc(2.1 * var(--u)); }
@@ -417,7 +448,13 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-totals { border-radius: 7px; padding: calc(.5 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; white-space: nowrap; }
 .lobby-panel .online-totals { justify-self: start; margin: 0; }
 .online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
-.online-resume { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: 50%; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; border-radius: 10px; padding: 10px 14px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-m); transform: translateX(-50%); }
+/* The Auto play / bot-playing banner floats in the top-left corner under the status card, clear of every hand; the player can drag it anywhere on the table. */
+.online-resume { position: absolute; z-index: 7; top: calc(18 * var(--u)); left: calc(2 * var(--u)); display: flex; align-items: center; gap: 8px; width: max-content; max-width: max(250px, calc(34 * var(--u))); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 4px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-s); line-height: 1.3; cursor: grab; touch-action: none; user-select: none; }
+.online-resume:active { cursor: grabbing; }
+.online-resume > span { flex: 1 1 auto; min-width: 12ch; }
+.online-resume .primary-button { flex: none; min-height: max(30px, calc(4.2 * var(--u))); padding: 0 12px; font-size: var(--text-s); }
+.banner-grip { align-self: stretch; border: 0; border-radius: 6px; padding: 0 4px; background: none; color: var(--muted); font-size: var(--text-l); cursor: grab; touch-action: none; }
+.banner-grip:hover, .banner-grip:focus-visible { color: var(--gold); }
 .online-seats { display: grid; grid-template-areas: ". north north north ." "west west . east east" ". south south south ."; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
 .online-seat { display: grid; align-content: center; justify-items: center; gap: 6px; text-align: center; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .online-seat-north { grid-area: north; } .online-seat-east { grid-area: east; } .online-seat-south { grid-area: south; } .online-seat-west { grid-area: west; }
@@ -431,17 +468,10 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-result h2 { margin: 0; font: 700 20px/1.1 var(--suit-font); }
 .online-result h2 .red-card { color: #ff6b62; }
 .online-result p { margin: 0; color: #d6e0d8; }
-.online-hands { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-.online-hand { display: grid; gap: 2px; font: 13px/1.35 var(--suit-font); }
-.online-hand-red > span:first-child { color: #ff6b62; }
 .online-copy-note { overflow-wrap: anywhere; }
 .lobby > .online-status { position: static; transform: none; }
 @media (max-width: 520px) {
   .online-seating .start-bar .secondary-button { padding: 0 8px; font-size: 12px; }
-}
-/* Tall, narrow windows: keep the take-back panel clear of the bottom seat. */
-@media (max-aspect-ratio: 4/5) {
-  .online-resume { bottom: max(100px, calc(18 * var(--u))); }
 }
 
 /* ---------- UI preview mode (#/mocks) ---------- */

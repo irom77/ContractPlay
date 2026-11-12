@@ -188,7 +188,7 @@ export const previewScreens: readonly PreviewScreen[] = [
     build: () => ({ ...playUntilView({ east: "Alex" }, "east", moment(["east"], 2)), menuOpen: true })
   },
   {
-    id: "auto-play", title: "Auto play", detail: "You chose Auto play from the menu: a bot plays your East cards until this hand ends, or until you stop it.",
+    id: "auto-play", title: "Auto play", detail: "You chose Auto play from the menu: a bot plays your East cards until this hand ends, or until you stop it. Drag the banner anywhere on the table.",
     build: () => {
       const people: People = { east: "Alex" };
       const playing = playUntil(bid(dealt(table("Friday club", people, others("east"))), 8), moment(["east"], 2));
@@ -204,7 +204,7 @@ export const previewScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "result", title: "Hand result", detail: "All 52 cards played: the contract, the score, and every hand revealed.",
+    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points, and the contract, score, and Deal in the middle.",
     build: () => playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete")
   }
 ];

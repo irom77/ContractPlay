@@ -1,15 +1,19 @@
 import { useState } from "react";
-import { SUITS, type Seat, type SkillLevel } from "@contractplay/core";
+import type { Seat, SkillLevel } from "@contractplay/core";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
-import { claimText, contractText, samePartnership, seatNames, seats, sortHand, suitSymbols } from "../table/labels.js";
+import { ContractOutcome } from "../table/ResultSummary.js";
+import { claimText, contractText, seatNames, seats } from "../table/labels.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
 const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
 
 /** Between hands, or for anyone unseated: the four seats with their controls, the totals, the last result, and Deal. */
-export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, onCopy, send }: {
-  view: TableViewData; totals: string; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void; send(message: Outgoing): void;
+export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
+  view: TableViewData; totals: string; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void;
+  /** Back to the finished hand laid out on the table, when there is one. */
+  onShowResult?: (() => void) | undefined;
+  send(message: Outgoing): void;
 }) {
   const [botSkills, setBotSkills] = useState<Record<Seat, SkillLevel>>({ north: "intermediate", east: "intermediate", south: "intermediate", west: "intermediate" });
   const yourSeat = view.yourSeat;
@@ -58,7 +62,10 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
           <p className="online-totals">{totals}</p>
           {copyNote ? <p className="quiet-copy online-copy-note" role="status">{copyNote}</p> : null}
           {view.handInProgress && !yourSeat ? <p>A hand is in progress. You can take a seat when it ends.</p> : null}
-          {view.revealed && view.game ? <HandResult game={view.game} revealed={view.revealed} /> : null}
+          {view.revealed && view.game ? <section className="online-result" aria-label="Last hand">
+            <HandResultSummary game={view.game} />
+            {onShowResult ? <button className="secondary-button" type="button" onClick={onShowResult}>Show the hands</button> : null}
+          </section> : null}
           <div className="online-seats">
             {seats.map((seat) => {
               const info = view.seats[seat];
@@ -83,32 +90,15 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
   );
 }
 
-function HandResult({ game, revealed }: { game: PublicGame; revealed: NonNullable<TableViewData["revealed"]> }) {
+/** The finished hand's contract, how it went, and its score: the centre of the result table, and a reminder on the seating screen. */
+export function HandResultSummary({ game }: { game: PublicGame }) {
   const contract = game.contract;
   const score = game.score;
-  const declaringSide = contract ? samePartnership(contract.declarer, "north") ? "NS" : "EW" : undefined;
-  const result = score
-    ? score.undertricks > 0 ? `${score.undertricks} short` : score.overtricks > 0 ? `${score.overtricks} over` : "made exactly"
-    : undefined;
-  return (
-    <section className="online-result" aria-label="Hand result">
-      <h2>{contract ? <>{contractText(contract)} by {seatNames[contract.declarer]}</> : "Passed out"}</h2>
-      {contract && score && declaringSide && result ? <p>{declaringSide} took {score.tricksTaken} of {score.tricksRequired} required tricks — {result} · {score.score > 0 ? "+" : ""}{score.score} NS</p> : null}
-      {contract && game.claim ? <p>{claimText(game.claim, contract.declarer, 13 - game.completedTricks.length)}</p> : null}
-      <div className="online-hands">
-        {seats.map((seat) => {
-          const hand = sortHand(revealed[seat]);
-          return <div key={seat} role="group" aria-label={`${seatNames[seat]}'s hand`} className="online-hand">
-            <strong>{seatNames[seat]}</strong>
-            {SUITS.map((suit) => {
-              const ranks = hand.filter((card) => card.suit === suit).map((card) => card.rank === "T" ? "10" : card.rank).join(" ");
-              return <span key={suit} className={suit === "hearts" || suit === "diamonds" ? "online-hand-red" : undefined}>
-                <span aria-hidden="true">{suitSymbols[suit]}</span><span className="sr-only">{suit}</span> {ranks || "—"}
-              </span>;
-            })}
-          </div>;
-        })}
-      </div>
-    </section>
-  );
+  if (!contract || !score) return <h2>Passed out</h2>;
+  return <>
+    <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
+    <ContractOutcome score={score} />
+    {game.claim ? <p className="claim-line">{claimText(game.claim, contract.declarer, 13 - game.completedTricks.length)}</p> : null}
+    <p className="hand-points-line">{score.score >= 0 ? "NS" : "EW"} +{Math.abs(score.score)}</p>
+  </>;
 }

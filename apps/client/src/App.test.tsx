@@ -790,6 +790,10 @@ describe("bridge table", () => {
     expect(result.getByText(/^\d+ of 7 tricks needed$/)).toBeTruthy();
     expect(result.getByText(/^(\d+ (over|under)tricks?|exactly)$/)).toBeTruthy();
     expect(result.getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    // Once the last trick clears, the whole deal lies face-up at the seats, each with its high-card points.
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    for (const seat of ["North", "East", "South", "West"]) expect(within(screen.getByRole("region", { name: `${seat}'s hand` })).getAllByRole("img")).toHaveLength(13);
+    expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
     fireEvent.click(screen.getByLabelText("Table menu"));
     expect(screen.getByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toBeTruthy();
     expect(loadSoloData(window.localStorage).completedHands[0]!.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);

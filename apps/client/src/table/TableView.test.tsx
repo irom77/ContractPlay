@@ -85,4 +85,23 @@ describe("card backs at hidden seats", () => {
     expect(container.querySelectorAll(".hidden-hand").length).toBe(3);
     for (const element of container.querySelectorAll(".hidden-hand, .hidden-hand *")) expect(element.getAttribute("aria-label") ?? "").not.toContain(" of ");
   });
+
+  it("lays a finished deal face-up at every seat with its high-card points, and nothing playable", () => {
+    let game = playing();
+    while (game.phase === "play") game = apply(game, { type: "play", seat: game.currentActor, card: legalCards(game.hands[game.currentActor], game.currentTrick[0]?.card.suit)[0]! });
+    const { container, getByRole, queryAllByRole } = renderTable(publicGame(game, []), { showCalls: true, revealedHands: game.initialDeal });
+    expect(container.querySelector(".table-surface")!.classList.contains("hands-revealed")).toBe(true);
+    for (const seat of ["North", "East", "South", "West"]) expect(getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
+    expect([...container.querySelectorAll(".hcp-badge")].reduce((total, badge) => total + Number.parseInt(badge.textContent!, 10), 0)).toBe(40);
+    expect(queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+    expect(container.querySelector(".seat-auction-calls")).toBeNull();
+    expect(container.querySelector(".hand-zone")).toBeNull();
+  });
+
+  it("ignores revealed hands while the hand is still being played", () => {
+    const game = afterOpeningLead();
+    const { container } = renderTable(publicGame(game, ["north"]), { revealedHands: game.initialDeal });
+    expect(container.querySelector(".hands-revealed")).toBeNull();
+    expect(container.querySelector(".hcp-badge")).toBeNull();
+  });
 });

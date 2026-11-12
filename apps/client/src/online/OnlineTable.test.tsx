@@ -447,7 +447,9 @@ describe("OnlineTable play", () => {
     expect(screen.queryByRole("region", { name: "Hand result" })).toBeNull();
     act(() => { vi.advanceTimersByTime(1); });
     expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
-    expect(screen.queryByRole("region", { name: /^Bridge table/ })).toBeNull();
+    // The result stays on the table: the whole deal face-up, nothing playable.
+    expect(screen.getByRole("region", { name: /^Bridge table .*hand result$/ })).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
   });
 
   it("does not carry a held trick into a new hand", () => {
@@ -653,10 +655,36 @@ describe("OnlineTable play", () => {
     expect(hands[0]!.game.completedTricks).toEqual(finished.completedTricks);
     const result = screen.getByRole("region", { name: "Hand result" });
     expect(result.textContent).toContain("by North");
-    expect(result.textContent).toContain(`${finished.score!.tricksTaken} of ${finished.score!.tricksRequired} required tricks`);
-    expect(result.textContent).toContain(finished.score!.undertricks > 0 ? `${finished.score!.undertricks} short` : finished.score!.overtricks > 0 ? `${finished.score!.overtricks} over` : "made exactly");
-    expect(within(result).getByRole("group", { name: "West's hand" }).textContent).toContain("♠");
-    expect((screen.getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(result.textContent).toContain(`${finished.score!.tricksTaken} of ${finished.score!.tricksRequired} tricks needed`);
+    expect(result.textContent).toContain(finished.score!.undertricks > 0 ? `Down ${finished.score!.undertricks}` : "Made");
+    expect(result.textContent).toContain("Table score: NS 0 · EW 50");
+    expect((within(result).getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("lays the whole deal face-up at the seats around the result, with each hand's high-card points", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const finished = playCards(oneNoTrump(), 52);
+    service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+    const points = { A: 4, K: 3, Q: 2, J: 1 } as Record<string, number>;
+    for (const seat of ["north", "east", "south", "west"] as const) {
+      const hand = screen.getByRole("region", { name: `${seat[0]!.toUpperCase()}${seat.slice(1)}'s hand` });
+      expect(within(hand).getAllByRole("img")).toHaveLength(13);
+      const hcp = finished.initialDeal[seat].reduce((total, card) => total + (points[card.rank] ?? 0), 0);
+      expect(hand.closest(".seat")!.querySelector(".hcp-badge")!.textContent).toBe(`${hcp} HCP`);
+    }
+    expect(document.querySelector(".hand-zone")).toBeNull();
+
+    await user.click(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Deal" }));
+    expect(service.sent.at(-1)).toEqual({ type: "deal" });
+
+    // Seating swaps the table for the seat controls; Show the hands brings the result back.
+    await user.click(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Seating" }));
+    expect(screen.getByRole("group", { name: "West seat" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Last hand" }).textContent).toContain("by North");
+    expect(screen.queryByRole("region", { name: "North's hand" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Show the hands" }));
+    expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
   });
 });
 
