@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added **claims**: on your turn during play, claim all the remaining tricks or a number of them. Against robots they check the claim; online every human opponent must Accept (one Reject cancels it), and robots accept only a claim an exact search proves. The claimer can withdraw, and their hand is shown to the opponents while it waits. A claimed hand is saved, reviewed ("Claimed by South (declarer): 3 of the remaining 4 tricks"), and exported to PBN. Online tables moved to protocol version 3.
+- Added a **card queue**: while someone else is to play, click one of your cards (or dummy's, if you control it) to queue it. It plays half a second after your turn starts if it is still legal; click it again to unqueue.
+- Seats whose cards you cannot see now show one card back per card held, during the auction and play. The UI previews gain two screens, "Card queued" and "Claim waiting on you", for 13 in all.
 - iOS and iPadOS are on hold: CI no longer runs the iOS/iPadOS simulator build. The job stays in the workflow, switched off, so it can be turned back on.
 - On the online seating screen, everything in the North, South, East, and West seat cards (seat label, name, badges, the bot skill list, and the buttons) is now centered across and down the card.
 - Online tables moved to protocol version 2, so a page left open from before Auto play is asked to reload ("ContractPlay was updated. Reload to keep playing.") instead of quietly missing the new menu entry.

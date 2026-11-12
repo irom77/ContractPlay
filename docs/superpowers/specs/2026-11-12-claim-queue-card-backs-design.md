@@ -47,7 +47,7 @@ Success: a hand where the rest is obvious ends in one action. A player who alrea
   - Opposing declaring side: whoever `deciderOf` says controls declarer. If that is a human, they answer. If it is a robot, it runs the check.
   - If every answer is accept, the claim is applied. The first rejection cancels the claim, and play continues where it stopped.
 - **The robot check:** exact search (minimax with alpha-beta over all four actual hands, from the current position including any partial trick). The claim is proven if the claimer's side can guarantee at least the claimed number of the remaining tricks against every defence. The search has a node budget. If it runs out, the result is "unknown" and the robot rejects. The budget is the builder's choice, sized to stay well inside a Cloudflare Workers request's CPU time. Prefer ordering moves and treating equivalent cards (touching ranks in one hand) as one move.
-- **Claimer's cards are shown** to everyone at the table while the claim is pending, as in real bridge. *(Builder may skip this for solo, where the robot already sees everything.)*
+- **Claimer's cards are shown** to the claimer's opponents while the claim is pending (not to partner), as in real bridge. *(Builder may skip this for solo, where the robot already sees everything.)*
 - **While a claim is pending,** no cards can be played, robots do not act, and the claimer can withdraw it. Take-back and Cancel hand still work and clear the claim. Leaving or handing a seat to a robot also clears it. *(The simple rule: any seat or game change clears a pending claim.)*
 - **Applied claim:** recorded as a game action `{ type: "claim", seat, tricks }` in core history, only once accepted. Applying it sets phase `complete`. The declaring side's tricks are `won so far + (claimer is declaring side ? tricks : remaining − tricks)`, scored with the existing `scoreContract`. The state keeps `claim: { seat, tricks }` for display. Unplayed cards stay in `hands`. Undo/rewind/replay treat it like any action.
 - **Away responders online** *(claude's call)*: a human defender or declarer who must answer and is away (no stand-in) holds the claim open. There is no timeout. The claimer can withdraw. If another player hands the away seat to a robot, the pending claim is **kept**, and the new stand-in answers with the robot check. This is the one exception to "seat changes clear a pending claim". `tick` needs no claim logic.
@@ -55,6 +55,10 @@ Success: a hand where the rest is obvious ends in one action. A player who alrea
   - Against robots: the robots on the other side answer with the check.
   - Manual table (one person plays all four seats): Claim is offered and applies at once, because the same person is both sides. There is no card queue (every turn is yours). Seats not currently shown display card backs as normal.
   - While robots finish the hand (`botsFinishing`) and during review, there is no Claim and no queue. Card backs show as normal.
+- **Security rules** *(claude's call (security review))*:
+  - Answers carry the claim's id, so a stale answer cannot settle a newer claim.
+  - After a rejection or withdrawal, that side cannot claim again until the trick ends.
+  - The claimer's cards are revealed to opponents only.
 - **Rejection feedback:** the claimer sees who rejected (for example, "West rejected your claim of 3 tricks"). It stays until the next game action.
 
 ### Queue the next card

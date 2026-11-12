@@ -27,6 +27,8 @@ export type OnlineTableProps = {
   baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect;
   /** Opens the game menu on arrival (the UI previews show it this way). */
   menuOpen?: boolean;
+  /** Starts with this card queued (the UI previews show a queued card this way). */
+  initialQueued?: QueuedCard;
 };
 
 function refusalText(reason: RefusalReason): string | undefined {
@@ -145,7 +147,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={identity} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false }: OnlineTableProps & { identity: Identity }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -171,7 +173,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const takeBackSent = useRef(false);
   const [takenBackTo, setTakenBackTo] = useState<number>();
   // A card picked before the viewer's turn, sent for them when it comes.
-  const [queued, setQueued] = useState<QueuedCard>();
+  const [queued, setQueued] = useState<QueuedCard | undefined>(initialQueued);
   // The revision the claim picker was opened at; it closes when the table moves on.
   const [claimPickedAt, setClaimPickedAt] = useState<number>();
   const queueOwners = view ? queueOwnerSeats(view) : [];
@@ -288,8 +290,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   }, [view, waiting, status, holdingNow, forcedPlayOn, takenBackTo, claimPickedAt]);
 
   useEffect(() => {
-    if (queued && !activeQueued) setQueued(undefined);
-  }, [queued, activeQueued]);
+    if (view && queued && !activeQueued) setQueued(undefined);
+  }, [view, queued, activeQueued]);
 
   // The queued card is sent like a forced one, after the same pause. A forced card is that same card, so when the
   // forced-card effect sends this turn's card, this one stays out of it.

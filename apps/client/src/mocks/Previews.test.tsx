@@ -41,10 +41,15 @@ const expectations: Record<string, () => Promise<void> | void> = {
   "defending-left": () => {
     expect(surface()!.classList.contains("dummy-on-left")).toBe(true);
     expect(screen.getByText("Your play")).toBeTruthy();
+    expect(surface()!.querySelectorAll(".hidden-hand .card-back").length).toBeGreaterThan(0);
   },
   "defending-right": () => {
     expect(surface()!.classList.contains("dummy-on-right")).toBe(true);
     expect(screen.getByText("Your play")).toBeTruthy();
+  },
+  queued: () => {
+    expect(screen.getAllByRole("button", { name: /^Unqueue / })).toHaveLength(1);
+    expect(screen.getByText(/^Queued:/)).toBeTruthy();
   },
   "game-menu": () => {
     const menu = screen.getByRole("group", { name: "Game menu" });
@@ -58,6 +63,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(screen.getByRole("group", { name: "Auto play is on" })).getByRole("button", { name: "Stop auto play" })).toBeTruthy();
     expect(screen.getByText("auto play")).toBeTruthy();
     expect(screen.queryAllByRole("button", { name: /^Play / }).filter((card) => !(card as HTMLButtonElement).disabled)).toHaveLength(0);
+  },
+  "claim-answer": () => {
+    expect(screen.getByRole("button", { name: "Accept" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "North's hand" }).querySelectorAll(".table-card").length).toBe(10);
   },
   result: () => { expect(screen.getByRole("region", { name: "Hand result" }).textContent).toMatch(/4♠ by North[\s\S]*420/); }
 };
