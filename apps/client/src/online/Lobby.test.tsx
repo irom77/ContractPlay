@@ -136,7 +136,7 @@ describe("Lobby", () => {
   });
 
   it.each([
-    ["too-many-requests", "You've created a lot of tables. Try again in a while."],
+    ["too-many-requests", "Limit: 10 tables per public IP in a rolling hour. Removing tables doesn't reset it; try again later."],
     ["network", "Couldn't create the table. Try again."]
   ])("shows copy for the %s creation error", async (error, copy) => {
     const user = userEvent.setup();

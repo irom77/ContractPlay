@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Clarified the online table creation limit in the lobby and documentation: 10 tables per public IP in a rolling hour, shared across users behind that IP, and deleting tables does not reset it.
 - Removed automatic GitHub Pages deployments; Cloudflare is the only maintained web deployment.
 - In online play, Dummy's hand is face-up at its seat for everyone after the opening lead, marked clearly as DUMMY; when the human controls a bot partner's contract, the card belonging to the seat whose turn it is remains playable in either hand.
 - Online play spreads horizontal hands across most of the viewport while keeping each hand at its fixed seat; hint messages move away from a Dummy hand on the right.

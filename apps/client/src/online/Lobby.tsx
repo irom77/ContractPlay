@@ -24,7 +24,7 @@ const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defau
 
 function createErrorText(error: string): string {
   if (error === "too-many-tables") return "There are too many open tables right now. Try again later.";
-  if (error === "too-many-requests") return "You've created a lot of tables. Try again in a while.";
+  if (error === "too-many-requests") return "Limit: 10 tables per public IP in a rolling hour. Removing tables doesn't reset it; try again later.";
   return "Couldn't create the table. Try again.";
 }
 
