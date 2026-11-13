@@ -1463,13 +1463,40 @@ describe("bridge table", () => {
     await user.click(within(fieldPanel()!).getByRole("button", { name: "View original play" }));
     expect(screen.getByText("Original play: action 0 of 4")).toBeTruthy();
     expect(fieldPanel()).toBeNull();
+    expect(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to your result" })).toBeTruthy();
     for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: "Next action" }));
     expect(screen.getByText("Original play: action 4 of 4")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Next action" })).toHaveProperty("disabled", true);
 
-    chooseMenu("Back to your result");
+    await user.click(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to your result" }));
     expect(within(fieldPanel()!).getByText("30.0% · 3 of 10 matchpoints")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Passed out" })).toBeTruthy();
+
+    await user.click(within(fieldPanel()!).getByRole("button", { name: "View original play" }));
+    chooseMenu("Back to your result");
+    expect(fieldPanel()).toBeTruthy();
+  });
+
+  it("marks the original table's result as such and leads back to your own from it", async () => {
+    const user = userEvent.setup();
+    const played = gameAfterPlays(52);
+    const record = { dealer: played.dealer, vulnerability: played.vulnerability, deal: played.initialDeal, field: [], original: played.history.actions };
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({
+      version: 1, currentHandId: "set-hand", currentGame: played, completedHands: [],
+      boardSet: { name: "Set", records: [record, record], position: 0 }, currentRecord: record
+    }));
+    render(<App />);
+    expect(screen.queryByText("At the original table")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "View original play" }));
+    const next = screen.getByRole("button", { name: "Next action" });
+    for (let index = 0; index < 56; index += 1) fireEvent.click(next);
+    expect(screen.getByText("Original play: action 56 of 56")).toBeTruthy();
+
+    const originalResult = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(originalResult.getByText("At the original table")).toBeTruthy();
+    await user.click(originalResult.getByRole("button", { name: "Back to your result" }));
+    expect(screen.queryByText("At the original table")).toBeNull();
+    expect(screen.getByRole("button", { name: "View original play" })).toBeTruthy();
   });
 
   it("saves a finished board-set hand with its record and leaves the rubber alone", async () => {

@@ -590,6 +590,11 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setMessage("");
   }
 
+  function exitReview() {
+    setReviewHandId(undefined);
+    setLastTrickOpen(false);
+  }
+
   function backToResult() {
     if (original) setReviewCursor(original.returnCursor);
     setOriginal(undefined);
@@ -733,7 +738,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const menuItems: GameMenuItem[] = isReviewing ? [
     original
       ? { id: "exit-review", label: "Back to your result", onSelect: backToResult }
-      : { id: "exit-review", label: "Exit review", onSelect: () => { setReviewHandId(undefined); setLastTrickOpen(false); } },
+      : { id: "exit-review", label: "Exit review", onSelect: exitReview },
     { id: "hands", label: "Recent hands", onSelect: () => setDialog("hands") },
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") }
   ] : [
@@ -788,24 +793,30 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       {handOver && replayOriginal(shownRecord) ? <button className="secondary-button" type="button" onClick={() => viewOriginal(shownRecord)}>View original play</button> : null}
       {nextButton}
     </>} /> : null;
+  // The original table's result is marked as such, with the way back to the player's own result on it.
+  const originalTag = original ? <p className="original-tag">At the original table</p> : null;
+  const backButton = original ? <button className="primary-button" type="button" onClick={backToResult}>Back to your result</button> : null;
   const tableOverlay = <>
     {phase === "complete" && shownGame.score && contract && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""} ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
+      {originalTag}
       <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
       <ContractOutcome score={shownGame.score} />
       {shownGame.claim ? <p className="claim-line">{claimText(shownGame.claim, contract.declarer, remainingTricks(shownGame))}</p> : null}
       {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} actions={scorecardActions} /> : fieldResult ?? <>
         <p className="hand-points-line">{`${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
-        {nextButton}
+        {nextButton}{backButton}
       </>}
     </section> : null}
-    {phase === "passed-out" && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""}`} aria-label="Hand result"><h2>Passed out</h2>
+    {phase === "passed-out" && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""}`} aria-label="Hand result">{originalTag}<h2>Passed out</h2>
       {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} passedOut actions={scorecardActions} />
-        : fieldResult ?? nextButton}
+        : fieldResult ?? <>{nextButton}{backButton}</>}
     </section> : null}
 
     {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">
       <button className="secondary-button" aria-label="Previous action" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}><span aria-hidden="true">‹</span> Previous</button>
       <button className="secondary-button" aria-label="Next action" disabled={reviewCursor >= handCount} onClick={() => setReviewCursor((cursor) => Math.min(handCount, cursor + 1))}>Next <span aria-hidden="true">›</span></button>
+      {original ? <button className="secondary-button" type="button" onClick={backToResult}>Back to your result</button>
+        : <button className="secondary-button" type="button" onClick={exitReview}>Exit review</button>}
     </div> : null}
 
     {!isReviewing && liveTurn ? <div className="hint-controls">

@@ -343,6 +343,7 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .score-panel { position: absolute; z-index: 5; top: 50%; left: 50%; display: grid; justify-items: center; gap: calc(1.4 * var(--u)); min-width: calc(40 * var(--u)); border: 1px solid rgba(255, 255, 255, .13); border-radius: calc(1.4 * var(--u)); padding: calc(3 * var(--u)) calc(4 * var(--u)); background: rgba(12, 40, 34, .94); box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) #0007; text-align: center; transform: translate(-50%, -50%); }
 .score-panel h2 { margin: 0; font: 700 max(20px, calc(4 * var(--u)))/1.1 var(--suit-font); }
 .score-panel h2 .red-card { color: #ff6b62; }
+.score-panel .original-tag { margin: 0 0 calc(.4 * var(--u)); color: var(--gold); font-size: var(--text-s); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
 .score-panel p { margin: 0; color: #d6e0d8; font-size: var(--text-l); }
 .score-panel-hidden { visibility: hidden; }
 .score-panel .contract-outcome { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: calc(.6 * var(--u)) calc(1.4 * var(--u)); }

@@ -186,7 +186,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
   "solo-review": () => {
     expect(screen.getByRole("region", { name: "Hand review" })).toBeTruthy();
     expect(document.querySelector(".status-pill")!.textContent).toBe("Reviewing action 18 of 60");
-    expect(screen.getByRole("group", { name: "Review controls" })).toBeTruthy();
+    expect(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Exit review" })).toBeTruthy();
   },
   "solo-field-result": () => {
     const field = screen.getByRole("region", { name: "Result against the field" });
@@ -199,7 +199,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   "solo-original-play": () => {
     expect(document.querySelector(".status-pill")!.textContent).toMatch(/Original play: action 8 of/);
-    expect(screen.getByRole("button", { name: "Back to your result" })).toBeTruthy();
+    expect(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to your result" })).toBeTruthy();
     expect(document.querySelector(".board-label")).toBeNull();
   }
 };
