@@ -222,3 +222,25 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Build sessions, table lifecycle, and server-authoritative actions (delivered with guest identity only: a display name and a device secret; sign-in remains open in TODO.md).
 - [x] Protect private hands and recover live tables after disconnects.
 - [x] Connect lobby/table UI and verify reconnect, stale actions, and duplicate delivery.
+- [x] Deploy the online tables to Cloudflare: live at https://contractplay.niuk.workers.dev; the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set, so pushes to `main` deploy automatically.
+- [x] Add solo-style bidding, card-play, and call-meaning hints to online tables; suggestions use only the viewer's visible cards and public play.
+- [x] Add a UI preview mode at `#/mocks` that steps through realistic lobby, seating, auction, declaring, dummy, defending, and result screens built from real table states, with tests that keep each screen in its state.
+- [x] Play forced cards automatically (the only legal card) in solo and online play, with a setting to turn it off, and add Auto play so a bot plays the user's cards for the rest of the deal.
+- [x] Add claims (all remaining or a number; humans accept or reject online, robots check with an exact search), a queued next card played when your turn starts, and card backs for hidden hands, with `#/mocks` screens for the claim answer and the queued card.
+- [x] Add solo-play screens to `#/mocks`: new deal, auction and declaring against bots, Auto play, claiming, the game menu, settings, recent hands, the rubber result, and hand review.
+- [x] Align solo play with online tables: the shared game menu (Take back in it, no Redo), the draggable Auto play banner, and online turn wording.
+- [x] Offer Auto play during the auction too (solo and online), and start its banner in the top-right corner, clear of the side seats.
+- [x] Gather online table controls into a collapsible game menu: Back to lobby, Take back (your last call or card, with any bot play since), Cancel this hand (host), and Leave the table at any time (a bot finishes the hand).
+- [x] Name saved hands after the player's dealt cards (`SKT9_HKQJ32_CA2_D543`) instead of random two-word names.
+- [x] Reach the device's recent hands (solo and online alike) from the lobby and the online game menu, and from the solo start screen when no hand is in progress.
+- [x] Add a development-only `/admin` page to list and remove listed or unlisted online tables; its open access must be replaced with RBAC before public production use.
+
+## Scoring
+
+- [x] Score solo play as rubber bridge by default, with single deals as an option.
+- [x] Score online tables as rubber bridge by default (dealer from North, vulnerability from games won, Rubber score in the game menu), with running totals as a choice when creating a table; tables made before this keep running totals.
+- [x] Replace the end-of-hand rubber score with a paper-pad scorecard in solo and online play: partnerships either side of a divider, above and below the line, dotted game lines with an arrow to the winner, totals, a breakdown of the last hand's points, a rubber-over summary with next steps, and **Scores** in the game menu.
+
+## Hand records and replays
+
+- [x] Play PBN board sets (several boards or a `ScoreTable`) board by board in solo play, compare the result with the file's field by its `Scoring` method (matchpoints, Butler IMPs, or cross-IMPs), and view the original auction and play after each hand. Research: `docs/research/2026-11-13-hand-record-archives.md`; plan: `docs/superpowers/plans/2026-11-13-pbn-board-sets-vs-field.md`. Code: `packages/core/src/field.ts` (comparison), `packages/pbn/src/pbn.ts` (`ScoreTable`, inheritance, `pbnBoardToRecord`), `packages/persistence` (`BoardSet`, `HandRecord`), `apps/client/src/boardSet.ts`, `apps/client/src/table/FieldResult.tsx`, and the board-set flow in `apps/client/src/App.tsx`.
