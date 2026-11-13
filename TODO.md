@@ -23,6 +23,8 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 
 - [x] Play PBN board sets (several boards or a `ScoreTable`) board by board in solo play, compare the result with the file's field by its `Scoring` method (matchpoints, Butler IMPs, or cross-IMPs), and view the original auction and play after each hand. Research: `docs/research/2026-11-13-hand-record-archives.md`.
 - [ ] Extend hand records beyond the PBN MVP: LIN and USEBIO travellers, Butler-2 and Neuberg comparison, double-dummy par, licensed board sets, and online board sets.
+- [ ] Keep imported board sets in a library: list each set in Recent hands with its progress (for example "Club Pairs · 3 of 24 played") so any set can be resumed, restarted, or deleted without importing the file again, and several sets can be kept at once. Today only the one active set is kept, and leaving, finishing, or importing another file drops it. Needs a storage limit for this browser's storage and a way to move sets to another device (export, or sign-in).
+- [ ] Read PBN `%` comment lines (such as `% PBN 2.1` at the top of a file) without warnings, and write exported PBN with a blank line only between boards, not between tags, so other PBN programs read it board by board.
 - [ ] Replay a previously played random deal from recent hands and compare the new result with earlier attempts at the same deal (built on the same board source and comparison scoring as hand records).
 
 ## Online multiplayer
