@@ -3,7 +3,7 @@ import type { SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
-import { botToAct, createTable, reduce, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
+import { botToAct, createTable, reduce, rubberHandId, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
 
 /*
  * UI preview scenarios. Every screen is a real table state built with the same reducer the server runs, then
@@ -53,10 +53,14 @@ function table(name: string, people: People, bots: readonly Seat[] = []): TableS
   return state;
 }
 
-/** Starts hand 1 on the fixed deal; dealing itself is random, so the game is placed the way a deal would place it. */
-function dealt(state: TableState): TableState {
+/**
+ * Starts hand 1 on the fixed deal; dealing itself is random, so the game is placed the way a deal would place it,
+ * as the first hand of a new rubber. `earlier` puts hands already scored on that rubber.
+ */
+function dealt(state: TableState, earlier: Rubber["hands"] = []): TableState {
   const game: GameState = createGameState({ deal: DEAL, dealer: "north", vulnerability: "None" });
-  return { ...state, handNumber: 1, revision: state.revision + 1, game, turnSince: AT, lastHumanAt: AT, trickJustCompleted: false };
+  const rubber: Rubber = { hands: earlier, lastDealer: "north", activeHandId: rubberHandId(1) };
+  return { ...state, handNumber: 1, revision: state.revision + 1, game, rubber, turnSince: AT, lastHumanAt: AT, trickJustCompleted: false };
 }
 
 /** Applies one action through whoever controls it: the seat's bot, or the human allowed to act for it. */
@@ -123,7 +127,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; initialQueued?: QueuedCard }
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage"> };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
@@ -207,8 +211,20 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points, and the contract, score, and Deal in the middle.",
+    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points, and the contract, the hand's rubber points, the rubber scoresheet, and Deal in the middle.",
     build: () => playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete")
+  },
+  {
+    id: "rubber-score", title: "Rubber score", detail: "Rubber score from the game menu, mid-hand: East-West made 2♥ with an overtrick and North-South went down in 3NT, so the first game is still open and nobody is vulnerable.",
+    build: () => {
+      const people: People = { north: "Alex" };
+      const earlier = [
+        scoreRubberHand("preview-2h", { level: 2, strain: "hearts", declarer: "east", doubled: 0 }, 9, "None"),
+        scoreRubberHand("preview-3nt", { level: 3, strain: "notrump", declarer: "south", doubled: 0 }, 8, "None")
+      ];
+      const playing = playUntil(bid(dealt(table("Friday club", people, others("north")), earlier), 8), moment(["north", "south"], 2));
+      return { ...view(playing, "north", people), rubberOpen: true };
+    }
   }
 ];
 

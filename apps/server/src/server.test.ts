@@ -197,14 +197,22 @@ describe("lobby", () => {
     expect(tables.map((t) => t.id)).toContain(listed);
     expect(tables.map((t) => t.id)).not.toContain(hidden);
     const entry = tables.find((t) => t.id === listed)!;
-    expect(entry).toMatchObject({ name: "Open table", style: "SAYC", handInProgress: false });
+    expect(entry).toMatchObject({ name: "Open table", style: "SAYC", scoring: "rubber", handInProgress: false });
     expect(entry.seats.north).toEqual({ kind: "empty" });
   });
 
-  it("refuses a bad name or style", async () => {
+  it("scores rubbers unless running totals are asked for", async () => {
+    const totals = await createTable({ name: "Totals table", style: "SAYC", scoring: "duplicate", listed: true });
+    expect(totals.status).toBe(201);
+    const { id } = await totals.json<{ id: string }>();
+    expect((await listTables()).find((t) => t.id === id)).toMatchObject({ scoring: "duplicate" });
+  });
+
+  it("refuses a bad name, style, or scoring", async () => {
     expect((await createTable({ name: "  ", style: "SAYC", listed: true })).status).toBe(400);
     expect((await createTable({ name: "x".repeat(41), style: "SAYC", listed: true })).status).toBe(400);
     expect((await createTable({ name: "Fine", style: "Acol", listed: true })).status).toBe(400);
+    expect((await createTable({ name: "Fine", style: "SAYC", scoring: "chicago", listed: true })).status).toBe(400);
     expect((await SELF.fetch("https://x/api/tables", { method: "POST", body: "{not json" })).status).toBe(400);
   });
 
@@ -667,7 +675,8 @@ describe("a hand at an online table", () => {
       }
 
       const game = view.game!;
-      if (game.phase === "complete") expect(view.totals.ns + view.totals.ew).toBeGreaterThan(0);
+      // New tables score rubbers: a played hand goes on the rubber, which the view carries.
+      if (game.phase === "complete") expect(view.rubber!.hands).toHaveLength(1);
       else expect(game.phase).toBe("passed-out");
       expect(view.revealed!.south).toHaveLength(13);
     }

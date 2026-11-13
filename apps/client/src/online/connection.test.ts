@@ -228,18 +228,18 @@ describe("HTTP helpers", () => {
   it("creates a table", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "ABC234" }), { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(createTable("https://x.test", { name: "T", style: "SAYC", listed: true })).resolves.toEqual({ id: "ABC234" });
+    await expect(createTable("https://x.test", { name: "T", style: "SAYC", scoring: "rubber", listed: true })).resolves.toEqual({ id: "ABC234" });
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body as string)).toEqual({ name: "T", style: "SAYC", listed: true });
+    expect(JSON.parse(init.body as string)).toEqual({ name: "T", style: "SAYC", scoring: "rubber", listed: true });
   });
 
   it("returns the error code on 429 and a generic error otherwise", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: "too-many-tables" }), { status: 429 })));
-    await expect(createTable("https://x.test", { name: "T", style: "2/1", listed: false })).resolves.toEqual({ error: "too-many-tables" });
+    await expect(createTable("https://x.test", { name: "T", style: "2/1", scoring: "duplicate", listed: false })).resolves.toEqual({ error: "too-many-tables" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("bad", { status: 400 })));
-    await expect(createTable("https://x.test", { name: "", style: "2/1", listed: false })).resolves.toEqual({ error: "bad-request" });
+    await expect(createTable("https://x.test", { name: "", style: "2/1", scoring: "duplicate", listed: false })).resolves.toEqual({ error: "bad-request" });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    await expect(createTable("https://x.test", { name: "T", style: "2/1", listed: false })).resolves.toEqual({ error: "network" });
+    await expect(createTable("https://x.test", { name: "T", style: "2/1", scoring: "duplicate", listed: false })).resolves.toEqual({ error: "network" });
   });
 });

@@ -42,8 +42,8 @@ describe("claims", () => {
     expect(t.game!.phase).toBe("complete");
     expect(t.game!.claim).toEqual({ seat: "south", tricks: 7 });
     expect(t.pendingClaim).toBeUndefined();
-    const score = t.game!.score!.score;
-    expect(t.totals).toEqual(score >= 0 ? { ns: score, ew: 0 } : { ns: 0, ew: -score });
+    // The claimed hand is scored on the rubber.
+    expect(t.rubber!.hands.map((hand) => hand.handId)).toEqual([t.rubber!.activeHandId]);
     expect(viewFor(t, "east").claim).toBeUndefined();
   });
 

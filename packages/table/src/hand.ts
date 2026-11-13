@@ -1,8 +1,8 @@
-import { applyAction, createDeck, createGameState, deal as dealCards, playContextFor, rewindTo, SEATS, shuffle } from "@contractplay/core";
+import { applyAction, createDeck, createGameState, deal as dealCards, emptyRubber, nextRubberDeal, playContextFor, recordRubberHand, rewindTo, SEATS, shuffle } from "@contractplay/core";
 import type { GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
-  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, seatOf, withoutAutoPlay, withoutClaim, withoutGame,
+  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, scoringOf, seatOf, withoutAutoPlay, withoutClaim, withoutGame,
   type Outcome, type PlayerId, type TableState
 } from "./state.js";
 
@@ -10,6 +10,9 @@ const VULNERABILITY = ["None", "NS", "EW", "Both", "NS", "EW", "Both", "None", "
 
 const dummyOf = (game: GameState): Seat | undefined =>
   game.contract ? SEATS[(SEATS.indexOf(game.contract.declarer) + 2) % 4] : undefined;
+
+/** The id a table's hand has in its rubber. */
+export const rubberHandId = (handNumber: number): string => `hand-${handNumber}`;
 
 /** True when every seat is filled and at least one is a human. */
 function tableReady(state: TableState): boolean {
@@ -26,8 +29,16 @@ export function dealHand(state: TableState, player: PlayerId, at: number, random
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (!canDeal(state, player)) return refuse(state, "not-ready");
   const handNumber = state.handNumber + 1;
+  const deal = dealCards(shuffle(createDeck(), random));
+  if (scoringOf(state) === "rubber") {
+    // Rubber deals rotate the dealer from North and take vulnerability from games won; a won rubber starts a new one.
+    const next = nextRubberDeal(state.rubber ?? emptyRubber(), "north");
+    const game = createGameState({ deal, dealer: next.dealer, vulnerability: next.vulnerability });
+    const rubber = { ...next.rubber, activeHandId: rubberHandId(handNumber) };
+    return accept(state, { handNumber, game, rubber, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+  }
   const game = createGameState({
-    deal: dealCards(shuffle(createDeck(), random)),
+    deal,
     dealer: SEATS[(handNumber - 1) % 4]!,
     vulnerability: VULNERABILITY[(handNumber - 1) % 16]!
   });
@@ -63,14 +74,15 @@ export function record(state: TableState, action: GameAction, at: number, byHuma
   const game = result.state;
   const trickJustCompleted = action.type === "play" && game.phase === "play" && game.currentTrick.length === 0;
   let totals = state.totals;
-  if (game.phase === "complete" && game.score && game.contract) {
+  const rubber = state.rubber && game.phase === "complete" ? { rubber: recordRubberHand(state.rubber, rubberHandId(state.handNumber), game) } : {};
+  if (scoringOf(state) === "duplicate" && game.phase === "complete" && game.score && game.contract) {
     // score is signed from North-South's side: the side that scored plus is credited
     const { score } = game.score;
     totals = score >= 0 ? { ...totals, ns: totals.ns + score } : { ...totals, ew: totals.ew - score };
   }
   // Auto play lasts for one hand: when the last card is played, or the hand is passed out, those players get their seats back.
   const seats = game.phase === "complete" || game.phase === "passed-out" ? withoutAutoPlay(state.seats) : state.seats;
-  return accept(withoutClaim(state), { game, totals, seats, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
+  return accept(withoutClaim(state), { game, totals, ...rubber, seats, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
 }
 
 export function act(state: TableState, player: PlayerId, message: { handNumber: number; revision: number; action: GameAction }, at: number): Outcome {

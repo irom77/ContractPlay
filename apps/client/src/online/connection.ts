@@ -1,5 +1,5 @@
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
-import type { ClientMessage, RefusalReason, ServerMessage, TableStyle, TableSummary, TableView } from "@contractplay/protocol";
+import type { ClientMessage, RefusalReason, ServerMessage, TableScoring, TableStyle, TableSummary, TableView } from "@contractplay/protocol";
 import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
 
@@ -108,7 +108,7 @@ export async function listTables(baseUrl: string): Promise<TableSummary[]> {
   return (await response.json()) as TableSummary[];
 }
 
-export async function createTable(baseUrl: string, input: { name: string; style: TableStyle; listed: boolean }): Promise<{ id: string } | { error: string }> {
+export async function createTable(baseUrl: string, input: { name: string; style: TableStyle; scoring: TableScoring; listed: boolean }): Promise<{ id: string } | { error: string }> {
   try {
     const response = await fetch(`${baseUrl}/api/tables`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input)

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { Seat, SkillLevel } from "@contractplay/core";
+import type { RubberHand, RubberSummary, Seat, SkillLevel } from "@contractplay/core";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
-import { ContractOutcome } from "../table/ResultSummary.js";
+import { ContractOutcome, RubberScoresheet, rubberHandText } from "../table/ResultSummary.js";
 import { claimText, contractText, seatNames, seats } from "../table/labels.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
@@ -9,8 +9,10 @@ export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
 
 /** Between hands, or for anyone unseated: the four seats with their controls, the totals, the last result, and Deal. */
-export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
-  view: TableViewData; totals: string; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void;
+export function SeatingPanel({ view, totals, rubberSummary, rubberHand, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
+  view: TableViewData; totals: string;
+  /** A rubber table's rubber, shown as its scoresheet, and the last hand's line on it. */
+  rubberSummary?: RubberSummary | undefined; rubberHand?: RubberHand | undefined; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void;
   /** Back to the finished hand laid out on the table, when there is one. */
   onShowResult?: (() => void) | undefined;
   send(message: Outgoing): void;
@@ -57,13 +59,13 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
         <div className="lobby-panel">
           <div className="section-heading">
             <h2>{view.name}</h2>
-            <span className="quiet-copy">{view.style}</span>
+            <span className="quiet-copy">{view.style}{rubberSummary ? " · Rubber bridge" : ""}</span>
           </div>
-          <p className="online-totals">{totals}</p>
+          {rubberSummary ? <RubberScoresheet summary={rubberSummary} /> : <p className="online-totals">{totals}</p>}
           {copyNote ? <p className="quiet-copy online-copy-note" role="status">{copyNote}</p> : null}
           {view.handInProgress && !yourSeat ? <p>A hand is in progress. You can take a seat when it ends.</p> : null}
           {view.revealed && view.game ? <section className="online-result" aria-label="Last hand">
-            <HandResultSummary game={view.game} />
+            <HandResultSummary game={view.game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />
             {onShowResult ? <button className="secondary-button" type="button" onClick={onShowResult}>Show the hands</button> : null}
           </section> : null}
           <div className="online-seats">
@@ -82,7 +84,7 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
               </div>;
             })}
           </div>
-          {yourSeat ? <button className="primary-button online-deal" type="button" disabled={!view.canDeal} onClick={() => send({ type: "deal" })}>Deal</button> : null}
+          {yourSeat ? <button className="primary-button online-deal" type="button" disabled={!view.canDeal} onClick={() => send({ type: "deal" })}>{rubberSummary?.winner ? "Deal a new rubber" : "Deal"}</button> : null}
         </div>
         {statusLine}
       </section>
@@ -90,8 +92,11 @@ export function SeatingPanel({ view, totals, statusLine, backButton, copyNote, o
   );
 }
 
-/** The finished hand's contract, how it went, and its score: the centre of the result table, and a reminder on the seating screen. */
-export function HandResultSummary({ game }: { game: PublicGame }) {
+/**
+ * The finished hand's contract, how it went, and its score: the centre of the result table, and a reminder on the seating screen.
+ * At a rubber table `rubberHand` is the hand's line on the scoresheet (null when it is not on the sheet).
+ */
+export function HandResultSummary({ game, rubberHand }: { game: PublicGame; rubberHand?: RubberHand | null | undefined }) {
   const contract = game.contract;
   const score = game.score;
   if (!contract || !score) return <h2>Passed out</h2>;
@@ -99,6 +104,6 @@ export function HandResultSummary({ game }: { game: PublicGame }) {
     <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
     <ContractOutcome score={score} />
     {game.claim ? <p className="claim-line">{claimText(game.claim, contract.declarer, 13 - game.completedTricks.length)}</p> : null}
-    <p className="hand-points-line">{score.score >= 0 ? "NS" : "EW"} +{Math.abs(score.score)}</p>
+    <p className="hand-points-line">{rubberHand !== undefined ? (rubberHand ? rubberHandText(rubberHand) : "No score") : `${score.score >= 0 ? "NS" : "EW"} +${Math.abs(score.score)}`}</p>
   </>;
 }

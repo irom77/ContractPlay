@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import type { TableStyle, TableSummary } from "@contractplay/protocol";
+import type { TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 
 /** Listed and unlisted tables are capped separately, so neither kind can starve the other. */
 export const MAX_LISTED_TABLES = 100, MAX_UNLISTED_TABLES = 400;
@@ -21,7 +21,8 @@ const DELETE_BATCH = 128;
 /** A lobby entry; `summary` is missing while the table is being created (the id is reserved). */
 type Entry = { listed: boolean; summary?: TableSummary };
 
-export type NewTable = { name: string; style: TableStyle; listed: boolean };
+/** `scoring` is missing only from callers that predate rubber tables; the table then scores rubbers. */
+export type NewTable = { name: string; style: TableStyle; scoring?: TableScoring; listed: boolean };
 
 /** `length` characters from a 32-letter alphabet; 256 is a multiple of 32, so `byte % 32` is uniform. */
 function randomTableId(length: number): string {

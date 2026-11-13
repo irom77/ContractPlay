@@ -30,8 +30,8 @@ describe("dealing", () => {
     expect(viewFor(bots, "alice").canDeal).toBe(false);
   });
 
-  it("rotates dealer and vulnerability", () => {
-    let t = fourHumans();
+  it("rotates dealer and vulnerability by board at a running-totals table", () => {
+    let t = fourHumans("duplicate");
     const random = seededRandom(1);
     const seen: [string, string][] = [];
     for (let i = 0; i < 5; i++) {
@@ -126,7 +126,7 @@ describe("bots", () => {
 
   it("plays a full hand with one human and three bots and credits the side that scored", async () => {
     for (const seed of [1, 2, 3, 4, 5, 6]) {
-      const t = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(seed));
+      const t = sendOk(tableWithBots("duplicate"), "alice", { type: "deal" }, 1, seededRandom(seed));
       const done = await playOut(t);
       expectTotals(done);
     }
@@ -135,7 +135,7 @@ describe("bots", () => {
   it("credits totals correctly for north-south and east-west declarers, made and failed", async () => {
     const seen = new Set<string>();
     for (let seed = 1; seed <= 40 && seen.size < 4; seed++) {
-      const done = await playOut(sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(seed)));
+      const done = await playOut(sendOk(fourHumans("duplicate"), "p0", { type: "deal" }, 1, seededRandom(seed)));
       expectTotals(done);
       const game = done.game!;
       if (game.phase !== "complete") continue;
@@ -259,5 +259,62 @@ describe("cancelling and leaving a hand", () => {
     expect(left.game).toBeUndefined();
     expect(left.seats.north).toEqual({ kind: "empty" });
     expect(botToAct(left)).toBeUndefined();
+  });
+});
+
+describe("rubber scoring", () => {
+  const passOut = (start: TableState): TableState => {
+    let t = start;
+    for (let k = 0; k < 4; k++) {
+      const seat = t.game!.currentActor;
+      const s = t.seats[seat];
+      t = sendOk(t, s.kind === "human" ? s.player : "", act(t, pass(seat)));
+    }
+    return t;
+  };
+  const game = (side: "NS" | "EW", id: string) => ({ handId: id, below: { NS: side === "NS" ? 120 : 0, EW: side === "EW" ? 120 : 0 }, above: { NS: 0, EW: 0 } });
+
+  it("scores rubbers at new tables: dealer from North, vulnerability from games won, passed-out hands unscored", () => {
+    let t = fourHumans();
+    expect(t.scoring).toBe("rubber");
+    const seen: [string, string][] = [];
+    for (let i = 0; i < 3; i++) {
+      t = sendOk(t, "p0", { type: "deal" }, 1, seededRandom(i + 1));
+      seen.push([t.game!.dealer, t.game!.vulnerability]);
+      expect(t.rubber!.activeHandId).toBe(`hand-${i + 1}`);
+      t = passOut(t);
+    }
+    expect(seen).toEqual([["north", "None"], ["east", "None"], ["south", "None"]]);
+    expect(t.rubber!.hands).toEqual([]);
+    expect(t.totals).toEqual({ ns: 0, ew: 0 });
+    expect(viewFor(t, "p0")).toMatchObject({ scoring: "rubber", rubber: t.rubber });
+  });
+
+  it("deals vulnerable after a game, and starts a new rubber once one is won", () => {
+    const t = fourHumans();
+    const oneGame = { ...t, rubber: { hands: [game("NS", "hand-1")], lastDealer: "north" as const, activeHandId: "hand-1" } };
+    const dealt = sendOk(oneGame, "p0", { type: "deal" });
+    expect([dealt.game!.dealer, dealt.game!.vulnerability]).toEqual(["east", "NS"]);
+    expect(dealt.rubber!.hands).toHaveLength(1);
+    const won = { ...t, rubber: { hands: [game("NS", "hand-1"), game("NS", "hand-2")], lastDealer: "east" as const, activeHandId: "hand-2" } };
+    const fresh = sendOk(won, "p0", { type: "deal" });
+    expect([fresh.game!.dealer, fresh.game!.vulnerability]).toEqual(["north", "None"]);
+    expect(fresh.rubber).toEqual({ hands: [], lastDealer: "north", activeHandId: "hand-1" });
+  });
+
+  it("records a played hand on the rubber and leaves the running totals alone", async () => {
+    for (const seed of [1, 2, 3]) {
+      const done = await playOut(sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(seed)));
+      expect(done.totals).toEqual({ ns: 0, ew: 0 });
+      expect(done.rubber!.hands.map((hand) => hand.handId)).toEqual(done.game!.phase === "complete" ? ["hand-1"] : []);
+    }
+  });
+
+  it("keeps running totals at a table stored before rubber scoring", () => {
+    const legacy = Object.fromEntries(Object.entries(fourHumans()).filter(([key]) => key !== "scoring")) as TableState;
+    const dealt = sendOk(legacy, "p0", { type: "deal" });
+    expect(dealt.rubber).toBeUndefined();
+    expect(viewFor(dealt, "p0").scoring).toBe("duplicate");
+    expect(viewFor(dealt, "p0").rubber).toBeUndefined();
   });
 });

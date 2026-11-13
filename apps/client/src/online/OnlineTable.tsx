@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { cardId, forcedCard, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
+import { cardId, emptyRubber, forcedCard, summarizeRubber, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
@@ -10,6 +10,7 @@ import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCar
 import { TableView } from "../table/TableView.js";
 import { ClaimPanel } from "../table/ClaimPanel.js";
 import { DraggableBanner } from "../table/DraggableBanner.js";
+import { RubberScoresheet } from "../table/ResultSummary.js";
 import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
@@ -30,6 +31,8 @@ export type OnlineTableProps = {
   baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect;
   /** Opens the game menu on arrival (the UI previews show it this way). */
   menuOpen?: boolean;
+  /** Opens the Rubber score dialog on arrival (the UI previews show it this way). */
+  rubberOpen?: boolean;
   /** Starts with this card queued (the UI previews show a queued card this way). */
   initialQueued?: QueuedCard;
 };
@@ -154,7 +157,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={identity} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -187,6 +190,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
   const [claimPickedAt, setClaimPickedAt] = useState<number>();
   // The finished hand whose result table the viewer left for the seating screen.
   const [seatingAfter, setSeatingAfter] = useState<number>();
+  const [rubberShown, setRubberShown] = useState(rubberOpen);
   const queueOwners = view ? queueOwnerSeats(view) : [];
   const activeQueued = queued && view?.game && queueOwners.includes(queued.seat) && queueStillValid(view.game, queued, String(view.handNumber), !!view.claim) ? queued : undefined;
 
@@ -371,7 +375,22 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     </section></main>;
   }
 
-  const totals = `NS ${view.totals.ns} · EW ${view.totals.ew}`;
+  // A rubber table scores the rubber in play (or the one just won, until the next deal); older tables keep running totals.
+  const rubberSummary = view.scoring === "rubber" ? summarizeRubber(view.rubber ?? emptyRubber()) : undefined;
+  const score = rubberSummary ? { ns: rubberSummary.totals.NS, ew: rubberSummary.totals.EW } : view.totals;
+  const totals = `${rubberSummary ? "Rubber: " : ""}NS ${score.ns} · EW ${score.ew}`;
+  const rubberItem: GameMenuItem[] = rubberSummary
+    ? [{ id: "rubber", label: "Rubber score", title: "The rubber so far: games, points above and below the line, and totals", onSelect: () => setRubberShown(true) }]
+    : [];
+  const rubberDialog = rubberSummary && rubberShown ? <div className="about-backdrop" onClick={() => setRubberShown(false)}>
+    <section className="about-dialog menu-dialog" role="dialog" aria-modal="true" aria-label="Rubber score" onClick={(event) => event.stopPropagation()}>
+      <h2>Rubber score</h2>
+      <section className="rubber-menu" aria-label="Rubber"><RubberScoresheet summary={rubberSummary} /></section>
+      <button className="primary-button" type="button" autoFocus onClick={() => setRubberShown(false)}>Close</button>
+    </section>
+  </div> : null;
+  // This hand's line on the rubber scoresheet, once it is scored.
+  const rubberHand = view.rubber?.hands.find((hand) => hand.handId === view.rubber?.activeHandId);
   const yourSeat = view.yourSeat;
   const game = view.game;
   const holding = hold !== undefined && hold.handNumber === view.handNumber;
@@ -427,6 +446,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: "Keep your seat and return to the lobby" },
       ...(canClaim && !pickingClaim ? [{ id: "claim", label: "Claim", disabled: inputDisabled,
         title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(view.revision) }] : []),
+      ...rubberItem,
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",
@@ -487,7 +507,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 return explainBid(game.auction, index, view.style, skill);
               }
             } : undefined}
-            matchScore={view.totals}
+            matchScore={score}
             tools={<GameMenu items={menuItems} defaultOpen={menuOpen} />}
             overlay={<>
               {claimPanel}
@@ -502,6 +522,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>{mine.autoPlay ? "Stop auto play" : "Take my seat back"}</button>
               </DraggableBanner> : null}
               {view.claimRejected ? <p className="claim-notice" role="status">{claimRejectedText(view.claimRejected)}</p> : null}
+              {rubberDialog}
               {statusLine}
             </>}
           />
@@ -516,6 +537,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     const resultMenu: GameMenuItem[] = [
       { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: yourSeat ? "Keep your seat and return to the lobby" : "Return to the lobby" },
       { id: "seating", label: "Seating", onSelect: openSeating, title: "Change seats, bots, and skill levels before the next deal" },
+      ...rubberItem,
       ...(yourSeat ? [{ id: "leave", label: "Leave the table", tone: "danger" as const, disabled: status !== "open" || leaving,
         title: "Give up your seat and return to the lobby", onSelect: () => { setLeaving(true); send({ type: "leave" }); } }] : [])
     ];
@@ -536,17 +558,18 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             ariaLabel={`Bridge table ${view.name}, hand result`}
             botSeats={botSeatsOf(view.seats)}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat} onHandToBot={undefined} seat={seat} />}
-            matchScore={view.totals}
+            matchScore={score}
             tools={<GameMenu items={resultMenu} />}
             overlay={<>
               <section className="score-panel result-panel" aria-label="Hand result">
-                <HandResultSummary game={game} />
-                <p className="result-totals">Table score: {totals}</p>
+                <HandResultSummary game={game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />
+                {rubberSummary ? <RubberScoresheet summary={rubberSummary} /> : <p className="result-totals">Table score: {totals}</p>}
                 <div className="result-actions">
-                  {yourSeat ? <button className="primary-button" type="button" disabled={!view.canDeal} title={view.canDeal ? "Deal the next hand" : "Every seat needs a player or a bot before the next deal"} onClick={() => send({ type: "deal" })}>Deal</button> : null}
+                  {yourSeat ? <button className="primary-button" type="button" disabled={!view.canDeal} title={view.canDeal ? "Deal the next hand" : "Every seat needs a player or a bot before the next deal"} onClick={() => send({ type: "deal" })}>{rubberSummary?.winner ? "Deal a new rubber" : "Deal"}</button> : null}
                   <button className="secondary-button" type="button" onClick={openSeating}>{yourSeat ? "Seating" : "Take a seat"}</button>
                 </div>
               </section>
+              {rubberDialog}
               {statusLine}
             </>}
           />
@@ -555,7 +578,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
     );
   }
 
-  return <SeatingPanel view={view} totals={totals} statusLine={statusLine} backButton={backButton} copyNote={copyNote}
+  return <SeatingPanel view={view} totals={totals} rubberSummary={rubberSummary} rubberHand={rubberHand} statusLine={statusLine} backButton={backButton} copyNote={copyNote}
     onShowResult={game && view.revealed && !view.handInProgress ? () => setSeatingAfter(undefined) : undefined}
     onCopy={() => {
       const link = `${location.origin}${location.pathname}#/table/${view.id}`;

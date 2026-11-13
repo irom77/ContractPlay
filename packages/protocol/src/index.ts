@@ -1,11 +1,14 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
-import type { Card, Deal, GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
+import type { Card, Deal, GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
 export type TableStyle = "SAYC" | "2/1";
+/** How a table scores: rubber bridge (the default for new tables), or running duplicate-style totals (tables made before rubbers). */
+export type TableScoring = "rubber" | "duplicate";
+export const TABLE_SCORINGS: readonly TableScoring[] = ["rubber", "duplicate"];
 
 export type SeatInfo =
   | { kind: "empty" }
@@ -14,7 +17,7 @@ export type SeatInfo =
     /** The player asked a bot to play their cards for the rest of this hand; they get the seat back when it ends. */
     autoPlay?: true };
 
-export type TableSummary = { id: string; name: string; style: TableStyle; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
+export type TableSummary = { id: string; name: string; style: TableStyle; scoring: TableScoring; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
 
 /** GameState without history or the original deal; hands the viewer may not see are empty arrays. */
 export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader" | "claim">;
@@ -22,7 +25,10 @@ export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | 
 export type TableView = TableSummary & {
   /** `revision` is the staleness token to send with `act`, not a change counter: views can differ at the same revision, so never dedupe views by it. */
   listed: boolean; revision: number; handNumber: number;
+  /** Running totals at a duplicate-scored table; a rubber table keeps its score in `rubber`. */
   totals: { ns: number; ew: number };
+  /** A rubber table's rubber: the hands scored so far, with the hand being played for it. */
+  rubber?: Rubber;
   host?: Seat; yourSeat?: Seat; canDeal: boolean;
   game?: PublicGame;
   revealed?: Deal;

@@ -61,6 +61,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(menu).getByRole("button", { name: "Back to lobby" })).toBeTruthy();
     expect((within(menu).getByRole("button", { name: "Take back" }) as HTMLButtonElement).disabled).toBe(false);
     expect(within(menu).getByRole("button", { name: "Cancel this hand" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Rubber score" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "Leave the table" })).toBeTruthy();
   },
   "auto-play": () => {
@@ -79,11 +80,21 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   result: () => {
     const result = screen.getByRole("region", { name: "Hand result" });
-    expect(result.textContent).toMatch(/4♠ by North[\s\S]*420/);
+    // A rubber table: the hand's points below and above the line, and the rubber scoresheet with the game won.
+    expect(result.textContent).toMatch(/4♠ by North[\s\S]*NS 120 below the line/);
+    expect(within(result).getByRole("table", { name: "Rubber score" }).textContent).toMatch(/Games NS 1 · EW 0/);
     expect(within(result).getByRole("button", { name: "Deal" })).toBeTruthy();
     // All 52 cards face-up at their seats around the result, each hand with its high-card points.
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
     expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
+  },
+  "rubber-score": () => {
+    const dialog = screen.getByRole("dialog", { name: "Rubber score" });
+    const sheet = within(dialog).getByRole("table", { name: "Rubber score" });
+    expect(sheet.textContent).toMatch(/Games NS 0 · EW 0 · Neither side vulnerable/);
+    expect(sheet.textContent).toMatch(/Game 1 \(in play\)/);
+    // Opened over a hand in play.
+    expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
   },
   "solo-setup": () => {
     expect(screen.getByRole("region", { name: "New deal" })).toBeTruthy();

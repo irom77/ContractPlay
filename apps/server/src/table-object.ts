@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, parseClientMessage } from "@contractplay/protocol";
-import type { ServerMessage, TableStyle, TableSummary } from "@contractplay/protocol";
+import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, createTable, nextWake, reduce, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
@@ -71,7 +71,7 @@ export class TableObject extends DurableObject<Env> {
   private state: TableState | null | undefined;
 
   /** Creates the table; undefined when one already exists under this id. */
-  async create(input: { id: string; name: string; style: TableStyle; listed: boolean }): Promise<TableSummary | undefined> {
+  async create(input: { id: string; name: string; style: TableStyle; scoring?: TableScoring; listed: boolean }): Promise<TableSummary | undefined> {
     if (await this.load()) return undefined;
     const state = createTable({ ...input, at: Date.now() });
     await this.save(state);

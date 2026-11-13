@@ -45,7 +45,7 @@ const human = (name: string, extra: { away?: boolean; standIn?: "intermediate" }
 
 function tableView(overrides: Partial<TableView> = {}): TableView {
   return {
-    id: "ABC234", name: "Friday club", style: "SAYC", listed: true, revision: 3, handNumber: 0,
+    id: "ABC234", name: "Friday club", style: "SAYC", scoring: "duplicate", listed: true, revision: 3, handNumber: 0,
     totals: { ns: 0, ew: 0 }, canDeal: false, handInProgress: false,
     seats: { north: empty, east: empty, south: empty, west: empty },
     ...overrides

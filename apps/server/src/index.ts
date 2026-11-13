@@ -1,5 +1,5 @@
-import { MAX_MESSAGE_BYTES, MAX_TABLE_NAME, PROTOCOL_VERSION, cleanName } from "@contractplay/protocol";
-import type { TableStyle } from "@contractplay/protocol";
+import { MAX_MESSAGE_BYTES, MAX_TABLE_NAME, PROTOCOL_VERSION, TABLE_SCORINGS, cleanName } from "@contractplay/protocol";
+import type { TableScoring, TableStyle } from "@contractplay/protocol";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 
 // The entry module may only export handlers and Durable Object classes.
@@ -40,12 +40,12 @@ async function createTable(request: Request, env: Env): Promise<Response> {
   let body: unknown;
   try { body = JSON.parse(text); } catch { return bad(); }
   if (typeof body !== "object" || body === null) return bad();
-  const { name: rawName, style, listed } = body as Record<string, unknown>;
+  const { name: rawName, style, listed, scoring = "rubber" } = body as Record<string, unknown>;
   const name = cleanName(rawName, MAX_TABLE_NAME);
-  if (name === undefined || !STYLES.includes(style) || typeof listed !== "boolean") return bad();
+  if (name === undefined || !STYLES.includes(style) || typeof listed !== "boolean" || !(TABLE_SCORINGS as readonly unknown[]).includes(scoring)) return bad();
   // the raw address goes over the internal binding only; the lobby keeps just a salted hash of it
   const address = request.headers.get("CF-Connecting-IP") ?? "unknown";
-  const result = await lobbyOf(env).createTable({ name, style: style as TableStyle, listed }, address);
+  const result = await lobbyOf(env).createTable({ name, style: style as TableStyle, scoring: scoring as TableScoring, listed }, address);
   return "error" in result ? Response.json(result, { status: 429 }) : Response.json(result, { status: 201 });
 }
 

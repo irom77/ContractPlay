@@ -1,7 +1,7 @@
 import { createBot } from "@contractplay/bots";
 import { SEATS, applyAction, playContextFor } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
-import type { ClientMessage } from "@contractplay/protocol";
+import type { ClientMessage, TableScoring } from "@contractplay/protocol";
 import { chooseBotAction, deciderOf } from "./hand.js";
 import { reduce } from "./reduce.js";
 import { createTable, type Outcome, type PlayerId, type TableState } from "./state.js";
@@ -16,7 +16,7 @@ export function seededRandom(seed: number): () => number {
   };
 }
 
-export const newTable = (): TableState => createTable({ id: "t", name: "Table", style: "SAYC", listed: true, at: 0 });
+export const newTable = (scoring: TableScoring = "rubber"): TableState => createTable({ id: "t", name: "Table", style: "SAYC", scoring, listed: true, at: 0 });
 
 export function send(state: TableState, player: PlayerId, message: Exclude<ClientMessage, { type: "hello" }>, at = 1, random: () => number = seededRandom(1)): Outcome {
   return reduce(state, { type: "message", player, message, at }, random);
@@ -30,8 +30,8 @@ export function sendOk(state: TableState, player: PlayerId, message: Exclude<Cli
 }
 
 /** A table with `alice` at north and bots in the other seats, ready to deal. */
-export function tableWithBots(): TableState {
-  let state = sendOk(newTable(), "alice", { type: "sit", seat: "north" }, 1);
+export function tableWithBots(scoring: TableScoring = "rubber"): TableState {
+  let state = sendOk(newTable(scoring), "alice", { type: "sit", seat: "north" }, 1);
   for (const seat of SEATS.slice(1)) state = sendOk(state, "alice", { type: "setBot", seat, skill: "advanced" });
   return state;
 }
@@ -68,8 +68,8 @@ export async function playOut(start: TableState, onStep?: (state: TableState, ac
 }
 
 /** Four humans (p0..p3) seated north, east, south, west. */
-export function fourHumans(): TableState {
-  let t = newTable();
+export function fourHumans(scoring: TableScoring = "rubber"): TableState {
+  let t = newTable(scoring);
   SEATS.forEach((seat, i) => { t = sendOk(t, `p${i}`, { type: "sit", seat }, i); });
   return t;
 }

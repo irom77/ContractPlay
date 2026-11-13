@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StorageLike } from "@contractplay/persistence";
-import type { SeatInfo, TableStyle, TableSummary } from "@contractplay/protocol";
+import type { SeatInfo, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
 import { createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
 
 const REFRESH_MS = 5000;
+/** How the lobby names a table's scoring; lobby entries from before rubber tables have none and keep running totals. */
+const scoringNames: Record<TableScoring, string> = { rubber: "Rubber bridge", duplicate: "Running totals" };
 
 export type LobbyApi = {
   listTables(baseUrl: string): Promise<TableSummary[]>;
@@ -76,6 +78,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
   const [createError, setCreateError] = useState<string | undefined>();
   const [tableName, setTableName] = useState<string | undefined>();
   const [style, setStyle] = useState<TableStyle>("SAYC");
+  const [scoring, setScoring] = useState<TableScoring>("rubber");
   const [listed, setListed] = useState(true);
   const [creating, setCreating] = useState(false);
   const inFlight = useRef(false);
@@ -114,7 +117,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
     setCreateError(undefined);
     let result: { id: string } | { error: string };
     try {
-      result = await api.createTable(baseUrl, { name, style, listed });
+      result = await api.createTable(baseUrl, { name, style, scoring, listed });
     } catch {
       result = { error: "failed" };
     }
@@ -149,7 +152,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
               <li key={table.id} className="lobby-table">
                 <div className="lobby-table-head">
                   <strong>{table.name}</strong>
-                  <span className="quiet-copy">{table.style}</span>
+                  <span className="quiet-copy">{table.style} · {scoringNames[table.scoring ?? "duplicate"]}</span>
                   {table.handInProgress ? <span className="lobby-playing">Playing</span> : null}
                 </div>
                 <ul className="lobby-seats">
@@ -165,6 +168,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
         <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
           <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+          <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
           <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
           <button className="primary-button" type="submit" disabled={creating || effectiveName.trim() === ""}>New table</button>
         </form>

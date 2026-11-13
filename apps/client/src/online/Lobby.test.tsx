@@ -13,8 +13,8 @@ function memoryStorage(): StorageLike {
 }
 
 const summaries: TableSummary[] = [
-  { id: "ABC123", name: "Friday club", style: "SAYC", handInProgress: true, seats: { north: { kind: "human", name: "Ann", away: false }, east: { kind: "bot", skill: "beginner" }, south: { kind: "empty" }, west: { kind: "empty" } } },
-  { id: "DEF456", name: "Learners", style: "2/1", handInProgress: false, seats: { north: { kind: "empty" }, east: { kind: "empty" }, south: { kind: "empty" }, west: { kind: "empty" } } }
+  { id: "ABC123", name: "Friday club", style: "SAYC", scoring: "rubber", handInProgress: true, seats: { north: { kind: "human", name: "Ann", away: false }, east: { kind: "bot", skill: "beginner" }, south: { kind: "empty" }, west: { kind: "empty" } } },
+  { id: "DEF456", name: "Learners", style: "2/1", scoring: "duplicate", handInProgress: false, seats: { north: { kind: "empty" }, east: { kind: "empty" }, south: { kind: "empty" }, west: { kind: "empty" } } }
 ];
 
 function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean } = {}) {
@@ -50,7 +50,7 @@ describe("Lobby", () => {
     expect(screen.getByText("Bot")).toBeTruthy();
     expect(screen.getAllByText("Open").length).toBe(2 + 4);
     expect(screen.getAllByText("Playing").length).toBe(1);
-    expect(screen.getAllByText("2/1").some((el) => el.tagName === "SPAN")).toBe(true);
+    expect(screen.getByText("2/1 · Running totals").tagName).toBe("SPAN");
   });
 
   it("opens a listed table", async () => {
@@ -75,8 +75,29 @@ describe("Lobby", () => {
     await user.selectOptions(screen.getByLabelText("Bidding style"), "2/1");
     await user.click(screen.getByLabelText("Show in lobby"));
     await user.click(screen.getByRole("button", { name: "New table" }));
-    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Evening", style: "2/1", listed: false });
+    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Evening", style: "2/1", scoring: "rubber", listed: false });
     await waitFor(() => expect(onOpenTable).toHaveBeenCalledWith("NEW123"));
+  });
+
+  it("offers rubber scoring by default and running totals as a choice", async () => {
+    const user = userEvent.setup();
+    const { createTable } = setup({ list: () => Promise.resolve([]) });
+    expect(((await screen.findByLabelText("Scoring")) as HTMLSelectElement).value).toBe("rubber");
+    await user.selectOptions(screen.getByLabelText("Scoring"), "duplicate");
+    await user.click(screen.getByRole("button", { name: "New table" }));
+    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Bob's table", style: "SAYC", scoring: "duplicate", listed: true });
+  });
+
+  it("shows each table's scoring in the list", async () => {
+    setup();
+    expect(await screen.findByText("SAYC · Rubber bridge")).toBeTruthy();
+    expect(screen.getByText("2/1 · Running totals")).toBeTruthy();
+  });
+
+  it("names a table listed without a scoring (from before rubber tables) as running totals", async () => {
+    const legacy = Object.fromEntries(Object.entries(summaries[0]!).filter(([key]) => key !== "scoring")) as TableSummary;
+    setup({ list: () => Promise.resolve([legacy]) });
+    expect(await screen.findByText("SAYC · Running totals")).toBeTruthy();
   });
 
   it("shows a creation error in an alert", async () => {

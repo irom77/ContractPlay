@@ -1,6 +1,6 @@
-import type { GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
+import type { GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
-import type { ClientMessage, RefusalReason, TableStyle } from "@contractplay/protocol";
+import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
 
 export type PlayerId = string;
 export type SeatState =
@@ -12,6 +12,10 @@ export type SeatState =
 
 export type TableState = Readonly<{
   id: string; name: string; style: TableStyle; listed: boolean;
+  /** Missing on tables stored before rubber scoring, which keep their running totals. */
+  scoring?: TableScoring;
+  /** A rubber table's rubber, from its first deal. A won rubber stays until the next deal starts a new one. */
+  rubber?: Rubber;
   host?: PlayerId; seats: Readonly<Record<Seat, SeatState>>;
   connections: Readonly<Record<PlayerId, number>>;
   awaySince: Readonly<Record<PlayerId, number>>;
@@ -52,9 +56,12 @@ export const BOT_PAUSE_MS = 1000, TRICK_PAUSE_MS = 2000, IDLE_MS = 120_000, HOST
 /** A table no human has ever connected to expires this long after it was created. */
 export const UNVISITED_TABLE_MS = 600_000;
 
-export function createTable(input: { id: string; name: string; style: TableStyle; listed: boolean; at: number }): TableState {
+/** How a table scores; tables stored before rubber scoring keep running totals. */
+export const scoringOf = (state: TableState): TableScoring => state.scoring ?? "duplicate";
+
+export function createTable(input: { id: string; name: string; style: TableStyle; scoring?: TableScoring; listed: boolean; at: number }): TableState {
   return {
-    id: input.id, name: input.name, style: input.style, listed: input.listed,
+    id: input.id, name: input.name, style: input.style, scoring: input.scoring ?? "rubber", listed: input.listed,
     seats: { north: { kind: "empty" }, east: { kind: "empty" }, south: { kind: "empty" }, west: { kind: "empty" } },
     connections: {}, awaySince: {}, names: {}, revision: 0, handNumber: 0, totals: { ns: 0, ew: 0 },
     turnSince: input.at, lastHumanAt: input.at, trickJustCompleted: false, unvisited: true
