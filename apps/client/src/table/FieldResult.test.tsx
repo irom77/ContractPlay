@@ -28,6 +28,14 @@ const panel = () => within(screen.getByRole("region", { name: "Result against th
 const tableRows = () => [...panel().getAllByRole("row")].slice(1);
 
 describe("FieldResult", () => {
+  it("states the points when the field has no scores, but not for a passed-out hand", () => {
+    const { rerender } = render(<FieldResult record={record("MP", [])} nsScore={-420} side="NS" />);
+    expect(panel().getByText("No field results for this board.")).toBeTruthy();
+    expect(document.querySelector(".hand-points-line")?.textContent).toBe("EW +420");
+    rerender(<FieldResult record={record("MP", [])} nsScore={0} side="NS" showPoints={false} />);
+    expect(document.querySelector(".hand-points-line")).toBeNull();
+  });
+
   it("states the matchpoint result and labels the board", () => {
     render(<FieldResult record={record("MP")} nsScore={420} side="NS" label="Board 7 · 1 of 3" />);
     expect(panel().getByRole("heading", { name: "Against the field" })).toBeTruthy();

@@ -3,6 +3,9 @@ import { applyAction, createGameState, type GameState } from "./game.js";
 import type { GameAction } from "./history.js";
 import type { Vulnerability } from "./types.js";
 
+/** The largest Multiplicity a traveller row may carry; anything larger is treated as invalid. */
+export const MAX_MULTIPLICITY = 1000;
+
 /** One result on a board's traveller. `nsScore` is undefined when unknown or irrelevant; `contract` is PBN text such as "4S", "3NTX" or "Pass". */
 export type TravellerRow = Readonly<{
   nsScore?: number;
@@ -73,14 +76,16 @@ export function compareWithField(
   method: FieldMethod
 ): FieldComparison | undefined {
   const sign = side === "NS" ? 1 : -1;
-  const scores = fieldScores(rows).map((score) => sign * score);
-  if (scores.length === 0) return undefined;
+  const counted = rows
+    .filter((row) => !row.artificial && row.nsScore !== undefined)
+    .map((row) => ({ score: sign * row.nsScore!, weight: row.multiplicity }));
+  const count = counted.reduce((sum, { weight }) => sum + weight, 0);
+  if (count === 0) return undefined;
   const mine = sign * nsScore;
-  const count = scores.length;
-  const points = scores.reduce((sum, score) => sum + (score < mine ? 2 : score === mine ? 1 : 0), 0);
+  const points = counted.reduce((sum, { score, weight }) => sum + weight * (score < mine ? 2 : score === mine ? 1 : 0), 0);
   const top = 2 * count;
-  const datum = roundToTen(scores.reduce((sum, score) => sum + score, 0) / count);
-  const total = scores.reduce((sum, score) => sum + impsFor(mine - score), 0);
+  const datum = roundToTen(counted.reduce((sum, { score, weight }) => sum + score * weight, 0) / count);
+  const total = counted.reduce((sum, { score, weight }) => sum + weight * impsFor(mine - score), 0);
   return {
     method,
     count,

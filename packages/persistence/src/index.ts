@@ -1,4 +1,4 @@
-import { isValidDeal, RANKS, SEATS, SUITS, type Deal, type GameAction, type GameState, type HandRecord, type Rubber, type Seat, type Suit, type TravellerRow } from "@contractplay/core";
+import { isValidDeal, RANKS, SEATS, SUITS, type Deal, type GameAction, type GameState, type HandRecord, type Rubber, type Seat, type Suit, type TravellerRow, MAX_MULTIPLICITY } from "@contractplay/core";
 
 const storageKey = "contractplay.solo";
 const legacyStorageKey = "bridgelab.solo";
@@ -75,7 +75,7 @@ function isAction(action: unknown): action is GameAction {
 }
 
 function isTravellerRow(value: unknown): value is TravellerRow {
-  return isRecord(value) && Number.isInteger(value.multiplicity) && Number(value.multiplicity) > 0 && typeof value.artificial === "boolean" &&
+  return isRecord(value) && Number.isInteger(value.multiplicity) && Number(value.multiplicity) >= 1 && Number(value.multiplicity) <= MAX_MULTIPLICITY && typeof value.artificial === "boolean" &&
     (value.nsScore === undefined || Number.isFinite(value.nsScore)) &&
     (value.contract === undefined || typeof value.contract === "string") &&
     (value.declarer === undefined || isSeat(value.declarer)) &&
@@ -191,7 +191,11 @@ export function loadSoloData(storage: StorageLike): SoloData {
 }
 
 export function saveSoloData(storage: StorageLike, data: SoloData): void {
-  storage.setItem(storageKey, JSON.stringify(data));
+  try {
+    storage.setItem(storageKey, JSON.stringify(data));
+  } catch {
+    // A full or unavailable store must not break the app; the game carries on unsaved.
+  }
 }
 
 export function deleteSavedHand(storage: StorageLike, id: string): SoloData {

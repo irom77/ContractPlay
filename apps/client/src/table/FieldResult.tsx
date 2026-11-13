@@ -9,6 +9,8 @@ export type FieldResultProps = Readonly<{
   side: "NS" | "EW";
   /** Which board this is, for example "Board 7 · 1 of 3". */
   label?: string;
+  /** Whether to state the points when there is no field to compare with; false for a passed-out hand. Defaults to true. */
+  showPoints?: boolean;
   /** The panel's buttons. */
   actions?: ReactNode;
 }>;
@@ -38,7 +40,7 @@ function lines(field: readonly TravellerRow[], nsScore: number): Line[] {
 }
 
 /** How a board-set result compares with the field that played the board elsewhere. Pair names are never shown. */
-export function FieldResult({ record, nsScore, side, label, actions }: FieldResultProps) {
+export function FieldResult({ record, nsScore, side, label, showPoints = true, actions }: FieldResultProps) {
   const comparison = compareWithField(record.field, nsScore, side, fieldMethod(record.scoring));
   return <section className="field-result" aria-label="Result against the field">
     <h3>Against the field</h3>
@@ -56,7 +58,10 @@ export function FieldResult({ record, nsScore, side, label, actions }: FieldResu
           </tr>
           : <tr key={key} className="field-row-you"><td>You</td><td /><td /><td>{nsScore}</td></tr>)}</tbody>
       </table>
-    </> : <p className="field-headline">No field results for this board.</p>}
+    </> : <>
+      {showPoints ? <p className="hand-points-line">{`${nsScore >= 0 ? "NS" : "EW"} +${Math.abs(nsScore)}`}</p> : null}
+      <p className="field-headline">No field results for this board.</p>
+    </>}
     {actions ? <div className="field-actions">{actions}</div> : null}
   </section>;
 }

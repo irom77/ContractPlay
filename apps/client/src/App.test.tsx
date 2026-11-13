@@ -1427,6 +1427,20 @@ describe("bridge table", () => {
     expect(fieldPanel()).toBeNull();
   });
 
+  it("shows the points of a completed deal-only board that has no field", () => {
+    const done = completedGame();
+    const record = { dealer: done.dealer, vulnerability: done.vulnerability, deal: done.initialDeal, field: [] };
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({
+      version: 1, currentHandId: "set-hand", currentGame: done, completedHands: [],
+      boardSet: { name: "Set", records: [record, record], position: 0 }, currentRecord: record
+    }));
+    render(<App />);
+
+    const result = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(result.getByText("No field results for this board.")).toBeTruthy();
+    expect(result.getByText(/^(NS|EW) \+\d+$/).className).toBe("hand-points-line");
+  });
+
   it("offers Finish board set from the result of the last board", async () => {
     const user = await importTwoBoards();
     fireEvent.click(menuItem("Next board")!);

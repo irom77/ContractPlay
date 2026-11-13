@@ -190,6 +190,18 @@ describe("local solo store", () => {
       expect(loaded.completedHands).toEqual([record]);
     });
 
+    it("drops a record whose traveller row has an out-of-range multiplicity", () => {
+      const storage = new MemoryStorage();
+      const bad = { ...handRecord, field: [{ nsScore: 90, multiplicity: 1001, artificial: false }] } as HandRecord;
+      saveSoloData(storage, { ...emptyData, currentRecord: bad, completedHands: [record] });
+      expect(loadSoloData(storage).currentRecord).toBeUndefined();
+    });
+
+    it("does not throw when the storage rejects a save", () => {
+      const storage = { getItem: () => null, removeItem: () => undefined, setItem: () => { throw new Error("QuotaExceededError"); } };
+      expect(() => saveSoloData(storage, emptyData)).not.toThrow();
+    });
+
     it("loads data saved before board sets existed unchanged", () => {
       const storage = new MemoryStorage();
       const data: SoloData = { ...emptyData, currentHandId: "x", currentGame: game, completedHands: [record] };

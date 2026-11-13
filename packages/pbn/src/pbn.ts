@@ -1,4 +1,4 @@
-import { applyAction, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction, type HandRecord, type TravellerRow } from "@contractplay/core";
+import { applyAction, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction, type HandRecord, type TravellerRow, MAX_MULTIPLICITY } from "@contractplay/core";
 
 export type PbnTag = Readonly<{ name: string; value: string; line?: number }>;
 export type PbnDiagnostic = Readonly<{ severity: "error" | "warning"; message: string; line: number }>;
@@ -285,7 +285,7 @@ export function parseScoreTable(header: string, rowsText: string, line: number):
     const multiplicityToken = at(multiplicityColumn!);
     if (multiplicityToken !== undefined && !isUnknown(multiplicityToken)) {
       const value = Number(multiplicityToken);
-      if (Number.isInteger(value) && value > 0) multiplicity = value;
+      if (Number.isInteger(value) && value >= 1 && value <= MAX_MULTIPLICITY) multiplicity = value;
       else diagnostics.push({ severity: "warning", message: `Invalid Multiplicity, using 1: ${rowText.trim()}`, line: rowLine });
     }
     rows.push({

@@ -192,6 +192,12 @@ describe("PBN tables, inheritance, and hand records", () => {
     expect(board!.diagnostics.filter((entry) => entry.severity === "warning" && entry.message.includes("Multiplicity"))).toHaveLength(2);
   });
 
+  it("bounds Multiplicity to 1..1000 and warns otherwise", () => {
+    const [board] = parsePbn(minimal('[ScoreTable "Score_NS;Multiplicity"]\n420 1000\n100 1001\n50 10000000000')).boards;
+    expect(board!.field!.map((row) => row.multiplicity)).toEqual([1000, 1, 1]);
+    expect(board!.diagnostics.filter((entry) => entry.severity === "warning" && entry.message.includes("Multiplicity"))).toHaveLength(2);
+  });
+
   it("warns about a row with the wrong number of values and skips it", () => {
     const [board] = parsePbn(minimal('[ScoreTable "Score_NS;Contract"]\n420 4S\n130 3NT extra\n50 2H')).boards;
     expect(board!.field).toHaveLength(2);

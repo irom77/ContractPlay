@@ -777,13 +777,15 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       ? <button className="primary-button" type="button" onClick={() => startBoard({ ...boardSet, position: boardSet.position + 1 })}>Next board</button>
       : <button className="primary-button" type="button" onClick={() => setBoardSet(undefined)}>Finish board set</button>
     : <button className="primary-button" type="button" onClick={startHand}>Next deal</button>;
+  const handOver = phase === "complete" || phase === "passed-out";
   const fieldResult = shownRecord ? <FieldResult
     record={shownRecord}
     nsScore={duplicateScore}
+    showPoints={phase === "complete"}
     side={playAgainstBots ? partnership(userSeat) : "NS"}
     {...(!isReviewing && boardSet ? { label: boardLabel(boardSet) } : {})}
     actions={<>
-      {replayOriginal(shownRecord) ? <button className="secondary-button" type="button" onClick={() => viewOriginal(shownRecord)}>View original play</button> : null}
+      {handOver && replayOriginal(shownRecord) ? <button className="secondary-button" type="button" onClick={() => viewOriginal(shownRecord)}>View original play</button> : null}
       {nextButton}
     </>} /> : null;
   const tableOverlay = <>

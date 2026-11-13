@@ -22,6 +22,16 @@ describe("field scoring", () => {
   it("keeps only real scores, repeated by multiplicity", () => {
     expect(fieldScores([...field, row(100, { multiplicity: 3 })])).toEqual([420, -50, 430, 0, 420, 100, 100, 100]);
   });
+  it("weights a multiplicity row like that many separate rows", () => {
+    const triple = [...field, row(100, { multiplicity: 3 })];
+    const spread = [...field, row(100), row(100), row(100)];
+    for (const method of ["matchpoints", "butler", "cross"] as const) {
+      for (const side of ["NS", "EW"] as const) expect(compareWithField(triple, 130, side, method)).toEqual(compareWithField(spread, 130, side, method));
+    }
+  });
+  it("handles a huge multiplicity without building arrays", () => {
+    expect(compareWithField([row(100, { multiplicity: 1_000_000_000 })], 100, "NS", "matchpoints")!.count).toBe(1_000_000_000);
+  });
   it("matchpoints a new score as an extra table", () => {
     expect(compareWithField(field, 420, "NS", "matchpoints")!.matchpoints).toEqual({ points: 6, top: 10, percentage: 60 });
   });
