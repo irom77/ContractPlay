@@ -19,6 +19,11 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 - [x] Score online tables as rubber bridge by default (dealer from North, vulnerability from games won, Rubber score in the game menu), with running totals as a choice when creating a table; tables made before this keep running totals.
 - [x] Replace the end-of-hand rubber score with a paper-pad scorecard in solo and online play: partnerships either side of a divider, above and below the line, dotted game lines with an arrow to the winner, totals, a breakdown of the last hand's points, a rubber-over summary with next steps, and **Scores** in the game menu.
 
+## Hand records and replays
+
+- [ ] Play boards from tournament or online hand records (PBN first, then LIN and USEBIO results) instead of random deals, compare the player's score with the real field (matchpoints or IMPs), and optionally view the original auction and play. Research: `docs/research/2026-11-13-hand-record-archives.md`.
+- [ ] Replay a previously played random deal from recent hands and compare the new result with earlier attempts at the same deal (built on the same board source and comparison scoring as hand records).
+
 ## Online multiplayer
 
 - [x] Deploy the online tables to Cloudflare: live at https://contractplay.niuk.workers.dev; the repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are set, so pushes to `main` deploy automatically.
