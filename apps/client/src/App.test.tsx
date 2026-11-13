@@ -1384,6 +1384,77 @@ describe("bridge table", () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).toBeUndefined());
   });
 
+  /** Two boards: board 1 (East deals) has the field's results and, when asked, the original table's 1♣ passed out. */
+  async function importTwoBoards(original = false) {
+    const user = userEvent.setup();
+    const table = `[ScoreTable "PairId_NS\\2R;PairId_EW\\2R;Names_NS;Contract\\4L;Declarer\\1R;Result\\2R;Score_NS\\6R;Score_EW\\6R"]
+ 1  5 "Smith - Jones" 4S   N 10    420      -
+ 2  6 "Lee - Patel"   4S   N  9      -     50
+ 3  7 "Ng - Ruiz"     3NT  S 10    430      -
+ 4  8 "Ito - Berg"    Pass -  -      0      0
+ 9 10 "Ali - Moss"    4S   N 10   ^420      -
+11 12 "Fox - Kerr"    ?    ?  ?      ?      ?
+ 5  1 "Day - Hart"    4S   N 10    420      -
+`;
+    const actions = original
+      ? (["1clubs", "pass", "pass", "pass"] as const).map((bid, index) => ({ type: "bid" as const, seat: (["east", "south", "west", "north"] as const)[index]!, bid }))
+      : [];
+    const first = exportPbn({ dealer: "east", vulnerability: "None", actions, deal: deal() });
+    const pbn = `${first}\n${table}\n${exportPbn({ dealer: "south", vulnerability: "EW", actions: [], deal: deal() })}`;
+    render(<App />);
+    await user.click(screen.getByText("Import a PBN deal"));
+    fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: pbn } });
+    await user.click(screen.getByRole("button", { name: "Import hand" }));
+    return user;
+  }
+
+  const fieldPanel = () => screen.queryByRole("region", { name: "Result against the field" });
+
+  it("compares a passed-out board with the field and offers the next board from the result", async () => {
+    const user = await importTwoBoards();
+    expect(screen.getByText("East to bid")).toBeTruthy();
+    expect(fieldPanel()).toBeNull();
+    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+
+    const result = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(within(fieldPanel()!).getByText("30.0% · 3 of 10 matchpoints")).toBeTruthy();
+    expect(within(fieldPanel()!).getByText("Board 1 · 1 of 2")).toBeTruthy();
+    expect(result.queryByRole("button", { name: "Next deal" })).toBeNull();
+    expect(result.queryByRole("button", { name: "View original play" })).toBeNull();
+    await user.click(result.getByRole("button", { name: "Next board" }));
+
+    expect(screen.getByText("South to bid")).toBeTruthy();
+    expect(fieldPanel()).toBeNull();
+  });
+
+  it("offers Finish board set from the result of the last board", async () => {
+    const user = await importTwoBoards();
+    fireEvent.click(menuItem("Next board")!);
+    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+    const result = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(result.queryByRole("button", { name: "Next board" })).toBeNull();
+    await user.click(result.getByRole("button", { name: "Finish board set" }));
+    expect(menuItem("Deal a new hand")).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Next deal" })).toBeTruthy();
+  });
+
+  it("shows the original play only once the hand is over, and returns to the result", async () => {
+    const user = await importTwoBoards(true);
+    expect(screen.queryByRole("button", { name: "View original play" })).toBeNull();
+    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+
+    await user.click(within(fieldPanel()!).getByRole("button", { name: "View original play" }));
+    expect(screen.getByText("Original play: action 0 of 4")).toBeTruthy();
+    expect(fieldPanel()).toBeNull();
+    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: "Next action" }));
+    expect(screen.getByText("Original play: action 4 of 4")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next action" })).toHaveProperty("disabled", true);
+
+    chooseMenu("Back to your result");
+    expect(within(fieldPanel()!).getByText("30.0% · 3 of 10 matchpoints")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Passed out" })).toBeTruthy();
+  });
+
   it("saves a finished board-set hand with its record and leaves the rubber alone", async () => {
     const user = userEvent.setup();
     const game = gameAfterPlays(51);

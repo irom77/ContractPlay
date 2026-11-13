@@ -8,9 +8,11 @@ import {
   emptyRubber,
   forcedCard,
   nextRubberDeal,
+  partnership,
   recordRubberHand,
   redoAction,
   remainingTricks,
+  replayOriginal,
   summarizeRubber,
   playContextFor,
   requestHint,
@@ -28,7 +30,7 @@ import {
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { deleteSavedHand, loadSoloData, saveSoloData, type BoardSet, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
-import { boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
+import { boardLabel, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
@@ -41,6 +43,7 @@ import { ClaimPanel } from "./table/ClaimPanel.js";
 import { DraggableBanner } from "./table/DraggableBanner.js";
 import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
+import { FieldResult } from "./table/FieldResult.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { serviceUrl } from "./online/connection.js";
 
@@ -63,8 +66,8 @@ function claimAnswerer(game: GameState, claimSeat: Seat): Seat {
 
 const playedOn = (hand: SavedHand): string => new Date(hand.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-function reviewState(hand: SavedHand, cursor: number): GameState {
-  let state = hand.game;
+function reviewState(game: GameState, cursor: number): GameState {
+  let state = game;
   while (state.history.cursor > cursor) state = undoAction(state);
   while (state.history.cursor < cursor) state = redoAction(state);
   return state;
@@ -87,6 +90,8 @@ export type SoloPreview = Readonly<{
   dialog?: MenuDialog;
   /** Review this saved hand at this action. */
   review?: Readonly<{ handId: string; cursor: number }>;
+  /** Show the original table's play of the current board at this action. */
+  viewOriginal?: number;
 }>;
 
 /** The game menu's larger entries open as dialogs over the table. */
@@ -135,7 +140,12 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const [temporaryTrick, setTemporaryTrick] = useState<{ handId: string; cards: readonly TrickCard[] }>();
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
   const [reviewHandId, setReviewHandId] = useState<string | undefined>(preview?.review?.handId);
-  const [reviewCursor, setReviewCursor] = useState(preview?.review?.cursor ?? 0);
+  const [reviewCursor, setReviewCursor] = useState(preview?.review?.cursor ?? preview?.viewOriginal ?? 0);
+  // The original table's play of the shown board, opened from its result, and the review cursor to return to.
+  const [original, setOriginal] = useState<{ game: GameState; returnCursor: number } | undefined>(() => {
+    const game = preview?.viewOriginal !== undefined && soloData.currentRecord ? replayOriginal(soloData.currentRecord) : undefined;
+    return game ? { game, returnCursor: 0 } : undefined;
+  });
   const [dialog, setDialog] = useState<MenuDialog | undefined>(preview?.dialog ?? initialDialog);
   // The hand the user has handed over: bots make every remaining call and play for it.
   const [botsFinishHandId, setBotsFinishHandId] = useState<string | undefined>(preview?.autoPlay ? currentHandId : undefined);
@@ -194,7 +204,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
 
   useEffect(() => {
     setLastTrickOpen(false);
-  }, [reviewHandId]);
+  }, [reviewHandId, original]);
 
   useEffect(() => persistence.onSuspend(() => saveSoloData(persistence.storage, latestSoloData.current)), [persistence]);
 
@@ -261,8 +271,10 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
 
   const actor = game?.currentActor;
   const selectedHand = reviewHandId ? soloData.completedHands.find((hand) => hand.id === reviewHandId) : undefined;
-  const shownGame = selectedHand ? reviewState(selectedHand, reviewCursor) : game;
-  const isReviewing = !!selectedHand;
+  // The original play is looked at over the hand it belongs to, live or reviewed.
+  const reviewedGame = original?.game ?? selectedHand?.game;
+  const shownGame = reviewedGame ? reviewState(reviewedGame, reviewCursor) : game;
+  const isReviewing = !!reviewedGame;
   const shownActor = shownGame?.currentActor;
   const userControlsDeclaringSide = !!shownGame?.contract &&
     (shownGame.completedTricks.length > 0 || shownGame.currentTrick.length > 0) &&
@@ -275,7 +287,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const hintGame = hintsOn && canShowHand ? game : undefined;
   const visibleBidHint = hintGame && bidHint?.game === hintGame ? bidHint : undefined;
   const visibleHint = hintGame && playHint?.game === hintGame ? playHint : undefined;
-  const callsKey = `${reviewHandId ?? currentHandId}:${shownGame?.auction.length ?? 0}`;
+  const callsKey = `${original ? "original:" : ""}${reviewHandId ?? currentHandId}:${shownGame?.auction.length ?? 0}`;
   const shownExplanation = hintsOn && explainedCall?.key === callsKey ? explainedCall.index : undefined;
 
   useEffect(() => {
@@ -423,6 +435,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setCurrentRecord(undefined);
     setAuctionShown(false);
     setReviewHandId(undefined);
+    setOriginal(undefined);
     setMessage("");
   }
 
@@ -436,6 +449,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setCurrentPbnMetadata(undefined);
     setAuctionShown(false);
     setReviewHandId(undefined);
+    setOriginal(undefined);
     setDialog(undefined);
     setMessage("");
   }
@@ -473,6 +487,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setDealer(board.dealer);
     setVulnerability(board.vulnerability ?? "None");
     setReviewHandId(undefined);
+    setOriginal(undefined);
     setPbnInput("");
     setMessage("");
   }
@@ -527,6 +542,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   function openReview(hand: SavedHand) {
     setDialog(undefined);
     setReviewHandId(hand.id);
+    setOriginal(undefined);
     setReviewCursor(0);
     setLastTrickOpen(false);
     setMessage("");
@@ -564,7 +580,20 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     URL.revokeObjectURL(url);
   }
 
-  const handCount = selectedHand?.game.history.actions.length ?? 0;
+  const handCount = reviewedGame?.history.actions.length ?? 0;
+
+  function viewOriginal(record: HandRecord) {
+    const originalGame = replayOriginal(record);
+    if (!originalGame) return;
+    setOriginal({ game: originalGame, returnCursor: reviewCursor });
+    setReviewCursor(0);
+    setMessage("");
+  }
+
+  function backToResult() {
+    if (original) setReviewCursor(original.returnCursor);
+    setOriginal(undefined);
+  }
 
   useEffect(() => {
     const sync = () => { void isFullscreen().then(setFullscreenState).catch(() => undefined); };
@@ -686,11 +715,11 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   // The hand whose points the hints show during the auction: the one the hand zone shows.
   const auctionHandSeat: Seat | undefined = canAct ? actor : showBottomHand ? bottomSeat : undefined;
   const showCalls = phase !== "play" || auctionShown;
-  const reviewedClaim = selectedHand && reviewCursor > 0 ? selectedHand.game.history.actions[reviewCursor - 1] : undefined;
-  const statusText = isReviewing
+  const reviewedClaim = reviewedGame && reviewCursor > 0 ? reviewedGame.history.actions[reviewCursor - 1] : undefined;
+  const statusText = reviewedGame
     ? reviewedClaim?.type === "claim" && contract
-      ? claimText(reviewedClaim, contract.declarer, remainingTricks(selectedHand!.game))
-      : `Reviewing action ${reviewCursor} of ${handCount}`
+      ? claimText(reviewedClaim, contract.declarer, remainingTricks(reviewedGame))
+      : `${original ? "Original play: action" : "Reviewing action"} ${reviewCursor} of ${handCount}`
     : liveTurn && activeQueued && !canAct ? `Queued: ${cardLabel(activeQueued.card)}`
     // Against bots, your own turns read as they do online.
     : liveTurn && playAgainstBots && canAct ? (phase === "auction" ? "Your call" : actor === userSeat ? "Your play" : actor === contract?.declarer ? "Play declarer's hand" : "Play from dummy")
@@ -702,7 +731,9 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   // The live hand counts towards the rubber when it was dealt for it, whatever the scoring choice for the next deal.
   const inRubber = !isReviewing && !!currentHandId && rubber.activeHandId === currentHandId;
   const menuItems: GameMenuItem[] = isReviewing ? [
-    { id: "exit-review", label: "Exit review", onSelect: () => { setReviewHandId(undefined); setLastTrickOpen(false); } },
+    original
+      ? { id: "exit-review", label: "Back to your result", onSelect: backToResult }
+      : { id: "exit-review", label: "Exit review", onSelect: () => { setReviewHandId(undefined); setLastTrickOpen(false); } },
     { id: "hands", label: "Recent hands", onSelect: () => setDialog("hands") },
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") }
   ] : [
@@ -738,19 +769,36 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     <button className="secondary-button" type="button" onClick={() => setClosedScorecard(currentHandId)}>Close</button>
   </>;
   const duplicateScore = shownGame.score?.score ?? 0;
+  // A board-set hand's result is set against the field; the original table's play is a review of its own, without one.
+  const shownRecord = original ? undefined : selectedHand ? selectedHand.record : currentRecord;
+  // While a board set is active, the result moves on through the set instead of dealing afresh.
+  const nextButton = isReviewing ? null : boardSet
+    ? boardSet.position + 1 < boardSet.records.length
+      ? <button className="primary-button" type="button" onClick={() => startBoard({ ...boardSet, position: boardSet.position + 1 })}>Next board</button>
+      : <button className="primary-button" type="button" onClick={() => setBoardSet(undefined)}>Finish board set</button>
+    : <button className="primary-button" type="button" onClick={startHand}>Next deal</button>;
+  const fieldResult = shownRecord ? <FieldResult
+    record={shownRecord}
+    nsScore={duplicateScore}
+    side={playAgainstBots ? partnership(userSeat) : "NS"}
+    {...(!isReviewing && boardSet ? { label: boardLabel(boardSet) } : {})}
+    actions={<>
+      {replayOriginal(shownRecord) ? <button className="secondary-button" type="button" onClick={() => viewOriginal(shownRecord)}>View original play</button> : null}
+      {nextButton}
+    </>} /> : null;
   const tableOverlay = <>
     {phase === "complete" && shownGame.score && contract && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""} ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
       <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
       <ContractOutcome score={shownGame.score} />
       {shownGame.claim ? <p className="claim-line">{claimText(shownGame.claim, contract.declarer, remainingTricks(shownGame))}</p> : null}
-      {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} actions={scorecardActions} /> : <>
+      {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} actions={scorecardActions} /> : fieldResult ?? <>
         <p className="hand-points-line">{`${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
-        {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}
+        {nextButton}
       </>}
     </section> : null}
     {phase === "passed-out" && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""}`} aria-label="Hand result"><h2>Passed out</h2>
       {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} passedOut actions={scorecardActions} />
-        : !isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}
+        : fieldResult ?? nextButton}
     </section> : null}
 
     {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">

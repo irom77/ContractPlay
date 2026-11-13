@@ -349,6 +349,20 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .outcome-made strong { background: var(--gold); color: var(--deep); }
 .outcome-down strong { background: #b8423b; color: #fdfcf8; }
 .score-panel .hand-points-line { font-size: var(--text-m); }
+/* A board-set result against the field: the headline, then the traveller with the player's own row picked out. */
+.field-result { display: grid; justify-items: center; gap: var(--u); width: 100%; }
+.field-result h3 { margin: 0; color: var(--gold); font: 800 var(--text-l)/1.2 system-ui, sans-serif; }
+.score-panel .field-result .field-label { color: var(--muted); font-size: var(--text-s); }
+.score-panel .field-result .field-headline { color: var(--ink); font-weight: 700; }
+.field-table { border-collapse: collapse; color: #d6e0d8; font-size: var(--text-s); font-variant-numeric: tabular-nums; }
+.field-table th { border-bottom: 1px solid var(--line); padding: 2px calc(1.2 * var(--u)); color: var(--muted); font-weight: 600; }
+.field-table td { padding: 2px calc(1.2 * var(--u)); }
+.field-table td:last-child, .field-table th:last-child { text-align: right; }
+.field-table .field-row-you td { background: var(--gold); color: var(--deep); font-weight: 800; }
+.field-table .field-row-void td { color: var(--muted); opacity: .6; }
+.field-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--u); }
+/* The traveller can be long: the result panel scrolls rather than spilling off a short screen. */
+.score-panel:has(.field-result) { max-height: calc(100% - 4 * var(--u)); overflow-y: auto; overscroll-behavior: contain; }
 .menu-settings .setup-check, .setup-controls .setup-check { display: flex; flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px; }
 .setup-check input { width: auto; margin: 0; }
 .contract-outcome span + span::before { content: "· "; color: #8fa59a; }
