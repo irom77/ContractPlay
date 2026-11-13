@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { saveSoloData } from "@contractplay/persistence";
+import App from "../App.js";
 import type { StorageLike } from "@contractplay/persistence";
 import type { TableView } from "@contractplay/protocol";
 import type { connectTable } from "../online/connection.js";
@@ -22,7 +24,22 @@ function fixedConnection(view: TableView): typeof connectTable {
   };
 }
 
+/** The solo App opened on an in-memory copy of its saved hand and settings. */
+function SoloPreviewScreen({ data }: { data: Extract<PreviewData, { kind: "solo" }> }) {
+  const preview = useMemo(() => {
+    const storage = memoryStorage({ "contractplay.scoring": data.scoring });
+    saveSoloData(storage, data.data);
+    return { storage, ...data.table };
+  }, [data]);
+  return <App preview={preview} />;
+}
+
 function PreviewScreen({ data }: { data: PreviewData }) {
+  if (data.kind === "solo") return <SoloPreviewScreen data={data} />;
+  return <OnlineScreen data={data} />;
+}
+
+function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" }> }) {
   const storage = useMemo(() => {
     const store = memoryStorage(data.kind === "table" && data.hints ? { "contractplay.hints": "on" } : {});
     saveIdentity(store, data.viewerName);

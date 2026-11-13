@@ -25,7 +25,7 @@ import {
   type Vulnerability
 } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
-import { deleteSavedHand, loadSoloData, saveSoloData, type PbnMetadata, type SavedHand, type SoloData } from "@contractplay/persistence";
+import { deleteSavedHand, loadSoloData, saveSoloData, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
@@ -66,8 +66,26 @@ function reviewState(hand: SavedHand, cursor: number): GameState {
   return state;
 }
 
-export default function App({ solver }: { solver?: Solver } = {}) {
-  const persistence = useMemo(() => createClientPersistenceAdapter(window.localStorage), []);
+/**
+ * A fixed solo table for the UI previews (`#/mocks`): the hand and settings come from `storage`, and nothing moves on its
+ * own, so no bot, forced, or queued card is ever played. Clicks still work, but only on this in-memory copy.
+ */
+export type SoloPreview = Readonly<{
+  storage: StorageLike;
+  /** Play against bots from this seat; without it the table is manual and the user plays all four hands. */
+  userSeat?: Seat;
+  /** The bots play the user's cards for the rest of the hand (Auto play). */
+  autoPlay?: boolean;
+  /** The claim picker is open. */
+  claiming?: boolean;
+  menuOpen?: boolean;
+  /** Review this saved hand at this action. */
+  review?: Readonly<{ handId: string; cursor: number }>;
+}>;
+
+export default function App({ solver, preview }: { solver?: Solver; preview?: SoloPreview } = {}) {
+  const frozen = !!preview;
+  const persistence = useMemo(() => createClientPersistenceAdapter(preview?.storage ?? window.localStorage), [preview]);
   const [soloData, setSoloData] = useState<SoloData>(() => loadSoloData(persistence.storage));
   const latestSoloData = useRef(soloData);
   latestSoloData.current = soloData;
@@ -76,8 +94,8 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [currentHandId, setCurrentHandId] = useState(() => soloData.currentHandId ?? (soloData.currentGame ? createHandId() : ""));
   const [dealer, setDealer] = useState<Seat>(() => soloData.currentGame?.dealer ?? "north");
   const [vulnerability, setVulnerability] = useState<Vulnerability>(() => soloData.currentGame?.vulnerability ?? "None");
-  const [playAgainstBots, setPlayAgainstBots] = useState(false);
-  const [userSeat, setUserSeat] = useState<Seat>("north");
+  const [playAgainstBots, setPlayAgainstBots] = useState(preview?.userSeat !== undefined);
+  const [userSeat, setUserSeat] = useState<Seat>(preview?.userSeat ?? "north");
   const [botSkill, setBotSkill] = useState<SkillLevel>("beginner");
   const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">("SAYC");
   const [auctionShown, setAuctionShown] = useState(false);
@@ -100,15 +118,15 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   const [explainedCall, setExplainedCall] = useState<{ key: string; index: number }>();
   const [temporaryTrick, setTemporaryTrick] = useState<{ handId: string; cards: readonly TrickCard[] }>();
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
-  const [reviewHandId, setReviewHandId] = useState<string>();
-  const [reviewCursor, setReviewCursor] = useState(0);
+  const [reviewHandId, setReviewHandId] = useState<string | undefined>(preview?.review?.handId);
+  const [reviewCursor, setReviewCursor] = useState(preview?.review?.cursor ?? 0);
   const [aboutOpen, setAboutOpen] = useState(false);
   // The hand the user has handed over: bots make every remaining call and play for it.
-  const [botsFinishHandId, setBotsFinishHandId] = useState<string>();
+  const [botsFinishHandId, setBotsFinishHandId] = useState<string | undefined>(preview?.autoPlay ? currentHandId : undefined);
   // A card the user picked before their turn, played for them when it comes.
   const [queued, setQueued] = useState<QueuedCard>();
   // The position the claim picker was opened in; it closes when the position changes.
-  const [claimPickedAt, setClaimPickedAt] = useState<GameState>();
+  const [claimPickedAt, setClaimPickedAt] = useState<GameState | undefined>(preview?.claiming ? game : undefined);
   // A claim against robots being checked, for the position it was made in.
   const [soloClaim, setSoloClaim] = useState<{ game: GameState; seat: Seat; tricks: number }>();
   const botsFinishing = !!currentHandId && botsFinishHandId === currentHandId;
@@ -201,7 +219,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
       (game.completedTricks.length > 0 || game.currentTrick.length > 0) &&
       samePartnership(userSeat, game.contract.declarer) &&
       samePartnership(game.currentActor, game.contract.declarer);
-    if (!game || temporaryTrick || game.phase === "complete" || game.phase === "passed-out") return;
+    if (frozen || !game || temporaryTrick || game.phase === "complete" || game.phase === "passed-out") return;
     if (!botsFinishing && (!playAgainstBots || game.currentActor === userSeat || declaringSideIsHumanControlled)) return;
     let cancelled = false;
     const turnState = game;
@@ -219,7 +237,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     };
     void decide();
     return () => { cancelled = true; };
-  }, [game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill]);
+  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill]);
 
   const actor = game?.currentActor;
   const selectedHand = reviewHandId ? soloData.completedHands.find((hand) => hand.id === reviewHandId) : undefined;
@@ -297,7 +315,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   }
 
   // A card the user must play (the only legal one) is played for them after a short pause.
-  const forced = canShowHand && forcedPlayOn && !temporaryTrick && !soloClaimPending && !pickingClaim && game !== takenBackTo && game ? forcedCard(game) : undefined;
+  const forced = !frozen && canShowHand && forcedPlayOn && !temporaryTrick && !soloClaimPending && !pickingClaim && game !== takenBackTo && game ? forcedCard(game) : undefined;
   useEffect(() => {
     if (!forced || !game) return;
     const turnState = game;
@@ -319,7 +337,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
   }, [queued, activeQueued]);
 
   // The queued card is played like a forced one, after the same pause; when a card is forced it is that card, so only one plays.
-  const queuedNow = game && canShowHand && !temporaryTrick && !forced && !pickingClaim ? queuedPlay(game, activeQueued, game.currentActor) : undefined;
+  const queuedNow = !frozen && game && canShowHand && !temporaryTrick && !forced && !pickingClaim ? queuedPlay(game, activeQueued, game.currentActor) : undefined;
   useEffect(() => {
     if (!queuedNow || !game) return;
     const turnState = game;
@@ -619,7 +637,7 @@ export default function App({ solver }: { solver?: Solver } = {}) {
     : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
   const tableTools = <>
-    <details className="table-menu">
+    <details className="table-menu" open={preview?.menuOpen || undefined}>
       <summary className="icon-button" aria-label="Table menu" title="Table menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></summary>
       <div className="table-menu-content">
         {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}

@@ -4,18 +4,22 @@
 >
 > | # | Screen | # | Screen |
 > |---|---|---|---|
-> | 1 | Lobby | 8 | Defending, dummy on your right |
-> | 2 | Seating | 9 | Card queued |
-> | 3 | Auction: your call | 10 | Game menu |
-> | 4 | Auction with hints | 11 | Auto play |
-> | 5 | Declaring 4♠ with dummy | 12 | Claim waiting on you |
-> | 6 | Dummy playing for a bot declarer | 13 | Hand result |
-> | 7 | Defending, dummy on your left | | |
+> | 1 | Lobby | 12 | Claim waiting on you |
+> | 2 | Seating | 13 | Hand result |
+> | 3 | Auction: your call | 14 | Solo: new deal |
+> | 4 | Auction with hints | 15 | Solo: your call against bots |
+> | 5 | Declaring 4♠ with dummy | 16 | Solo: declaring against bots |
+> | 6 | Dummy playing for a bot declarer | 17 | Solo: auto play |
+> | 7 | Defending, dummy on your left | 18 | Solo: claiming |
+> | 8 | Defending, dummy on your right | 19 | Solo: table menu |
+> | 9 | Card queued | 20 | Solo: hand result with rubber score |
+> | 10 | Game menu | 21 | Solo: reviewing a saved hand |
+> | 11 | Auto play | | |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/13` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/21` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
-> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components; the solo screens (14–21) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
 
 <p align="center">

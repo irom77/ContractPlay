@@ -1,4 +1,6 @@
-import { createGameState, legalCards, RANKS, SEATS, SUITS, type Bid, type Card, type Deal, type GameAction, type GameState, type Rank, type Seat } from "@contractplay/core";
+import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, SUITS, type Bid, type Card, type Deal, type GameAction, type GameState, type Rank, type Rubber, type Seat } from "@contractplay/core";
+import type { SavedHand, SoloData } from "@contractplay/persistence";
+import type { SoloPreview } from "../App.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
 import { botToAct, createTable, reduce, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
@@ -121,7 +123,8 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; initialQueued?: QueuedCard };
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; initialQueued?: QueuedCard }
+  | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage"> };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
 
@@ -131,7 +134,7 @@ const view = (state: TableState, seat: Seat, people: People, hints?: boolean): P
 const you: People = { south: "Alex" };
 const others = (seat: Seat) => SEATS.filter((s) => s !== seat);
 
-export const previewScreens: readonly PreviewScreen[] = [
+const onlineScreens: readonly PreviewScreen[] = [
   {
     id: "lobby", title: "Lobby", detail: "Open tables, one mid-hand and one with open seats, and the new-table form.",
     build: () => {
@@ -208,6 +211,85 @@ export const previewScreens: readonly PreviewScreen[] = [
     build: () => playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete")
   }
 ];
+
+/*
+ * Solo play: the same deal and auction, played straight through the core rules (no table server), and opened in the
+ * real solo App from an in-memory copy of its saved data, with every automatic move switched off.
+ */
+const SOLO_HAND = "preview-solo-hand";
+
+function soloAct(game: GameState, action: GameAction): GameState {
+  const result = applyAction(game, action);
+  if (!result.ok) throw new Error(`Preview step was not accepted: ${JSON.stringify(action)} (${result.error.message})`);
+  return result.state;
+}
+
+/** The solo hand after `calls` calls, then played on until `stop` holds. */
+function soloGame(calls: number, stop: (game: GameState) => boolean = () => true): GameState {
+  let game = AUCTION.slice(0, calls).reduce((current, [seat, call]) => soloAct(current, { type: "bid", seat, bid: call }),
+    createGameState({ deal: DEAL, dealer: "north", vulnerability: "None" }));
+  while (!stop(game)) {
+    if (game.phase !== "play") throw new Error("The preview hand ended before reaching its moment.");
+    game = soloAct(game, { type: "play", seat: game.currentActor, card: nextCard(game) });
+  }
+  return game;
+}
+
+/** A rubber whose first hand East–West made 2♥, with this deal (North dealing) played for it. */
+const rubberUnderway = (): Rubber => ({
+  hands: [scoreRubberHand("preview-earlier", { level: 2, strain: "hearts", declarer: "east", doubled: 0 }, 8, "None", DEAL)],
+  lastDealer: "north",
+  activeHandId: SOLO_HAND
+});
+
+const savedHand = (): SavedHand => ({ id: "preview-saved", name: "Friday practice", game: soloGame(8, (game) => game.phase === "complete"), savedAt: new Date(AT).toISOString() });
+
+function solo(game: GameState | null, table: Omit<SoloPreview, "storage">, extra: Partial<SoloData> = {}): PreviewData {
+  return {
+    kind: "solo",
+    scoring: "rubber",
+    table,
+    data: { version: 1, currentHandId: game ? SOLO_HAND : null, currentGame: game, completedHands: [savedHand()], rubber: rubberUnderway(), ...extra }
+  };
+}
+
+export const soloScreens: readonly PreviewScreen[] = [
+  {
+    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, bot skill, and bidding style.",
+    build: () => solo(null, { userSeat: "south" }, { completedHands: [], rubber: { hands: [] } })
+  },
+  {
+    id: "solo-auction", title: "Solo: your call against bots", detail: "You are South against bots; partner opened 1♠ and East passed.",
+    build: () => solo(soloGame(2), { userSeat: "south" })
+  },
+  {
+    id: "solo-declaring", title: "Solo: declaring against bots", detail: "You are North, declarer in 4♠; you play both your hand and dummy South while the bots defend.",
+    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north" })
+  },
+  {
+    id: "solo-auto-play", title: "Solo: auto play", detail: "You are East and chose Auto play: the bots play your cards until this hand ends, or until you press Stop auto play.",
+    build: () => solo(soloGame(8, moment(["east"], 2)), { userSeat: "east", autoPlay: true })
+  },
+  {
+    id: "solo-claim", title: "Solo: claiming", detail: "Declaring as North, you opened the claim picker: claim all the remaining tricks or a number; the robots check it.",
+    build: () => solo(soloGame(8, (game) => game.completedTricks.length >= 6 && game.currentTrick.length === 0 && ["north", "south"].includes(game.currentActor)), { userSeat: "north", claiming: true })
+  },
+  {
+    id: "solo-menu", title: "Solo: table menu", detail: "Mid-hand with the menu open: deal again, claim, let bots finish, next-deal settings, the rubber so far, and recent hands.",
+    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", menuOpen: true })
+  },
+  {
+    id: "solo-result", title: "Solo: hand result with rubber score", detail: "4♠ made: the whole deal face-up, the rubber score for this hand, and the scoresheet so far.",
+    build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north" })
+  },
+  {
+    id: "solo-review", title: "Solo: reviewing a saved hand", detail: "A finished hand opened from Recent hands, stepped to the third trick with Previous and Next.",
+    build: () => solo(null, { userSeat: "north", review: { handId: "preview-saved", cursor: 8 + 10 } })
+  }
+];
+
+/** Every preview, online screens first and then solo play. */
+export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens];
 
 function playUntilView(people: People, seat: Seat, stop: (game: GameState) => boolean): PreviewData {
   const humans = Object.keys(people) as Seat[];

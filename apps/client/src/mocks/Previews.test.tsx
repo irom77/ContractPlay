@@ -84,6 +84,53 @@ const expectations: Record<string, () => Promise<void> | void> = {
     // All 52 cards face-up at their seats around the result, each hand with its high-card points.
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
     expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
+  },
+  "solo-setup": () => {
+    expect(screen.getByRole("region", { name: "New deal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start a new hand" })).toBeTruthy();
+    expect((screen.getByRole("combobox", { name: "Scoring" }) as HTMLSelectElement).value).toBe("rubber");
+    expect((screen.getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
+    expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("south");
+  },
+  "solo-auction": () => {
+    expect(document.querySelector(".status-pill")!.textContent).toBe("South to bid");
+    expect(screen.getByRole("group", { name: "Contract bids by level and strain" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Auction calls" }).querySelectorAll("li")).toHaveLength(2);
+  },
+  "solo-declaring": () => {
+    expect(screen.getByRole("region", { name: "South's dummy hand" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Play / }).some((card) => !(card as HTMLButtonElement).disabled)).toBe(true);
+    expect(document.querySelector(".status-pill")!.textContent).not.toMatch(/^Bot/);
+  },
+  "solo-auto-play": () => {
+    const stop = screen.getByRole("button", { name: "Stop auto play" });
+    expect(stop.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".status-pill")!.textContent).toBe("Bot · East to play");
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+  },
+  "solo-claim": () => {
+    const picker = screen.getByRole("group", { name: "Claim tricks" });
+    expect(within(picker).getByRole("group", { name: "Claim some of the tricks" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Play / }).every((card) => (card as HTMLButtonElement).disabled)).toBe(true);
+  },
+  "solo-menu": () => {
+    expect(document.querySelector<HTMLDetailsElement>(".table-menu")!.open).toBe(true);
+    expect(screen.getByRole("button", { name: "Claim" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Let bots finish this hand" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Rubber" })).getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Review Friday practice/ })).toBeTruthy();
+  },
+  "solo-result": () => {
+    const result = screen.getByRole("region", { name: "Hand result" });
+    expect(result.textContent).toMatch(/4♠ by North/);
+    expect(within(result).getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    expect(within(result).getByRole("button", { name: "Next deal" })).toBeTruthy();
+    for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
+  },
+  "solo-review": () => {
+    expect(screen.getByRole("region", { name: "Hand review" })).toBeTruthy();
+    expect(document.querySelector(".status-pill")!.textContent).toBe("Reviewing action 18 of 60");
+    expect(screen.getByRole("group", { name: "Review controls" })).toBeTruthy();
   }
 };
 
