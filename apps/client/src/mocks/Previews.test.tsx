@@ -192,13 +192,15 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const field = screen.getByRole("region", { name: "Result against the field" });
     expect(field.textContent).toContain("37.5% · 3 of 8 matchpoints");
     expect(field.textContent).toContain("You");
-    expect(screen.getByText("Board 7 · 1 of 3")).toBeTruthy();
+    expect(within(field).getByText("Board 7 · 1 of 3")).toBeTruthy();
+    expect(document.querySelector(".table-status .board-label")!.textContent).toBe("Board 7 · 1 of 3");
     expect(screen.getByRole("button", { name: "View original play" })).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Next board" })).toBeTruthy();
   },
   "solo-original-play": () => {
     expect(document.querySelector(".status-pill")!.textContent).toMatch(/Original play: action 8 of/);
     expect(screen.getByRole("button", { name: "Back to your result" })).toBeTruthy();
+    expect(document.querySelector(".board-label")).toBeNull();
   }
 };
 

@@ -351,7 +351,7 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(null, { userSeat: "north", review: { handId: "preview-saved", cursor: 8 + 10 } })
   },
   {
-    id: "solo-field-result", title: "Solo: result against the field", detail: "4♠ made on board 7 of an imported club game: your +420 placed in the field's traveller with your matchpoint percentage, the original play one click away, and Next board.",
+    id: "solo-field-result", title: "Solo: result against the field", detail: "4♠ made on board 7 of an imported club game (the status card shows Board 7 · 1 of 3): your +420 placed in the field's traveller with your matchpoint percentage, the original play one click away, and Next board.",
     build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north" }, boardSetExtra())
   },
   {

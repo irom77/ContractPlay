@@ -1367,6 +1367,7 @@ describe("bridge table", () => {
     fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: `${one("north")}\n\n${noDeal}\n\n${one("east")}` } });
     await user.click(screen.getByRole("button", { name: "Import hand" }));
     expect(screen.getByText("Skipped 1 board(s) that could not be read.")).toBeTruthy();
+    expect(document.querySelector(".table-status .board-label")!.textContent).toBe("Board 1 · 1 of 2");
     expect(menuItem("Next board")!.classList.contains("menu-danger")).toBe(true);
     expect(menuItem("Leave the board set")!.title).toBe("Stop playing this board set; this hand stays on the table");
 
@@ -1374,6 +1375,7 @@ describe("bridge table", () => {
     expect(screen.queryByText(/Skipped 1 board/)).toBeNull();
     expect(menuItem("Finish board set")!.classList.contains("menu-danger")).toBe(false);
     expect(menuItem("Finish board set")!.title).toBe("End the board set; this hand stays on the table");
+    expect(document.querySelector(".table-status .board-label")!.textContent).toBe("Board 2 · 2 of 2");
 
     fireEvent.click(menuItem("Recent hands")!);
     await user.click(screen.getByText("Import a PBN deal"));
@@ -1381,6 +1383,7 @@ describe("bridge table", () => {
     await user.click(screen.getByRole("button", { name: "Import hand" }));
     expect(menuItem("Deal a new hand")).toBeTruthy();
     expect(menuItem("Finish board set")).toBeNull();
+    expect(document.querySelector(".board-label")).toBeNull();
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).toBeUndefined());
   });
 

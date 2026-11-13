@@ -51,6 +51,8 @@ export type TableViewProps = {
   /** Keep every call in the bid picker disabled, for example while a sent call awaits the service. */
   bidsDisabled?: boolean;
   statusText: string; ariaLabel: string;
+  /** Where an imported board set stands, such as "Board 7 · 1 of 3", shown under the status in the top-left card. */
+  boardLabel?: string | undefined;
   /** Seats played by a bot: their seat badge is drawn as a computer instead of a circle. */
   botSeats?: readonly Seat[] | undefined;
   seatLabel?(seat: Seat): React.ReactNode;       // extra per-seat content (online: player name, away, bot badge, seat controls)
@@ -74,7 +76,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, exposedSeat,
-  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, tools, overlay
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -141,6 +143,7 @@ export function TableView({
             <span className="hud-ns">{matchScore.ns}</span><span className="hud-ew">{matchScore.ew}</span>
           </span> : null}
           <span className="status-pill" aria-live="polite">{statusText}</span>
+          {boardLabel ? <span className="board-label">{boardLabel}</span> : null}
         </div>
 
         <div className="table-tools">

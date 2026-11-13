@@ -84,6 +84,7 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .contract-badge:disabled { cursor: default; }
 .contract-badge[aria-expanded="true"]:not(:disabled) { box-shadow: 0 0 0 3px var(--gold); }
 .status-pill { grid-column: 1 / -1; justify-self: stretch; color: var(--gold); font-size: var(--text-m); font-weight: 600; text-align: left; }
+.board-label { grid-column: 1 / -1; justify-self: stretch; color: var(--muted); font-size: var(--text-s); text-align: left; }
 .table-status:is(.has-contract, :has(.hud-side)) .status-pill { margin-top: calc(.5 * var(--u)); border-top: 1px solid var(--line); padding-top: calc(.6 * var(--u)); }
 
 /* The last trick is a small badge with the card that won it; a click lays the whole trick out on the table, another clears it. */

@@ -848,6 +848,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
           queuedCard={activeQueued}
           onQueue={(seat, card) => setQueued((current) => current?.seat === seat && cardId(current.card) === cardId(card) ? undefined : { handKey: currentHandId, seat, card })}
           statusText={statusText}
+          boardLabel={!isReviewing && boardSet ? boardLabel(boardSet) : undefined}
           ariaLabel={isReviewing ? "Hand review" : "Bridge table"}
           onBid={(bid) => { if (game) submitAction({ type: "bid", seat: game.currentActor, bid }); }}
           onPlay={(seat, card) => submitAction({ type: "play", seat, card })}
