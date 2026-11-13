@@ -1358,6 +1358,50 @@ describe("bridge table", () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).toBeUndefined());
   });
 
+  it("clears the board set when a single board is imported, and reports skipped boards", async () => {
+    const user = userEvent.setup();
+    const one = (dealer: "north" | "east") => exportPbn({ dealer, vulnerability: "None", actions: [], deal: deal() });
+    const noDeal = one("north").split("\n").filter((line) => !line.startsWith("[Deal ")).join("\n");
+    render(<App />);
+    await user.click(screen.getByText("Import a PBN deal"));
+    fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: `${one("north")}\n\n${noDeal}\n\n${one("east")}` } });
+    await user.click(screen.getByRole("button", { name: "Import hand" }));
+    expect(screen.getByText("Skipped 1 board(s) that could not be read.")).toBeTruthy();
+    expect(menuItem("Next board")!.classList.contains("menu-danger")).toBe(true);
+    expect(menuItem("Leave the board set")!.title).toBe("Stop playing this board set; this hand stays on the table");
+
+    fireEvent.click(menuItem("Next board")!);
+    expect(screen.queryByText(/Skipped 1 board/)).toBeNull();
+    expect(menuItem("Finish board set")!.classList.contains("menu-danger")).toBe(false);
+    expect(menuItem("Finish board set")!.title).toBe("End the board set; this hand stays on the table");
+
+    fireEvent.click(menuItem("Recent hands")!);
+    await user.click(screen.getByText("Import a PBN deal"));
+    fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: one("north") } });
+    await user.click(screen.getByRole("button", { name: "Import hand" }));
+    expect(menuItem("Deal a new hand")).toBeTruthy();
+    expect(menuItem("Finish board set")).toBeNull();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).toBeUndefined());
+  });
+
+  it("saves a finished board-set hand with its record and leaves the rubber alone", async () => {
+    const user = userEvent.setup();
+    const game = gameAfterPlays(51);
+    const record = { dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal, field: [] };
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({
+      version: 1, currentHandId: "set-hand", currentGame: game, completedHands: [],
+      boardSet: { name: "Set", records: [record, record], position: 0 }, currentRecord: record
+    }));
+    render(<App />);
+    await user.click(screen.getAllByRole("button", { name: /^Play / })[0]!);
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem("contractplay.solo")!);
+      expect(stored.completedHands[0].record).toEqual(JSON.parse(JSON.stringify(record)));
+      expect(stored.rubber?.hands ?? []).toEqual([]);
+      expect(stored.boardSet.position).toBe(0);
+    });
+  });
+
   it("exports a saved hand as PBN with its metadata", async () => {
     const user = userEvent.setup();
     const game = completedGame();

@@ -26,9 +26,9 @@ import {
   type Vulnerability
 } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
-import { boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
 import { deleteSavedHand, loadSoloData, saveSoloData, type BoardSet, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
+import { boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
@@ -437,6 +437,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setAuctionShown(false);
     setReviewHandId(undefined);
     setDialog(undefined);
+    setMessage("");
   }
 
   function importHand(contents = pbnInput) {
@@ -715,10 +716,10 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     { id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") },
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
     ...(boardSet ? [
-      { id: "leave-set", label: "Leave the board set", title: "Keep this hand and stop playing the board set", onSelect: () => { setBoardSet(undefined); setCurrentRecord(undefined); } },
+      { id: "leave-set", label: "Leave the board set", title: "Stop playing this board set; this hand stays on the table", onSelect: () => setBoardSet(undefined) },
       boardSet.position + 1 < boardSet.records.length
         ? { id: "deal", label: "Next board", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and play the next" } : {}), onSelect: () => startBoard({ ...boardSet, position: boardSet.position + 1 }) }
-        : { id: "deal", label: "Finish board set", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and end the board set" } : {}), onSelect: () => setBoardSet(undefined) }
+        : { id: "deal", label: "Finish board set", title: "End the board set; this hand stays on the table", onSelect: () => setBoardSet(undefined) }
     ] : [
       { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
     ])
