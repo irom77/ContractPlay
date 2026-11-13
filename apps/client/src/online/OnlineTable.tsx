@@ -470,6 +470,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             onQueue={(seat, card) => setQueued((current) => current?.seat === seat && cardId(current.card) === cardId(card) ? undefined : { handKey: String(view.handNumber), seat, card })}
             statusText={statusText}
             ariaLabel={`Bridge table ${view.name}`}
+            botSeats={botSeatsOf(view.seats)}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat}
               onHandToBot={canHandToBot(seat) ? () => send({ type: "handToBot", seat }) : undefined} seat={seat} />}
             onBid={(bid) => act({ type: "bid", seat: game.currentActor, bid })}
@@ -533,6 +534,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
             revealedHands={view.revealed}
             statusText={game.phase === "complete" ? "Hand complete" : "Passed out"}
             ariaLabel={`Bridge table ${view.name}, hand result`}
+            botSeats={botSeatsOf(view.seats)}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat} onHandToBot={undefined} seat={seat} />}
             matchScore={view.totals}
             tools={<GameMenu items={resultMenu} />}
@@ -561,6 +563,11 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       try { void navigator.clipboard.writeText(link).then(() => setCopyNote("Link copied."), shown); } catch { shown(); }
     }}
     send={send} />;
+}
+
+/** Seats a bot plays: bot seats, and players a bot is standing in for. */
+function botSeatsOf(seats: Readonly<Record<Seat, SeatInfo>>): Seat[] {
+  return seatOrder.filter((seat) => { const info = seats[seat]; return info.kind === "bot" || (info.kind === "human" && info.standIn !== undefined); });
 }
 
 function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatInfo; isHost: boolean; onHandToBot: (() => void) | undefined }) {

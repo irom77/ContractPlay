@@ -105,3 +105,14 @@ describe("card backs at hidden seats", () => {
     expect(container.querySelector(".hcp-badge")).toBeNull();
   });
 });
+
+describe("bot seat badges", () => {
+  it("draws bot seats as computers and the rest as circles", () => {
+    const { container } = renderTable(publicGame(newGame(), ["north"]), { botSeats: ["east", "west"] });
+    expect(container.querySelector(".seat-east .seat-compass")!.classList.contains("bot-compass")).toBe(true);
+    expect(container.querySelector(".seat-east .seat-compass")!.getAttribute("aria-label")).toContain("bot");
+    expect(container.querySelector(".seat-west .seat-compass")!.classList.contains("bot-compass")).toBe(true);
+    expect(container.querySelector(".seat-north .seat-compass")!.classList.contains("bot-compass")).toBe(false);
+    expect(container.querySelector(".seat-south .seat-compass")!.classList.contains("bot-compass")).toBe(false);
+  });
+});

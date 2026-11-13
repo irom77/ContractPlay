@@ -724,6 +724,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
         <TableView
           game={shownGame}
           bottomSeat={bottomSeat}
+          botSeats={playAgainstBots ? seats.filter((seat) => seat !== userSeat) : undefined}
           actingSeat={canAct ? actor : undefined}
           displayedTrick={displayedTrick}
           showCalls={showCalls}

@@ -51,6 +51,8 @@ export type TableViewProps = {
   /** Keep every call in the bid picker disabled, for example while a sent call awaits the service. */
   bidsDisabled?: boolean;
   statusText: string; ariaLabel: string;
+  /** Seats played by a bot: their seat badge is drawn as a computer instead of a circle. */
+  botSeats?: readonly Seat[] | undefined;
   seatLabel?(seat: Seat): React.ReactNode;       // extra per-seat content (online: player name, away, bot badge, seat controls)
   onBid?(bid: Bid): void; onPlay?(seat: Seat, card: Card): void;
   hintedBid?: Bid | undefined; hintedCards?: ReadonlySet<string> | undefined;
@@ -72,7 +74,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, exposedSeat,
-  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, tools, overlay
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -167,12 +169,13 @@ export function TableView({
           const showBacks = phase === "play" && !seatHasCards && held > 0 && position !== "bottom";
           // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
           const isDummy = dummyVisible && seat === dummySeat;
+          const isBot = botSeats?.includes(seat) ?? false;
           const points = revealed ? highCardPoints([...revealed[seat]]) : undefined;
           const seatCanPlay = fixedPlayHands ? canAct && phase === "play" && shownActor === seat : playFromDummy && seat === dummySeat;
           return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards && !revealed ? "has-dummy" : ""} ${revealed ? "has-revealed-hand" : ""} ${showBacks ? "has-backs" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
             {/* The head row: one line beside a hand spread along the top or bottom, invisible (display: contents) elsewhere. */}
             <div className="seat-head">
-            <span className={`seat-compass ${isDummy ? "dummy-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}${showBacks ? `, ${held} cards` : ""}`} title={`${seatNames[seat]}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
+            <span className={`seat-compass ${isDummy ? "dummy-compass" : ""} ${isBot ? "bot-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isBot ? ", bot" : ""}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}${showBacks ? `, ${held} cards` : ""}`} title={`${seatNames[seat]}${isBot ? " · bot" : ""}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
             {seatLabel?.(seat)}
             {points !== undefined ? <span className="hcp-badge" title="High-card points: A 4, K 3, Q 2, J 1">{points} HCP</span> : null}
             {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall

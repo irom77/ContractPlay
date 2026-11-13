@@ -221,6 +221,14 @@ button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var
 .played-seat .seat-compass { background: rgba(255, 255, 255, .2); }
 .active-seat .seat-compass { border-color: var(--gold); background: var(--gold); color: var(--deep); box-shadow: 0 0 calc(2.6 * var(--u)) rgba(242, 193, 78, .85); }
 .active-seat.vulnerable-seat .seat-compass { outline: max(2px, calc(.3 * var(--u))) solid #ee4a3f; outline-offset: 1px; }
+/* A bot's seat badge is a computer in the same box as the circle: a screen over a stand, the stand following the screen's ring colour. */
+.seat-compass.bot-compass { --stand: rgba(255, 255, 255, .34); height: calc(max(26px, calc(4.6 * var(--u))) * .76); margin-bottom: calc(max(26px, calc(4.6 * var(--u))) * .24); border-radius: 18%; }
+.seat-compass.bot-compass::before, .seat-compass.bot-compass::after { content: ""; position: absolute; left: 50%; background: var(--stand); transform: translateX(-50%); }
+.seat-compass.bot-compass::before { top: calc(100% + max(2px, calc(.35 * var(--u)))); width: 14%; height: 12%; }
+.seat-compass.bot-compass::after { top: calc(112% + max(2px, calc(.35 * var(--u)))); width: 56%; height: max(2px, calc(.35 * var(--u))); border-radius: 2px; }
+.vulnerable-seat .seat-compass.bot-compass { --stand: #ee4a3f; }
+.active-seat .seat-compass.bot-compass { --stand: var(--gold); }
+.seat-compass.bot-compass.dummy-compass { --stand: var(--gold); border-radius: 18%; }
 .dealer-mark { position: absolute; right: -38%; bottom: -30%; display: grid; width: 62%; height: 62%; place-items: center; border-radius: 50%; background: #fdfcf8; color: var(--deep); box-shadow: 0 1px 3px #0008; font-size: .72em; font-weight: 800; }
 .seat-auction-calls { display: flex; gap: calc(.6 * var(--u)); }
 .pos-left .seat-auction-calls, .pos-right .seat-auction-calls { display: grid; grid-template-columns: repeat(2, auto); }
