@@ -297,7 +297,11 @@ describe("OnlineTable play", () => {
     service.push(inHand(game, ["north"]));
     expect(screen.queryByRole("button", { name: "1 spades" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Pass" })).toBeNull();
-    expect(screen.getByRole("region", { name: "North's cards" })).toBeTruthy();
+    // The viewer's hand is shown at their seat, grouped by suit as in the play, with nothing to play from it.
+    const hand = screen.getByRole("region", { name: "North's hand" });
+    expect(hand.querySelectorAll(".dummy-suit-row").length).toBe(new Set(game.hands.north.map((card) => card.suit)).size);
+    expect(within(hand).getAllByRole("img")).toHaveLength(13);
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
   });
 
   it("lets declarer play a dummy card for dummy's seat", async () => {

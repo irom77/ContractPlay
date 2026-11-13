@@ -24,6 +24,7 @@ import {
 } from "./labels.js";
 
 const tablePositions = ["bottom", "left", "top", "right"] as const;
+const liveTurnPhase = (phase: PublicGame["phase"]) => phase === "auction" || phase === "play";
 
 export type TableViewProps = {
   game: PublicGame;                      // hidden hands are empty arrays
@@ -36,7 +37,7 @@ export type TableViewProps = {
   lastTrickOpen: boolean; onToggleLastTrick(): void;
   /** Show the bottom seat's cards in the hand zone when the viewer is not acting. */
   showBottomHand: boolean;
-  /** During online play, keep every visible hand at its seat for the whole play. */
+  /** Online, keep every visible hand at its seat, grouped by suit, from the deal to the last card (the bidding included). */
   fixedSeatHands?: boolean;
   /** A seat to show face-up at its place, such as the claimer's hand while a claim is pending; backs stay if its cards were not sent. */
   exposedSeat?: Seat | undefined;
@@ -90,9 +91,9 @@ export function TableView({
   const dummyPosition = dummySeat ? tablePositions[(seats.indexOf(dummySeat) - seats.indexOf(bottomSeat) + 4) % 4]! : undefined;
   const dummyVisible = !!contract && (game.currentTrick.length > 0 || game.completedTricks.length > 0 || phase === "complete");
   const revealed = revealedHands && (phase === "complete" || phase === "passed-out") ? revealedHands : undefined;
-  const fixedPlayHands = fixedSeatHands && phase === "play" && dummyVisible;
+  const fixedPlayHands = fixedSeatHands && liveTurnPhase(phase);
   // A dummy at a side seat is a column as wide as its longest suit; the bottom hand is laid out beside it.
-  const sideDummy = fixedPlayHands && dummySeat && (dummyPosition === "left" || dummyPosition === "right") ? dummyPosition : undefined;
+  const sideDummy = fixedPlayHands && dummyVisible && dummySeat && (dummyPosition === "left" || dummyPosition === "right") ? dummyPosition : undefined;
   // A hand spread along the top shares its height with the status corner, so it starts to the right of it.
   const handOnTop = fixedPlayHands && game.hands[seats[(seats.indexOf(bottomSeat) + 2) % 4]!].length > 0;
   const sideDummySpan = sideDummy && dummySeat ? Math.max(1, ...SUITS.map((suit) => game.hands[dummySeat].filter((card) => card.suit === suit).length)) : undefined;
@@ -167,7 +168,7 @@ export function TableView({
           // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
           const isDummy = dummyVisible && seat === dummySeat;
           const points = revealed ? highCardPoints([...revealed[seat]]) : undefined;
-          const seatCanPlay = fixedPlayHands ? canAct && shownActor === seat : playFromDummy && seat === dummySeat;
+          const seatCanPlay = fixedPlayHands ? canAct && phase === "play" && shownActor === seat : playFromDummy && seat === dummySeat;
           return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards && !revealed ? "has-dummy" : ""} ${revealed ? "has-revealed-hand" : ""} ${showBacks ? "has-backs" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
             {/* The head row: one line beside a hand spread along the top or bottom, invisible (display: contents) elsewhere. */}
             <div className="seat-head">

@@ -437,6 +437,13 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--tools-room) - 70 * var(--u)) / 9)); }
 .online-table .table-surface.dummy-on-right .hint-controls { right: auto; left: calc(2 * var(--u)); align-items: flex-start; }
 .online-table .table-surface.dummy-on-right .hint-controls p { text-align: left; }
+/* Tall, narrow windows: your hand takes the full width with larger cards, in the bidding and the play alike, and the
+   Hints corner moves up above it instead of taking room beside it. */
+@media (max-aspect-ratio: 4/5) {
+  .online-table .table-surface, .online-table .dummy-on-left, .online-table .dummy-on-right { --bottom-left: calc(2 * var(--u)); --bottom-right: calc(2 * var(--u)); --own-h: calc(22 * var(--u)); }
+  .online-table .pos-bottom .dummy-table-hand { --h: var(--own-h); --step: max(calc(2.6 * var(--u)), calc((100vw - 4 * var(--u) - 4 * .7 * var(--own-h) - 2.4 * var(--u)) / 9)); }
+  .online-table .hint-controls { bottom: calc(var(--own-h) + 9 * var(--u)); }
+}
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pos-right .online-seat-label { justify-content: flex-end; }
 .online-badge { border-radius: 99px; padding: 1px 7px; background: rgba(255, 255, 255, .14); color: var(--gold); font-size: var(--text-s); font-weight: 700; }

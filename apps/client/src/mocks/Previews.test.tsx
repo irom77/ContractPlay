@@ -19,11 +19,15 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   auction: () => {
     expect(screen.getByText("Your call")).toBeTruthy();
-    // The hand alternates suit colours (♠♥♣♦) and draws suits as shapes, so like-coloured suits never sit together.
-    const suitRuns = [...screen.getByRole("region", { name: "South's hand" }).querySelectorAll(".playing-card")]
-      .map((card) => card.getAttribute("aria-label")!.split(" of ")[1]).filter((suit, index, all) => suit !== all[index - 1]);
-    expect(suitRuns).toEqual(["spades", "hearts", "clubs", "diamonds"]);
-    expect(document.querySelector(".playing-card .card-corner svg.suit-glyph")).toBeTruthy();
+    // While bidding, the hand is grouped by suit exactly as in the play: one row per suit, alternating colours
+    // (♠♥♣♦), with suits drawn as shapes, so like-coloured suits never sit together.
+    const hand = screen.getByRole("region", { name: "South's hand" });
+    expect(hand.classList.contains("fixed-seat-hand")).toBe(true);
+    const suitGroups = [...hand.querySelectorAll(".dummy-suit-row")].map((row) => new Set([...row.querySelectorAll(".table-card")].map((card) => card.getAttribute("aria-label")!.split(" of ")[1])));
+    expect(suitGroups.map((suits) => [...suits])).toEqual([["spades"], ["hearts"], ["clubs"], ["diamonds"]]);
+    expect(document.querySelector(".hand-zone")).toBeNull();
+    expect(document.querySelector(".table-card .card-corner svg.suit-glyph")).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
     expect(screen.getByRole("switch", { name: "Hints" }).getAttribute("aria-checked")).toBe("false");
   },
   "auction-hints": () => {
