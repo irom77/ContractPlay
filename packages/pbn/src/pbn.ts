@@ -1,4 +1,4 @@
-import { applyAction, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction, type HandRecord, type TravellerRow, MAX_MULTIPLICITY } from "@contractplay/core";
+import { applyAction, scoreContract, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction, type GameState, type HandRecord, type TravellerRow, MAX_MULTIPLICITY } from "@contractplay/core";
 
 export type PbnTag = Readonly<{ name: string; value: string; line?: number }>;
 export type PbnDiagnostic = Readonly<{ severity: "error" | "warning"; message: string; line: number }>;
@@ -203,6 +203,7 @@ function parseSection(board: RawBoard, section: RawSection | undefined, type: "b
   const content = stripComments(section.text, board, section.line);
   for (const rawToken of content.split(/\s+/).filter(Boolean)) {
     if (stopped) break;
+    if (isAnnotation(rawToken)) continue;
     if (type === "bid") {
       const token = rawToken.toUpperCase();
       if (token === "AP") {
@@ -249,6 +250,49 @@ function parseSection(board: RawBoard, section: RawSection | undefined, type: "b
     }
   }
   return starred;
+}
+
+/** A note reference (`=1=`) or a numeric annotation glyph (`$12`) in an Auction or Play section. */
+const isAnnotation = (token: string) => /^=\d+=$/.test(token) || /^\$\d+$/.test(token);
+
+/**
+ * Reads a Play section as PBN 2.1 §3.11 lays it out: one trick per four tokens, each in its seat's column starting with
+ * the `[Play]` seat, `-` for a card not played, and `*` ending the record. Each trick is played from its actual leader.
+ * Returns undefined when the cards do not fit that layout, so a file written in play order can be read that way instead.
+ */
+function playByColumns(section: RawSection, start: GameState): { actions: GameAction[]; state: GameState; starred: boolean } | undefined {
+  if (!section.seat) return undefined;
+  const tokens: (Card | null)[] = [];
+  let starred = false;
+  for (const token of section.text.replace(/\{[^}]*\}/g, " ").replace(/;[^\n]*/g, " ").split(/\s+/).filter(Boolean)) {
+    if (isAnnotation(token)) continue;
+    if (token === "*") {
+      starred = true;
+      break;
+    }
+    if (token === "-") {
+      tokens.push(null);
+      continue;
+    }
+    const card = parseCard(token);
+    if (!card) return undefined;
+    tokens.push(card);
+  }
+  const column = (seat: Seat) => (SEATS.indexOf(seat) - SEATS.indexOf(section.seat!) + 4) % 4;
+  const actions: GameAction[] = [];
+  let state = start;
+  for (let trick = 0; trick * 4 < tokens.length && state.phase === "play"; trick += 1) {
+    for (let turn = 0; turn < 4; turn += 1) {
+      const seat = state.currentActor;
+      const card = tokens[trick * 4 + column(seat)];
+      if (!card) return { actions, state, starred };
+      const result = applyAction(state, { type: "play", seat, card });
+      if (!result.ok) return undefined;
+      actions.push({ type: "play", seat, card });
+      state = result.state;
+    }
+  }
+  return { actions, state, starred };
 }
 
 const tokenizeRow = (row: string): string[] => Array.from(row.matchAll(/"([^"]*)"|(\S+)/g), (match) => match[1] ?? match[2]!);
@@ -309,7 +353,7 @@ function materializeBoard(raw: RawBoard): PbnBoard {
   if (!dealerCode) raw.diagnostics.push({ severity: "warning", message: "Missing Dealer tag", line: 1 });
   const vulnerableCode = tagValue("Vulnerable")?.toLowerCase();
   const vulnerability = vulnerableCode
-    ? ({ none: "None", love: "None", ns: "NS", ew: "EW", both: "Both", all: "Both" } as const)[vulnerableCode]
+    ? ({ none: "None", love: "None", "-": "None", ns: "NS", ew: "EW", both: "Both", all: "Both" } as const)[vulnerableCode]
     : undefined;
   if (vulnerableCode && !vulnerability) raw.diagnostics.push({ severity: "error", message: "Invalid Vulnerable tag", line: tagLine("Vulnerable") });
   if (!vulnerableCode) raw.diagnostics.push({ severity: "warning", message: "Missing Vulnerable tag", line: 1 });
@@ -330,7 +374,16 @@ function materializeBoard(raw: RawBoard): PbnBoard {
       playState = result.state;
     }
   }
-  const resolvePlaySeat = playState?.phase === "play" ? (card: Card): Seat | undefined => {
+  if (raw.play?.seat && playState?.phase === "play" && raw.play.seat !== playState.currentActor) {
+    raw.diagnostics.push({ severity: "error", message: "Play starting seat does not match the opening leader", line: raw.play.line });
+  }
+  const byColumns = raw.play && playState?.phase === "play" ? playByColumns(raw.play, playState) : undefined;
+  if (byColumns) {
+    actions.push(...byColumns.actions);
+    playState = byColumns.state;
+    stripComments(raw.play!.text, raw, raw.play!.line);
+  }
+  const resolvePlaySeat = !byColumns && playState?.phase === "play" ? (card: Card): Seat | undefined => {
     const seat = playState!.currentActor;
     const result = applyAction(playState!, { type: "play", seat, card });
     if (!result.ok) {
@@ -341,10 +394,7 @@ function materializeBoard(raw: RawBoard): PbnBoard {
     playState = result.state;
     return seat;
   } : undefined;
-  if (raw.play?.seat && playState?.phase === "play" && raw.play.seat !== playState.currentActor) {
-    raw.diagnostics.push({ severity: "error", message: "Play starting seat does not match the opening leader", line: raw.play.line });
-  }
-  const starred = parseSection(raw, raw.play, "play", actions, resolvePlaySeat);
+  const starred = byColumns ? byColumns.starred : parseSection(raw, raw.play, "play", actions, resolvePlaySeat);
   // A `*` that ends the play early with a Result is a claim of the tricks that settle that result.
   const result = Number(tagValue("Result"));
   if (starred && playState?.phase === "play" && tagValue("Result") !== undefined && Number.isInteger(result)) {
@@ -461,6 +511,8 @@ export function parsePbn(input: string): PbnDocument {
       continue;
     }
     if (!line.trim()) continue;
+    // PBN §2.4: a line starting with % is an escape line (such as "% PBN 2.1") and carries no game data.
+    if (line.startsWith("%")) continue;
     if (activeSection === "table") {
       current.tables[activeTable] += `${line}\n`;
     } else if (activeSection) {
@@ -547,4 +599,27 @@ export function pbnBoardToRecord(board: PbnBoard): HandRecord | undefined {
     ...(board.actions.length ? { original: board.actions } : {}),
     field: board.field ?? []
   };
+}
+
+/**
+ * The result one table recorded for its board in the `Contract`, `Declarer`, `Result`, and `Score` tags, as a traveller
+ * row. Files such as RealBridge's "full" export list each table's play of a board as its own game with these tags
+ * instead of a `ScoreTable`. Undefined when the table has no contract (an unplayed board) or its score cannot be found.
+ */
+export function tableResult(board: PbnBoard): TravellerRow | undefined {
+  const tag = (name: string) => board.tags.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value.trim();
+  const contractText = tag("Contract")?.toUpperCase();
+  if (!contractText || isUnknown(contractText)) return undefined;
+  if (contractText === "PASS" || contractText === "AP") return { nsScore: 0, contract: "Pass", multiplicity: 1, artificial: false };
+  const match = /^([1-7])(C|D|H|S|NT|N)(X{0,2})$/.exec(contractText);
+  const declarer = letterSeat[tag("Declarer")?.toUpperCase() ?? ""];
+  const tricks = Number(tag("Result"));
+  if (!match || !declarer || !Number.isInteger(tricks) || tricks < 0 || tricks > 13) return undefined;
+  const strain = ({ C: "clubs", D: "diamonds", H: "hearts", S: "spades", NT: "notrump", N: "notrump" } as const)[match[2] as "C" | "D" | "H" | "S" | "NT" | "N"];
+  const doubled = match[3]!.length as 0 | 1 | 2;
+  const scoreMatch = /^(NS|EW)\s+([+-]?\d+)$/i.exec(tag("Score") ?? "");
+  const nsScore = scoreMatch
+    ? (scoreMatch[1]!.toUpperCase() === "NS" ? 1 : -1) * Number(scoreMatch[2])
+    : scoreContract({ level: Number(match[1]) as 1 | 2 | 3 | 4 | 5 | 6 | 7, strain, declarer, doubled }, tricks, board.vulnerability ?? "None").score;
+  return { nsScore, contract: `${match[1]}${match[2] === "N" ? "NT" : match[2]}${match[3]}`, declarer, tricks, multiplicity: 1, artificial: false };
 }

@@ -138,6 +138,7 @@ Use files you are entitled to: your own club's games or downloads a site offers 
 |---|---|---|
 | **ACBL Live for Clubs** ([live.acbl.org](https://live.acbl.org)) | Each club game links a PBN hand record, a USEBIO XML results file, and an ACBLscore game file. | Usually not: the field is in the USEBIO file, which ContractPlay cannot read yet. |
 | **BridgeWebs** club sites | Results with travellers; some clubs offer the PBN deal file. | Usually not. |
+| **RealBridge** (event results pages) | The "full" PBN download: every table's auction and play of each board, with that table's contract and score. | Yes, read from the tables' own results: each board is played once with the other tables as its field. |
 | **Your club's director** (Bridgemate, ACBLscore, other scoring programs) | Hand records exported as `.pbn`; some programs can write a PBN with a `ScoreTable`. | Sometimes: ask for "PBN with score table". |
 | **Pianola** | Results pages with hands and travellers. | No (directors can download USEBIO). |
 | **Vugraph Project** (Nikos Sarantakos) | Historic championship matches with full bidding and play, as `.pbn` / `.lin`. | No field, but **View original play** works. The site now redirects elsewhere; reach it through the Wayback Machine. |

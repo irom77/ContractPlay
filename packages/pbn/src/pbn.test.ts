@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyAction, claimSeatFor, createDeck, createGameState, deal, validatePlay } from "@contractplay/core";
-import { exportPbn, parsePbn, pbnBoardToHand, pbnBoardToRecord, serializePbn } from "./pbn.js";
+import { exportPbn, parsePbn, pbnBoardToHand, pbnBoardToRecord, serializePbn, tableResult } from "./pbn.js";
+import type { GameAction, GameState, Seat } from "@contractplay/core";
 
 const normalizedDeal = (value: ReturnType<typeof deal>) => Object.fromEntries(
   Object.entries(value).map(([seat, hand]) => [seat, hand.map(({ suit, rank }) => `${suit}:${rank}`).sort()])
@@ -267,4 +268,88 @@ describe("PBN tables, inheritance, and hand records", () => {
     expect(broken.diagnostics.some((entry) => entry.severity === "error")).toBe(true);
     expect(pbnBoardToRecord(broken)).toBeUndefined();
   });
+
 });
+
+/** A complete hand played with legal first cards, where some trick is led from a seat other than the opening leader. */
+function playedHand(): GameState {
+  for (;;) {
+    let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+    for (const bid of ["1spades", "pass", "pass", "pass"] as const) {
+      const result = applyAction(game, { type: "bid", seat: game.currentActor, bid });
+      if (!result.ok) throw new Error(result.error.message);
+      game = result.state;
+    }
+    while (game.phase === "play") {
+      const seat = game.currentActor;
+      const ledSuit = game.currentTrick[0]?.card.suit;
+      const card = game.hands[seat].find((candidate) => validatePlay(game.hands[seat], candidate, ledSuit).legal)!;
+      const result = applyAction(game, { type: "play", seat, card });
+      if (!result.ok) throw new Error(result.error.message);
+      game = result.state;
+    }
+    const leader = game.completedTricks[0]![0]!.seat;
+    if (game.completedTricks.some((trick) => trick[0]!.seat !== leader)) return game;
+  }
+}
+
+const letter: Record<Seat, string> = { north: "N", east: "E", south: "S", west: "W" };
+const token = (action: GameAction) => action.type === "play" ? `${action.card.suit[0]!.toUpperCase()}${action.card.rank}` : "";
+
+/** The hand written as PBN 2.1 lays a Play section out: one trick a line, each card in its seat's column. */
+function columnPbn(game: GameState, tricks = 13, extra: (line: string, index: number) => string = (line) => line): string {
+  const leader = game.completedTricks[0]![0]!.seat;
+  const order: Seat[] = ["north", "east", "south", "west"];
+  const columns = [0, 1, 2, 3].map((offset) => order[(order.indexOf(leader) + offset) % 4]!);
+  const lines = game.completedTricks.slice(0, tricks).map((trick, index) =>
+    extra(columns.map((seat) => token({ type: "play", seat, card: trick.find((entry) => entry.seat === seat)!.card })).join(" "), index));
+  const exported = exportPbn({ dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal, actions: game.history.actions.filter((action) => action.type === "bid") });
+  return `${exported}\n[Play "${letter[leader]}"]\n${lines.join("\n")}${tricks < 13 ? "\n*" : ""}`;
+}
+
+describe("PBN 2.1 files from other programs", () => {
+  it("reads a Play section in seat columns, each trick from its own leader", () => {
+    const game = playedHand();
+    const board = parsePbn(columnPbn(game)).boards[0]!;
+    expect(board.diagnostics).toEqual([]);
+    expect(board.actions).toEqual(game.history.actions);
+  });
+
+  it("still reads a Play section written in play order, as earlier exports were", () => {
+    const game = playedHand();
+    const board = parsePbn(exportPbn({ dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal, actions: game.history.actions })).boards[0]!;
+    expect(board.diagnostics).toEqual([]);
+    expect(board.actions).toEqual(game.history.actions);
+  });
+
+  it("skips note references and stops at a dash or star in a column Play section", () => {
+    const game = playedHand();
+    const text = columnPbn(game, 3, (line, index) => index === 0 ? `${line} =1=` : line);
+    const board = parsePbn(text.replace(/\n\*$/, "\n- - - -\n*")).boards[0]!;
+    expect(board.diagnostics).toEqual([]);
+    expect(board.actions.filter((action) => action.type === "play")).toHaveLength(12);
+  });
+
+  it("ignores % escape lines, auction notes, and a dash for no one vulnerable", () => {
+    const text = `% PBN 2.1\n% Content-type: text/x-pbn; charset=UTF-8\n${exportPbn({ dealer: "north", vulnerability: "None", actions: [], deal: deal() })
+      .replace('[Vulnerable "None"]', '[Vulnerable "-"]')}\n% RBDATA 14,0,1\n[Auction "N"]\n1C =1= Pass $3 Pass Pass`;
+    const board = parsePbn(text).boards[0]!;
+    expect(board.diagnostics).toEqual([]);
+    expect(board.vulnerability).toBe("None");
+    expect(board.actions.map((action) => action.type === "bid" ? action.bid : "")).toEqual(["1clubs", "pass", "pass", "pass"]);
+  });
+
+  it("reads a table's own result from its Contract, Declarer, Result, and Score tags", () => {
+    const tags = (contract: string, declarer: string, result: string, score?: string) => parsePbn(
+      `${exportPbn({ dealer: "north", vulnerability: "NS", actions: [], deal: deal() })}\n[Contract "${contract}"]\n[Declarer "${declarer}"]\n[Result "${result}"]${score ? `\n[Score "${score}"]` : ""}`
+    ).boards[0]!;
+    expect(tableResult(tags("3NT", "N", "10", "NS 430"))).toEqual({ nsScore: 430, contract: "3NT", declarer: "north", tricks: 10, multiplicity: 1, artificial: false });
+    expect(tableResult(tags("5S", "S", "10", "NS -100"))!.nsScore).toBe(-100);
+    expect(tableResult(tags("4HX", "E", "8", "EW -300"))!.nsScore).toBe(300);
+    // Without a Score tag the score comes from the contract: 4♠ by North, vulnerable, made with an overtrick.
+    expect(tableResult(tags("4S", "N", "11"))!.nsScore).toBe(650);
+    expect(tableResult(tags("Pass", "", "")) ).toEqual({ nsScore: 0, contract: "Pass", multiplicity: 1, artificial: false });
+    expect(tableResult(tags("", "", ""))).toBeUndefined();
+  });
+});
+
