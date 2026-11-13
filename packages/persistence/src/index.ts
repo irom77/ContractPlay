@@ -1,4 +1,4 @@
-import { isValidDeal, RANKS, SEATS, SUITS, type Deal, type GameState, type Rubber, type Seat, type Suit } from "@contractplay/core";
+import { isValidDeal, RANKS, SEATS, SUITS, type Deal, type GameAction, type GameState, type HandRecord, type Rubber, type Seat, type Suit, type TravellerRow } from "@contractplay/core";
 
 const storageKey = "contractplay.solo";
 const legacyStorageKey = "bridgelab.solo";
@@ -10,7 +10,12 @@ export type SavedHand = Readonly<{
   game: GameState;
   savedAt: string;
   pbnMetadata?: PbnMetadata;
+  /** The imported board this hand was played on, when it came from a board set. */
+  record?: HandRecord;
 }>;
+
+/** An imported PBN file's boards; `position` is the index of the board being played. */
+export type BoardSet = Readonly<{ name: string; records: readonly HandRecord[]; position: number }>;
 
 export type PbnMetadata = Readonly<{
   tags?: readonly Readonly<{ name: string; value: string }>[];
@@ -25,6 +30,8 @@ export type SoloData = Readonly<{
   completedHands: readonly SavedHand[];
   /** The rubber being played in rubber-bridge scoring; absent until the first rubber deal. */
   rubber?: Rubber;
+  boardSet?: BoardSet;
+  currentRecord?: HandRecord;
 }>;
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -63,6 +70,32 @@ function isPbnMetadata(value: unknown): value is PbnMetadata {
     (value.comments === undefined || (Array.isArray(value.comments) && value.comments.every((comment) => typeof comment === "string")));
 }
 
+function isAction(action: unknown): action is GameAction {
+  return isRecord(action) && isSeat(action.seat) && (action.type === "bid" ? isBid(action.bid) : action.type === "play" ? isCard(action.card) : action.type === "claim" && Number.isInteger(action.tricks) && Number(action.tricks) >= 0 && Number(action.tricks) <= 13);
+}
+
+function isTravellerRow(value: unknown): value is TravellerRow {
+  return isRecord(value) && Number.isInteger(value.multiplicity) && Number(value.multiplicity) > 0 && typeof value.artificial === "boolean" &&
+    (value.nsScore === undefined || Number.isFinite(value.nsScore)) &&
+    (value.contract === undefined || typeof value.contract === "string") &&
+    (value.declarer === undefined || isSeat(value.declarer)) &&
+    (value.tricks === undefined || (Number.isInteger(value.tricks) && Number(value.tricks) >= 0 && Number(value.tricks) <= 13));
+}
+
+function isHandRecord(value: unknown): value is HandRecord {
+  return isRecord(value) && isSeat(value.dealer) && ["None", "NS", "EW", "Both"].includes(String(value.vulnerability)) && isDeal(value.deal) &&
+    (value.board === undefined || typeof value.board === "string") &&
+    (value.event === undefined || typeof value.event === "string") &&
+    (value.scoring === undefined || typeof value.scoring === "string") &&
+    (value.original === undefined || (Array.isArray(value.original) && value.original.every(isAction))) &&
+    Array.isArray(value.field) && value.field.every(isTravellerRow);
+}
+
+function isBoardSet(value: unknown): value is BoardSet {
+  return isRecord(value) && typeof value.name === "string" && Array.isArray(value.records) && value.records.length > 0 && value.records.every(isHandRecord) &&
+    Number.isInteger(value.position) && Number(value.position) >= 0 && Number(value.position) < value.records.length;
+}
+
 function isGame(value: unknown): value is GameState {
   if (!isRecord(value) || !["auction", "play", "passed-out", "complete"].includes(String(value.phase))) return false;
   if (!isSeat(value.dealer) || !isSeat(value.currentActor) || !isSeat(value.trickLeader)) return false;
@@ -73,7 +106,7 @@ function isGame(value: unknown): value is GameState {
   if (!Array.isArray(value.currentTrick) || value.currentTrick.length > 3 || !value.currentTrick.every(isTrickCard)) return false;
   if (!Array.isArray(value.completedTricks) || !value.completedTricks.every((trick) => Array.isArray(trick) && trick.length === 4 && trick.every(isTrickCard))) return false;
   if (!isRecord(value.history) || !Array.isArray(value.history.actions) || !Number.isInteger(value.history.cursor) || Number(value.history.cursor) < 0 || Number(value.history.cursor) > value.history.actions.length) return false;
-  if (!value.history.actions.every((action) => isRecord(action) && isSeat(action.seat) && (action.type === "bid" ? isBid(action.bid) : action.type === "play" ? isCard(action.card) : action.type === "claim" && Number.isInteger(action.tricks) && Number(action.tricks) >= 0 && Number(action.tricks) <= 13))) return false;
+  if (!value.history.actions.every(isAction)) return false;
   if (value.contract !== undefined && (!isRecord(value.contract) || !Number.isInteger(value.contract.level) || Number(value.contract.level) < 1 || Number(value.contract.level) > 7 || !(SUITS.includes(value.contract.strain as Suit) || value.contract.strain === "notrump") || !isSeat(value.contract.declarer) || ![0, 1, 2].includes(Number(value.contract.doubled)))) return false;
   if ((value.phase === "play" || value.phase === "complete") && value.contract === undefined) return false;
   if (value.claim !== undefined && (!isRecord(value.claim) || !isSeat(value.claim.seat) || !Number.isInteger(value.claim.tricks) || Number(value.claim.tricks) < 0 || Number(value.claim.tricks) > 13)) return false;
@@ -85,6 +118,12 @@ function isGame(value: unknown): value is GameState {
 function isSavedHand(value: unknown): value is SavedHand {
   return isRecord(value) && typeof value.id === "string" && typeof value.savedAt === "string" && (value.name === undefined || typeof value.name === "string") && isGame(value.game) && value.game.phase === "complete" &&
     (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata));
+}
+
+/** A saved hand with a malformed board record dropped; the hand itself stays. */
+function cleanSavedHand(hand: SavedHand): SavedHand {
+  if (hand.record === undefined || isHandRecord(hand.record)) return hand;
+  return { id: hand.id, ...(hand.name === undefined ? {} : { name: hand.name }), game: hand.game, savedAt: hand.savedAt, ...(hand.pbnMetadata === undefined ? {} : { pbnMetadata: hand.pbnMetadata }) };
 }
 
 function isSidePoints(value: unknown): boolean {
@@ -127,8 +166,10 @@ function normalize(value: unknown): SoloData {
     currentHandId: currentGame && typeof value.currentHandId === "string" ? value.currentHandId : null,
     currentGame,
     ...(isPbnMetadata(value.currentPbnMetadata) ? { currentPbnMetadata: value.currentPbnMetadata } : {}),
-    completedHands: Array.isArray(value.completedHands) ? value.completedHands.filter(isSavedHand) : [],
-    ...(isRubber(value.rubber) ? { rubber: cleanRubber(value.rubber) } : {})
+    completedHands: Array.isArray(value.completedHands) ? value.completedHands.filter(isSavedHand).map(cleanSavedHand) : [],
+    ...(isRubber(value.rubber) ? { rubber: cleanRubber(value.rubber) } : {}),
+    ...(isBoardSet(value.boardSet) ? { boardSet: value.boardSet } : {}),
+    ...(isHandRecord(value.currentRecord) ? { currentRecord: value.currentRecord } : {})
   };
 }
 

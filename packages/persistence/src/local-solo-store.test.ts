@@ -1,6 +1,6 @@
-import { applyAction, claimSeatFor, createGameState, deal, validatePlay, type GameAction } from "@contractplay/core";
+import { applyAction, claimSeatFor, createGameState, deal, validatePlay, type GameAction, type HandRecord } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { deleteSavedHand, exportSavedHand, loadSoloData, saveSoloData, type SoloData } from "./index.js";
+import { deleteSavedHand, exportSavedHand, loadSoloData, saveSoloData, type BoardSet, type SoloData } from "./index.js";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -154,5 +154,47 @@ describe("local solo store", () => {
     (bad.completedHands[0]!.game.history.actions as GameAction[])[4] = { type: "claim", seat: "north", tricks: 2.5 };
     saveSoloData(storage, bad);
     expect(loadSoloData(storage).completedHands).toEqual([]);
+  });
+  describe("board sets and hand records", () => {
+    const handRecord: HandRecord = {
+      board: "1", event: "Club night", scoring: "MP", dealer: "north", vulnerability: "None", deal: deal(),
+      original: [{ type: "bid", seat: "north", bid: "1clubs" }, { type: "bid", seat: "east", bid: "pass" }],
+      field: [{ nsScore: 90, contract: "1C", declarer: "north", tricks: 8, multiplicity: 2, artificial: false }, { multiplicity: 1, artificial: true }]
+    };
+    const boardSet: BoardSet = { name: "Club night", records: [handRecord, { ...handRecord, board: "2" }], position: 1 };
+
+    it("round-trips a board set, current record and saved hand record", () => {
+      const storage = new MemoryStorage();
+      const data: SoloData = { ...emptyData, boardSet, currentRecord: handRecord, completedHands: [{ ...record, record: handRecord }] };
+      saveSoloData(storage, data);
+      expect(loadSoloData(storage)).toEqual(data);
+    });
+
+    it("drops an invalid board set and keeps the rest", () => {
+      const badDeal = { ...handRecord, deal: { ...handRecord.deal, north: handRecord.deal.north.slice(1) } };
+      for (const bad of [{ ...boardSet, records: [] }, { ...boardSet, position: 2 }, { ...boardSet, position: -1 }, { ...boardSet, position: 0.5 }, { ...boardSet, records: [badDeal] }]) {
+        const storage = new MemoryStorage();
+        saveSoloData(storage, { ...emptyData, boardSet: bad as BoardSet, completedHands: [record] });
+        const loaded = loadSoloData(storage);
+        expect(loaded.boardSet).toBeUndefined();
+        expect(loaded.completedHands).toEqual([record]);
+      }
+    });
+
+    it("drops a malformed current record or saved hand record but keeps the hand", () => {
+      const storage = new MemoryStorage();
+      const bad = { ...handRecord, field: [{ multiplicity: 0, artificial: false }] } as HandRecord;
+      saveSoloData(storage, { ...emptyData, currentRecord: bad, completedHands: [{ ...record, record: bad }] });
+      const loaded = loadSoloData(storage);
+      expect(loaded.currentRecord).toBeUndefined();
+      expect(loaded.completedHands).toEqual([record]);
+    });
+
+    it("loads data saved before board sets existed unchanged", () => {
+      const storage = new MemoryStorage();
+      const data: SoloData = { ...emptyData, currentHandId: "x", currentGame: game, completedHands: [record] };
+      saveSoloData(storage, data);
+      expect(loadSoloData(storage)).toEqual(data);
+    });
   });
 });
