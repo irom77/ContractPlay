@@ -7,3 +7,4 @@
 - Update `TODO.md` when roadmap status changes. Add completed user-facing behavior or meaningful project setup to `CHANGES.md`.
 - Keep plans in `docs/superpowers/plans/`; update the relevant plan when scope or architecture changes.
 - Keep user-facing docs concise and accurate to the current code. Mark planned capabilities as planned.
+- Git: commit finished work to `main` and push it directly (feature branches may be merged into `main` locally); no pull request is needed. Pushes to `main` deploy the live site, so run the checks first.
