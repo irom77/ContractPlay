@@ -974,11 +974,11 @@ describe("OnlineTable connection", () => {
       });
     });
 
-    it("offers Auto play during card play only, and shows it until the viewer stops it", async () => {
+    it("offers Auto play in the auction and card play, and shows it until the viewer stops it", async () => {
       const user = userEvent.setup();
       const service = setup();
       service.push(live(newGame()));
-      expect(within(menu()).queryByRole("button", { name: "Auto play this hand", hidden: true })).toBeNull();
+      expect(within(menu()).queryByRole("button", { name: "Auto play this hand", hidden: true })).toBeTruthy();
       service.push(live(oneNoTrump(), { revision: 4 }));
       await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
       await user.click(item("Auto play this hand"));

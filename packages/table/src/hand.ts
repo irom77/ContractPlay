@@ -68,8 +68,8 @@ export function record(state: TableState, action: GameAction, at: number, byHuma
     const { score } = game.score;
     totals = score >= 0 ? { ...totals, ns: totals.ns + score } : { ...totals, ew: totals.ew - score };
   }
-  // Auto play lasts for one hand: when the last card is played, those players get their seats back.
-  const seats = game.phase === "complete" ? withoutAutoPlay(state.seats) : state.seats;
+  // Auto play lasts for one hand: when the last card is played, or the hand is passed out, those players get their seats back.
+  const seats = game.phase === "complete" || game.phase === "passed-out" ? withoutAutoPlay(state.seats) : state.seats;
   return accept(withoutClaim(state), { game, totals, seats, turnSince: at, trickJustCompleted, ...(byHuman ? { lastHumanAt: at } : {}) });
 }
 

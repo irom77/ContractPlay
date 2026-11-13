@@ -181,9 +181,12 @@ describe("stand-ins", () => {
     expect(resumed.revision).toBe(t.revision + 1);
   });
 
-  it("auto play hands the sender's cards to a bot during card play only", () => {
+  it("auto play hands the sender's calls and cards to a bot during the auction or card play, not between hands", () => {
+    expect(send(connectedFour(), "p0", { type: "autoPlay" }).refused).toBe("not-allowed");
     const auction = sendOk(connectedFour(), "p0", { type: "deal" }, 1, seededRandom(5));
-    expect(send(auction, "p0", { type: "autoPlay" }).refused).toBe("not-allowed");
+    const bidding = sendOk(auction, "p0", { type: "autoPlay" });
+    expect(bidding.seats.north).toMatchObject({ standIn: "intermediate", autoPlay: true });
+    expect(botToAct(bidding)).toBe(bidding.game!.currentActor === "north" ? "north" : undefined);
     const t = northDeclares(connectedFour());
     expect(send(t, "zed", { type: "autoPlay" }).refused).toBe("not-seated");
     const auto = sendOk(t, "p1", { type: "autoPlay" });
@@ -203,6 +206,19 @@ describe("stand-ins", () => {
     expect(done.game!.phase).toBe("complete");
     expect(done.seats.east).toEqual({ kind: "human", player: "p1", name: "P1", since: 1 });
     expect(botToAct(done)).toBeUndefined();
+  });
+
+  it("gives an auto-played seat back when the hand is passed out", () => {
+    let t = sendOk(connectedFour(), "p0", { type: "deal" }, 1, seededRandom(2));
+    t = sendOk(t, "p1", { type: "autoPlay" });
+    for (let k = 0; k < 4; k++) {
+      const seat = t.game!.currentActor;
+      t = seat === "east"
+        ? apply(t, { type: "bot", revision: t.revision, action: pass("east"), at: 7 }).state
+        : sendOk(t, `p${["north", "east", "south", "west"].indexOf(seat)}`, act(t, pass(seat)));
+    }
+    expect(t.game!.phase).toBe("passed-out");
+    expect(t.seats.east).toEqual({ kind: "human", player: "p1", name: "P1", since: 1 });
   });
 
   it("ends auto play when the player takes the seat back or the host cancels the hand", () => {

@@ -432,8 +432,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
         title: "Undo your last call or card, and any bot play since, to choose again",
         onSelect: () => { if (!inputDisabled) { setWaiting(true); setQueued(undefined); takeBackSent.current = true; send({ type: "takeBack" }); } }
       },
-      ...(game.phase === "play" && !standIn ? [{ id: "auto-play", label: "Auto play this hand", disabled: status !== "open",
-        title: "A bot plays your cards until this hand ends, then you play again", onSelect: () => send({ type: "autoPlay" }) }] : []),
+      ...(live && !standIn ? [{ id: "auto-play", label: "Auto play this hand", disabled: status !== "open",
+        title: "A bot makes your calls and plays your cards until this hand ends, then you play again", onSelect: () => send({ type: "autoPlay" }) }] : []),
       ...(live && isHost ? [{ id: "cancel", label: "Cancel this hand", tone: "danger" as const, disabled: status !== "open",
         title: "Abandon the hand for everyone, unscored, and return to seating", onSelect: () => send({ type: "cancelHand" }) }] : []),
       { id: "leave", label: "Leave the table", tone: "danger", disabled: status !== "open" || leaving,
@@ -497,7 +497,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
                 <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
               </div> : null}
               {standIn ? <DraggableBanner className="online-resume" storageKey={resumeBannerKey} label={mine.autoPlay ? "Auto play is on" : "A bot is playing for you"}>
-                <span>{mine.autoPlay ? "Auto play: a bot plays your cards until this hand ends." : "A bot is playing for you."}</span>
+                <span>{mine.autoPlay ? "Auto play: a bot plays for you until this hand ends." : "A bot is playing for you."}</span>
                 <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>{mine.autoPlay ? "Stop auto play" : "Take my seat back"}</button>
               </DraggableBanner> : null}
               {view.claimRejected ? <p className="claim-notice" role="status">{claimRejectedText(view.claimRejected)}</p> : null}

@@ -93,7 +93,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("south");
   },
   "solo-auction": () => {
-    expect(document.querySelector(".status-pill")!.textContent).toBe("South to bid");
+    expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
     expect(screen.getByRole("group", { name: "Contract bids by level and strain" })).toBeTruthy();
     expect(screen.getByRole("list", { name: "Auction calls" }).querySelectorAll("li")).toHaveLength(2);
   },
@@ -103,8 +103,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(document.querySelector(".status-pill")!.textContent).not.toMatch(/^Bot/);
   },
   "solo-auto-play": () => {
-    const stop = screen.getByRole("button", { name: "Stop auto play" });
-    expect(stop.getAttribute("aria-pressed")).toBe("true");
+    // The same floating, draggable banner as online.
+    const banner = screen.getByRole("group", { name: "Auto play is on" });
+    expect(within(banner).getByRole("button", { name: "Stop auto play" })).toBeTruthy();
+    expect(within(banner).getByRole("button", { name: "Move this banner" })).toBeTruthy();
+    expect(banner.closest(".hand-zone, .pos-bottom")).toBeNull();
     expect(document.querySelector(".status-pill")!.textContent).toBe("Bot · East to play");
     expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
   },
@@ -114,11 +117,22 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getAllByRole("button", { name: /^Play / }).every((card) => (card as HTMLButtonElement).disabled)).toBe(true);
   },
   "solo-menu": () => {
-    expect(document.querySelector<HTMLDetailsElement>(".table-menu")!.open).toBe(true);
-    expect(screen.getByRole("button", { name: "Claim" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Let bots finish this hand" })).toBeTruthy();
-    expect(within(screen.getByRole("region", { name: "Rubber" })).getByRole("table", { name: "Rubber score" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Review Friday practice/ })).toBeTruthy();
+    const menu = screen.getByRole("group", { name: "Game menu" });
+    expect(menu.closest("details")!.open).toBe(true);
+    expect(within(menu).getAllByRole("button").map((button) => button.textContent)).toEqual(
+      ["Online tables", "Claim", "Take back", "Auto play this hand", "Settings", "Rubber score", "Recent hands", "About ContractPlay", "Deal a new hand"]);
+    // No Take back or Redo buttons on the table itself.
+    expect(document.querySelector(".history-controls")).toBeNull();
+  },
+  "solo-settings": () => {
+    const dialog = screen.getByRole("dialog", { name: "Settings" });
+    expect((within(dialog).getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
+    expect(within(dialog).getByRole("checkbox", { name: "Play forced cards automatically" })).toBeTruthy();
+  },
+  "solo-hands": () => {
+    const dialog = screen.getByRole("dialog", { name: "Recent hands" });
+    expect(within(dialog).getByRole("button", { name: /^Review Friday practice/ })).toBeTruthy();
+    expect(within(dialog).getByText("Import a PBN deal")).toBeTruthy();
   },
   "solo-result": () => {
     const result = screen.getByRole("region", { name: "Hand result" });

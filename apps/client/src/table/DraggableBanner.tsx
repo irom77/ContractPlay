@@ -45,20 +45,24 @@ export function DraggableBanner({ label, storageKey, className = "", children }:
       const space = room();
       if (!space) return setPlace(undefined);
       if (spot) return setPlace({ left: spot.x * space.width, top: spot.y * space.height });
-      // Default: just under the status card in the top-left corner, clear of every hand. Tall, narrow windows have no room
-      // there (the top hand starts beside the status card), so the banner sits on the open felt just above the player's seat.
+      // Default: the top-right corner, just under the menu and the last trick, where no seat or hand sits (on the left the
+      // side seat's badge and dummy start just under the status card). Tall, narrow windows have no room there (the top
+      // hand reaches the corner), so the banner sits on the open felt just above the player's seat.
+      const tools = space.surface.querySelector<HTMLElement>(".table-tools");
       const status = space.surface.querySelector<HTMLElement>(".table-status");
       const bottomSeat = space.surface.querySelector<HTMLElement>(".pos-bottom");
-      const left = status?.offsetLeft ?? 0;
       if (bottomSeat && space.surface.clientHeight > space.surface.clientWidth * 1.25) {
-        setPlace({ left, top: Math.max(0, Math.min(space.height, bottomSeat.offsetTop - space.element.offsetHeight - 12)) });
-      } else setPlace(status ? { left, top: Math.min(space.height, status.offsetTop + status.offsetHeight + 8) } : undefined);
+        setPlace({ left: status?.offsetLeft ?? 0, top: Math.max(0, Math.min(space.height, bottomSeat.offsetTop - space.element.offsetHeight - 12)) });
+      } else if (tools) {
+        setPlace({ left: Math.max(0, Math.min(space.width, tools.offsetLeft + tools.offsetWidth - space.element.offsetWidth)), top: Math.min(space.height, tools.offsetTop + tools.offsetHeight + 8) });
+      } else setPlace(undefined);
     };
     layout();
     window.addEventListener("resize", layout);
-    const status = ref.current?.offsetParent?.querySelector(".table-status");
-    const observer = typeof ResizeObserver === "function" && status ? new ResizeObserver(layout) : undefined;
-    if (status) observer?.observe(status);
+    // The corner moves when the last trick appears under the menu, or the status card changes size.
+    const watched = [...(ref.current?.offsetParent?.querySelectorAll(".table-tools, .table-status") ?? [])];
+    const observer = typeof ResizeObserver === "function" && watched.length ? new ResizeObserver(layout) : undefined;
+    for (const element of watched) observer?.observe(element);
     return () => { window.removeEventListener("resize", layout); observer?.disconnect(); };
   }, [spot, room]);
 

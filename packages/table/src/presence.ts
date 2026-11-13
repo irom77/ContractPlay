@@ -79,14 +79,16 @@ export function handToBot(state: TableState, player: PlayerId, seat: Seat, at: n
 }
 
 /**
- * Auto play: during card play the sender hands their own cards to a bot for the rest of the hand. The stand-in
- * ends by itself when the hand does, or sooner when the player takes the seat back.
+ * Auto play: during the auction or card play the sender hands their own calls and cards to a bot for the rest of the
+ * hand. The stand-in ends by itself when the hand does (played out or passed out), or sooner when the player takes the
+ * seat back.
  */
 export function autoPlay(state: TableState, player: PlayerId): Outcome {
   const seat = seatOf(state, player);
   if (!seat) return refuse(state, "not-seated");
   const held = state.seats[seat] as Human;
-  if (state.game?.phase !== "play" || held.standIn !== undefined) return refuse(state, "not-allowed");
+  const phase = state.game?.phase;
+  if ((phase !== "auction" && phase !== "play") || held.standIn !== undefined) return refuse(state, "not-allowed");
   return accept(withoutClaim(state), { seats: { ...state.seats, [seat]: { ...held, standIn: "intermediate", autoPlay: true } } });
 }
 

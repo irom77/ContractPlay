@@ -36,6 +36,8 @@ import { TableView } from "./table/TableView.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard.js";
 import { ClaimPanel } from "./table/ClaimPanel.js";
+import { DraggableBanner } from "./table/DraggableBanner.js";
+import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
 import { serviceUrl } from "./online/connection.js";
 
@@ -79,9 +81,16 @@ export type SoloPreview = Readonly<{
   /** The claim picker is open. */
   claiming?: boolean;
   menuOpen?: boolean;
+  /** One of the game menu's dialogs is open. */
+  dialog?: MenuDialog;
   /** Review this saved hand at this action. */
   review?: Readonly<{ handId: string; cursor: number }>;
 }>;
+
+/** The game menu's larger entries open as dialogs over the table. */
+export type MenuDialog = "settings" | "rubber" | "hands" | "about";
+/** Shared with online play, so the Auto play banner stays where the player last put it. */
+const autoPlayBannerKey = "contractplay.resumeBanner";
 
 export default function App({ solver, preview }: { solver?: Solver; preview?: SoloPreview } = {}) {
   const frozen = !!preview;
@@ -120,7 +129,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
   const [reviewHandId, setReviewHandId] = useState<string | undefined>(preview?.review?.handId);
   const [reviewCursor, setReviewCursor] = useState(preview?.review?.cursor ?? 0);
-  const [aboutOpen, setAboutOpen] = useState(false);
+  const [dialog, setDialog] = useState<MenuDialog | undefined>(preview?.dialog);
   // The hand the user has handed over: bots make every remaining call and play for it.
   const [botsFinishHandId, setBotsFinishHandId] = useState<string | undefined>(preview?.autoPlay ? currentHandId : undefined);
   // A card the user picked before their turn, played for them when it comes.
@@ -424,6 +433,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
     setGame(imported);
     setAuctionShown(false);
     setCurrentPbnMetadata({ tags: board.tags, comments: board.comments });
+    setDialog(undefined);
     setDealer(board.dealer);
     setVulnerability(board.vulnerability ?? "None");
     setReviewHandId(undefined);
@@ -478,13 +488,8 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
     setMessage("");
   }
 
-  function redo() {
-    if (!game || game.history.cursor >= game.history.actions.length) return;
-    setGame(redoAction(game));
-    setMessage("");
-  }
-
   function openReview(hand: SavedHand) {
+    setDialog(undefined);
     setReviewHandId(hand.id);
     setReviewCursor(0);
     setLastTrickOpen(false);
@@ -534,7 +539,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
         event.preventDefault();
         void toggleFullscreen();
       } else if (event.key === "Escape") {
-        setAboutOpen(false);
+        setDialog(undefined);
         if (!isNativeClient()) return;
         void setFullscreen(false).then(setFullscreenState).catch(() => undefined);
       }
@@ -592,14 +597,26 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
       : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}</svg>
   </button>;
   const version = <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>;
-  const closeMenu = (event: React.MouseEvent<HTMLElement>) => event.currentTarget.closest("details")?.removeAttribute("open");
-  const aboutDialog = aboutOpen ? <div className="about-backdrop" onClick={() => setAboutOpen(false)}>
-    <section className="about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-title" onClick={(event) => event.stopPropagation()}>
-      <span className="brand-mark" aria-hidden="true">C</span>
-      <h2 id="about-title">ContractPlay</h2>
-      <p className="about-version">Version {__CONTRACTPLAY_VERSION__}</p>
-      <p>Play, learn, and review contract bridge.</p>
-      <button className="primary-button" type="button" autoFocus onClick={() => setAboutOpen(false)}>Close</button>
+  const dialogTitles: Record<MenuDialog, string> = { settings: "Settings", rubber: "Rubber score", hands: "Recent hands", about: "ContractPlay" };
+  const menuDialog = dialog ? <div className="about-backdrop" onClick={() => setDialog(undefined)}>
+    <section className={`about-dialog ${dialog === "about" ? "" : "menu-dialog"}`} role="dialog" aria-modal="true" aria-label={dialogTitles[dialog]} onClick={(event) => event.stopPropagation()}>
+      {dialog === "about" ? <span className="brand-mark" aria-hidden="true">C</span> : null}
+      {/* Recent hands keeps its own heading, with the count of saved hands. */}
+      {dialog === "hands" ? null : <h2>{dialogTitles[dialog]}</h2>}
+      {dialog === "about" ? <>
+        <p className="about-version">Version {__CONTRACTPLAY_VERSION__}</p>
+        <p>Play, learn, and review contract bridge.</p>
+      </> : null}
+      {dialog === "settings" ? <>
+        <p className="quiet-copy">Scoring, dealer, and vulnerability apply from the next deal.</p>
+        <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section>
+      </> : null}
+      {dialog === "rubber" ? <section className="rubber-menu" aria-label="Rubber">
+        <RubberScoresheet summary={rubberSummary} />
+        <button className="secondary-button" type="button" onClick={() => { setDialog(undefined); setRubber(emptyRubber()); }}>Start a new rubber</button>
+      </section> : null}
+      {dialog === "hands" ? <>{recentHandsPanel}{pbnImportForm}</> : null}
+      <button className="primary-button" type="button" autoFocus onClick={() => setDialog(undefined)}>Close</button>
     </section>
   </div> : null;
 
@@ -634,27 +651,31 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
       ? claimText(reviewedClaim, contract.declarer, remainingTricks(selectedHand!.game))
       : `Reviewing action ${reviewCursor} of ${handCount}`
     : liveTurn && activeQueued && !canAct ? `Queued: ${cardLabel(activeQueued.card)}`
+    // Against bots, your own turns read as they do online.
+    : liveTurn && playAgainstBots && canAct ? (phase === "auction" ? "Your call" : actor === userSeat ? "Your play" : actor === contract?.declarer ? "Play declarer's hand" : "Play from dummy")
     : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
+  // The same game menu as at an online table: the hand's actions first, then this device's settings and hands, and
+  // dealing again (which abandons a hand in progress) set apart at the end.
+  const handLive = !isReviewing && liveTurn;
+  const menuItems: GameMenuItem[] = isReviewing ? [
+    { id: "exit-review", label: "Exit review", onSelect: () => { setReviewHandId(undefined); setLastTrickOpen(false); } },
+    { id: "hands", label: "Recent hands", onSelect: () => setDialog("hands") },
+    { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") }
+  ] : [
+    ...(online ? [{ id: "online", label: "Online tables", title: "Go to the online lobby; this hand is kept for later", onSelect: goOnline }] : []),
+    ...(claimSeat !== undefined && !soloClaimPending && !pickingClaim ? [{ id: "claim", label: "Claim", title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(game) }] : []),
+    { id: "take-back", label: "Take back", disabled: !game || game.history.cursor === 0, title: "Undo the last call or card to choose again", onSelect: takeBack },
+    ...(handLive && !botsFinishing ? [{ id: "auto-play", label: "Auto play this hand",
+      title: "A bot makes your calls and plays your cards until this hand ends, then you play again", onSelect: () => setBotsFinishHandId(currentHandId) }] : []),
+    { id: "settings", label: "Settings", title: "Scoring, dealer, opponents, hints, and forced cards for the next deal", onSelect: () => setDialog("settings") },
+    ...(scoring === "rubber" ? [{ id: "rubber", label: "Rubber score", onSelect: () => setDialog("rubber") }] : []),
+    { id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") },
+    { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
+    { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
+  ];
   const tableTools = <>
-    <details className="table-menu" open={preview?.menuOpen || undefined}>
-      <summary className="icon-button" aria-label="Table menu" title="Table menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg></summary>
-      <div className="table-menu-content">
-        {!isReviewing ? <button className="secondary-button menu-deal" onClick={startHand}>Deal a new hand</button> : <button className="secondary-button menu-deal" onClick={() => { setReviewHandId(undefined); setLastTrickOpen(false); }}>Exit review</button>}
-        {claimSeat !== undefined && !soloClaimPending && !pickingClaim ? <button className="secondary-button menu-deal" type="button" title="Claim some or all of the remaining tricks" onClick={(event) => { closeMenu(event); setClaimPickedAt(game); }}>Claim</button> : null}
-        {!isReviewing && liveTurn ? <button className="secondary-button menu-deal" type="button" aria-pressed={botsFinishing} onClick={(event) => { closeMenu(event); setBotsFinishHandId(botsFinishing ? undefined : currentHandId); }}>{botsFinishing ? "Take back control" : "Let bots finish this hand"}</button> : null}
-        {!isReviewing ? <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section> : null}
-        {!isReviewing && scoring === "rubber" ? <section className="rubber-menu" aria-label="Rubber">
-          <RubberScoresheet summary={rubberSummary} />
-          <button className="secondary-button" type="button" onClick={(event) => { closeMenu(event); setRubber(emptyRubber()); }}>Start a new rubber</button>
-        </section> : null}
-        {/* Not named "Play …": the in-game tests and card buttons treat /^Play / as a playable card. */}
-        {online ? <button className="secondary-button menu-deal" type="button" onClick={goOnline}>Online tables</button> : null}
-        {pbnImportForm}
-        {recentHandsPanel}
-        <button className="secondary-button menu-about" type="button" onClick={(event) => { closeMenu(event); setAboutOpen(true); }}>About ContractPlay</button>
-      </div>
-    </details>
+    <GameMenu items={menuItems} defaultOpen={preview?.menuOpen ?? false} />
     {fullscreenButton}
   </>;
 
@@ -676,24 +697,23 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
     {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">
       <button className="secondary-button" aria-label="Previous action" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}><span aria-hidden="true">‹</span> Previous</button>
       <button className="secondary-button" aria-label="Next action" disabled={reviewCursor >= handCount} onClick={() => setReviewCursor((cursor) => Math.min(handCount, cursor + 1))}>Next <span aria-hidden="true">›</span></button>
-    </div> : <div className="history-controls">
-      <button className="secondary-button" disabled={!game || game.history.cursor === 0} onClick={takeBack}><span aria-hidden="true">↶ </span>Take back</button>
-      <button className="secondary-button" disabled={!!temporaryTrick || !game || game.history.cursor >= game.history.actions.length} onClick={redo}><span aria-hidden="true">↷ </span>Redo</button>
-    </div>}
+    </div> : null}
 
     {!isReviewing && liveTurn ? <div className="hint-controls">
       {hintsOn && phase === "auction" && auctionHandSeat ? <strong className="hand-points" aria-label={`${highCardPoints(shownGame.hands[auctionHandSeat])} high-card points`}>{highCardPoints(shownGame.hands[auctionHandSeat])} HCP</strong> : null}
       {visibleBidHint && phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
       {visibleHint && phase === "play" ? <p role="status">{visibleHint.reason}</p> : null}
-      {phase === "play" ? <button className="secondary-button auto-play-toggle" type="button" aria-pressed={botsFinishing}
-        title={botsFinishing ? "Take back control of your cards" : "Let the bots play your cards until this hand ends"}
-        onClick={() => setBotsFinishHandId(botsFinishing ? undefined : currentHandId)}>{botsFinishing ? "Stop auto play" : "Auto play"}</button> : null}
       <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
     </div> : null}
 
     {pickingClaim && game ? <ClaimPanel mode="pick" remaining={remainingTricks(game)} onClaim={claim} onCancel={() => setClaimPickedAt(undefined)} />
       : soloClaimPending && soloClaim ? <ClaimPanel mode="pending" text={`${pendingClaimText(soloClaim, remainingTricks(soloClaim.game), true)}. Checking…`} onWithdraw={() => setSoloClaim(undefined)} />
       : null}
+
+    {botsFinishing && handLive ? <DraggableBanner className="online-resume" storageKey={autoPlayBannerKey} label="Auto play is on">
+      <span>Auto play: a bot plays for you until this hand ends.</span>
+      <button className="primary-button" type="button" onClick={() => setBotsFinishHandId(undefined)}>Stop auto play</button>
+    </DraggableBanner> : null}
 
     {message ? <p className="error-message" role="alert">{message}</p> : null}
   </>;
@@ -735,7 +755,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
           overlay={tableOverlay}
         />
       </div>
-      {aboutDialog}
+      {menuDialog}
     </main>
   );
 }

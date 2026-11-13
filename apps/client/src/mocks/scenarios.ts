@@ -267,7 +267,7 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north" })
   },
   {
-    id: "solo-auto-play", title: "Solo: auto play", detail: "You are East and chose Auto play: the bots play your cards until this hand ends, or until you press Stop auto play.",
+    id: "solo-auto-play", title: "Solo: auto play", detail: "You are East and chose Auto play this hand from the menu: a bot plays your cards until this hand ends. Drag the banner anywhere; Stop auto play takes your cards back.",
     build: () => solo(soloGame(8, moment(["east"], 2)), { userSeat: "east", autoPlay: true })
   },
   {
@@ -275,8 +275,16 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, (game) => game.completedTricks.length >= 6 && game.currentTrick.length === 0 && ["north", "south"].includes(game.currentActor)), { userSeat: "north", claiming: true })
   },
   {
-    id: "solo-menu", title: "Solo: table menu", detail: "Mid-hand with the menu open: deal again, claim, let bots finish, next-deal settings, the rubber so far, and recent hands.",
+    id: "solo-menu", title: "Solo: game menu", detail: "Mid-hand with the menu open, as at an online table: claim, take back, auto play, then settings, the rubber, recent hands, and dealing again.",
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", menuOpen: true })
+  },
+  {
+    id: "solo-settings", title: "Solo: settings", detail: "Settings from the game menu: scoring, dealer, opponents, your seat, bot skill and style, hints, and forced cards.",
+    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "settings" })
+  },
+  {
+    id: "solo-hands", title: "Solo: recent hands", detail: "Recent hands from the game menu: review or export a finished hand, or import a PBN deal.",
+    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "hands" })
   },
   {
     id: "solo-result", title: "Solo: hand result with rubber score", detail: "4♠ made: the whole deal face-up, the rubber score for this hand, and the scoresheet so far.",

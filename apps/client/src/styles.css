@@ -131,6 +131,12 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .about-dialog p { margin: 0; color: #cfdbd1; font-size: 14px; }
 .about-dialog .about-version { color: var(--gold); font-weight: 700; }
 .about-dialog .primary-button { margin-top: 12px; }
+/* The solo game menu's Settings, Rubber score, and Recent hands dialogs. */
+.menu-dialog { justify-items: stretch; width: min(460px, 100%); max-height: calc(100% - 16px); overflow: auto; text-align: left; }
+.menu-dialog h2 { margin: 0; }
+.menu-dialog .recent-panel { margin-top: 0; border-top: 0; padding-top: 0; }
+.menu-dialog .rubber-menu { margin-top: 0; border-top: 0; padding-top: 0; }
+.menu-dialog > .primary-button { justify-self: center; }
 
 /* ---------- Start screen ---------- */
 .empty-table { position: relative; display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; gap: 18px; min-height: 0; overflow: auto; padding: 64px 20px 20px; }
@@ -455,8 +461,8 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-totals { border-radius: 7px; padding: calc(.5 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; white-space: nowrap; }
 .lobby-panel .online-totals { justify-self: start; margin: 0; }
 .online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
-/* The Auto play / bot-playing banner floats in the top-left corner under the status card, clear of every hand; the player can drag it anywhere on the table. */
-.online-resume { position: absolute; z-index: 7; top: calc(18 * var(--u)); left: calc(2 * var(--u)); display: flex; align-items: center; gap: 8px; width: max-content; max-width: max(250px, calc(34 * var(--u))); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 4px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-s); line-height: 1.3; cursor: grab; touch-action: none; user-select: none; }
+/* The Auto play / bot-playing banner floats in the top-right corner under the menu and last trick, clear of every hand; the player can drag it anywhere on the table. */
+.online-resume { position: absolute; z-index: 7; top: calc(14 * var(--u)); right: calc(2 * var(--u)); display: flex; align-items: center; gap: 8px; width: max-content; max-width: max(300px, calc(44 * var(--u))); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 4px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-s); line-height: 1.3; cursor: grab; touch-action: none; user-select: none; }
 .online-resume:active { cursor: grabbing; }
 .online-resume > span { flex: 1 1 auto; min-width: 12ch; }
 .online-resume .primary-button { flex: none; min-height: max(30px, calc(4.2 * var(--u))); padding: 0 12px; font-size: var(--text-s); }

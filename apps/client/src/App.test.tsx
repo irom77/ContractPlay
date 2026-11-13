@@ -55,6 +55,25 @@ function storeCurrentGame(game: GameState, completedHands: readonly SavedHand[] 
 }
 
 
+const menuToggle = () => screen.getByLabelText("Game menu", { selector: "summary" });
+/** Items currently offered in the game menu, open or not. */
+const menuItem = (name: string) => within(screen.getByRole("group", { name: "Game menu", hidden: true })).queryByRole("button", { name, hidden: true }) as HTMLButtonElement | null;
+
+/** Opens the game menu's entry `name` (Settings, Rubber score, Recent hands, About ContractPlay, ...). */
+function chooseMenu(name: string) {
+  fireEvent.click(menuToggle());
+  fireEvent.click(within(screen.getByRole("group", { name: "Game menu", hidden: true })).getByRole("button", { name, hidden: true }));
+}
+
+/** Changes a deal setting: on the start screen directly, at the table through the game menu's Settings dialog. */
+function setSetting(label: string, value: string) {
+  const direct = screen.queryByLabelText(label);
+  if (direct) { fireEvent.change(direct, { target: { value } }); return; }
+  chooseMenu("Settings");
+  fireEvent.change(within(screen.getByRole("dialog", { name: "Settings" })).getByLabelText(label), { target: { value } });
+  fireEvent.click(within(screen.getByRole("dialog", { name: "Settings" })).getByRole("button", { name: "Close" }));
+}
+
 function bidButtonLabel(call: string) {
   if (call === "pass") return "Pass";
   if (call === "double") return "X";
@@ -200,8 +219,9 @@ describe("bridge table", () => {
 
     expect(container.querySelector(".hand-zone .cards-row")).toBeTruthy();
     expect(within(table).getByRole("switch", { name: "Hints" })).toBeTruthy();
-    expect(within(table).getByRole("button", { name: "Take back" })).toBeTruthy();
-    expect(within(table).getByRole("button", { name: "Redo" })).toBeTruthy();
+    // As at an online table, Take back lives in the game menu, and there is no Redo.
+    expect(menuItem("Take back")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Redo/, hidden: true })).toBeNull();
     expect(container.querySelector("h1, header, footer, .hand-zone h2, .hand-zone h3, .table-status h2")).toBeNull();
   });
 
@@ -250,18 +270,6 @@ describe("bridge table", () => {
     expect(lastTrick.querySelector(".last-trick-chip")!.textContent).toBe(`${card.rank === "T" ? "10" : card.rank}${suitSymbols[card.suit]}`);
   });
 
-  it("disables redo while the completed trick pause is active", () => {
-    vi.useFakeTimers();
-    const afterThirdCardOfSecondTrick = undoAction(undoAction(gameAfterPlays(9)));
-    storeCurrentGame(afterThirdCardOfSecondTrick);
-    render(<App />);
-
-    expect(screen.getByRole("button", { name: "Redo" }).hasAttribute("disabled")).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
-    expect(screen.getByRole("button", { name: "Redo" }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card")).toHaveLength(4);
-  });
-
   it("pauses bot play for the full completed-trick display", async () => {
     vi.useFakeTimers();
     const game = gameAfterPlays(3);
@@ -277,8 +285,8 @@ describe("bridge table", () => {
     const userSeat = defenders.find((candidate) => candidate !== finalSeat && candidate !== nextSeat)!;
     storeCurrentGame(game);
     render(<App />);
-    fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
-    fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: userSeat } });
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", userSeat);
 
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     const status = document.querySelector(".status-pill")!;
@@ -298,7 +306,7 @@ describe("bridge table", () => {
     storeCurrentGame(gameAfterPlays(4), [saved]);
     render(<App />);
 
-    await user.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Recent hands");
     await user.click(screen.getByRole("button", { name: /^Review Bold Finesse, played / }));
     for (let action = 0; action < 8; action += 1) {
       await user.click(screen.getByRole("button", { name: "Next action" }));
@@ -306,7 +314,7 @@ describe("bridge table", () => {
     await user.click(screen.getByRole("button", { name: "Last trick" }));
     expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card")).toHaveLength(4);
 
-    await user.click(screen.getByRole("button", { name: "Exit review" }));
+    chooseMenu("Exit review");
     expect(screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card")).toHaveLength(0);
   });
 
@@ -323,22 +331,32 @@ describe("bridge table", () => {
     expect(screen.getByText("East to bid")).toBeTruthy();
   });
 
-  it("centers the auction and keeps setup, PBN import, and recent hands in the table menu", async () => {
+  it("centers the auction and offers the same game menu as online, with settings, rubber, and hands in dialogs", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
 
     expect(screen.getByRole("region", { name: "Auction" }).closest(".auction-layout")).toBeTruthy();
-    const menu = screen.getByLabelText("Table menu").closest("details");
-    expect(menu).toBeTruthy();
-    await user.click(screen.getByLabelText("Table menu"));
-    expect(within(menu!).getByLabelText("Scoring")).toBeTruthy();
-    expect(within(menu!).getByRole("table", { name: "Rubber score" })).toBeTruthy();
-    expect(within(menu!).getByText("Import a PBN deal")).toBeTruthy();
-    expect(within(menu!).getByRole("region", { name: "Recent hands" })).toBeTruthy();
-    await user.click(within(menu!).getByText("Import a PBN deal"));
-    expect(within(menu!).getByRole("button", { name: "Choose PBN file" })).toBeTruthy();
-    expect(within(menu!).getByRole("button", { name: "Import hand" })).toBeTruthy();
+    const menu = screen.getByRole("group", { name: "Game menu", hidden: true });
+    expect(menu.closest("details")!.classList.contains("game-menu")).toBe(true);
+    // The hand's actions first, then this device's settings and hands, and dealing again apart at the end.
+    expect(within(menu).getAllByRole("button", { hidden: true }).map((button) => button.textContent))
+      .toEqual(["Online tables", "Take back", "Auto play this hand", "Settings", "Rubber score", "Recent hands", "About ContractPlay", "Deal a new hand"]);
+    expect(menuItem("Take back")!.disabled).toBe(true);
+    expect(menuItem("Deal a new hand")!.classList.contains("menu-danger")).toBe(true);
+
+    chooseMenu("Settings");
+    expect(within(screen.getByRole("dialog", { name: "Settings" })).getByLabelText("Scoring")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    chooseMenu("Rubber score");
+    expect(within(screen.getByRole("dialog", { name: "Rubber score" })).getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    chooseMenu("Recent hands");
+    const hands = screen.getByRole("dialog", { name: "Recent hands" });
+    expect(within(hands).getByRole("region", { name: "Recent hands" })).toBeTruthy();
+    await user.click(within(hands).getByText("Import a PBN deal"));
+    expect(within(hands).getByRole("button", { name: "Choose PBN file" })).toBeTruthy();
+    expect(within(hands).getByRole("button", { name: "Import hand" })).toBeTruthy();
   });
 
   it("keeps the latest call visible in a long centered auction", async () => {
@@ -359,8 +377,8 @@ describe("bridge table", () => {
   it("keeps the auction centered and hides bid controls on a bot turn", () => {
     vi.useFakeTimers();
     render(<App />);
-    fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
-    fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "south");
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
 
     expect(screen.getByText("Bot · North to bid")).toBeTruthy();
@@ -377,12 +395,12 @@ describe("bridge table", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
-    await user.click(screen.getByLabelText("Table menu"));
+    await user.click(menuToggle());
     await user.click(screen.getByRole("button", { name: "About ContractPlay" }));
 
     const about = screen.getByRole("dialog", { name: "ContractPlay" });
     expect(within(about).getByText(`Version ${__CONTRACTPLAY_VERSION__}`)).toBeTruthy();
-    expect(screen.getByLabelText("Table menu").closest("details")!.open).toBe(false);
+    expect(menuToggle().closest("details")!.open).toBe(false);
 
     await user.click(within(about).getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -394,7 +412,8 @@ describe("bridge table", () => {
     const legacy = { id: "legacy-hand", game: completedGame(), savedAt: "2026-10-27T15:30:00.000Z" };
     storeCurrentGame(gameAfterPlays(0), [named, legacy]);
     render(<App />);
-    await user.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Recent hands");
+    await user.click(screen.getByText("Import a PBN deal"));
 
     const recent = screen.getByRole("region", { name: "Recent hands" });
     const played = new Date(named.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
@@ -415,13 +434,11 @@ describe("bridge table", () => {
   });
 
   it("lets bots finish the rest of a hand once the user hands over control", async () => {
-    const user = userEvent.setup();
     storeCurrentGame(gameAfterPlays(46));
     render(<App />);
     expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
 
-    await user.click(screen.getByLabelText("Table menu"));
-    await user.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
+    chooseMenu("Auto play this hand");
 
     expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
     await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 8000 });
@@ -449,7 +466,7 @@ describe("bridge table", () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(0);
-    fireEvent.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Settings");
     const setting = screen.getByRole("checkbox", { name: "Play forced cards automatically" }) as HTMLInputElement;
     expect(setting.checked).toBe(false);
     fireEvent.click(setting);
@@ -465,7 +482,7 @@ describe("bridge table", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(500); });
     expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: /Take back/ }));
+    chooseMenu("Take back");
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
@@ -477,8 +494,12 @@ describe("bridge table", () => {
     storeCurrentGame(gameAfterPlays(44));
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: "Auto play" }));
-    expect(screen.getByRole("button", { name: "Stop auto play" }).getAttribute("aria-pressed")).toBe("true");
+    chooseMenu("Auto play this hand");
+    // As online: a draggable banner says Auto play is on and offers Stop auto play; the menu no longer offers it.
+    const banner = screen.getByRole("group", { name: "Auto play is on" });
+    expect(within(banner).getByRole("button", { name: "Stop auto play" })).toBeTruthy();
+    expect(within(banner).getByRole("button", { name: "Move this banner" })).toBeTruthy();
+    expect(menuItem("Auto play this hand")).toBeNull();
     expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
     expect(document.querySelector(".status-pill")!.textContent).toContain("Bot ·");
 
@@ -488,22 +509,29 @@ describe("bridge table", () => {
     expect(document.querySelector(".status-pill")!.textContent).not.toContain("Bot ·");
   });
 
-  it("has bots bid for every seat after a handover and returns control on request", async () => {
+  it("lets bots bid for every seat after Auto play in the auction", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
-    await user.click(screen.getByLabelText("Table menu"));
-    await user.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
+    chooseMenu("Auto play this hand");
 
     expect(screen.queryByRole("group", { name: "Contract bids by level and strain" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Auto play is on" })).toBeTruthy();
     await waitFor(() => expect(loadSoloData(window.localStorage).currentGame!.phase).not.toBe("auction"));
-    const game = loadSoloData(window.localStorage).currentGame!;
-    if (game.phase === "play") {
-      await user.click(screen.getByLabelText("Table menu"));
-      await user.click(screen.getByRole("button", { name: "Take back control" }));
-      await waitFor(() => expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0), { timeout: 4000 });
-      expect(screen.getByRole("button", { name: "Let bots finish this hand" })).toBeTruthy();
-    }
+  });
+
+  it("offers Auto play in card play too, and Stop auto play returns control", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("contractplay.forcedPlay", "off");
+
+    storeCurrentGame(gameAfterPlays(4));
+    render(<App />);
+    chooseMenu("Auto play this hand");
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+    await user.click(screen.getByRole("button", { name: "Stop auto play" }));
+    expect(screen.queryByRole("group", { name: "Auto play is on" })).toBeNull();
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0), { timeout: 4000 });
+    expect(menuItem("Auto play this hand")).toBeTruthy();
   });
 
   it("disables bids that do not outrank the current contract", async () => {
@@ -794,7 +822,7 @@ describe("bridge table", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     for (const seat of ["North", "East", "South", "West"]) expect(within(screen.getByRole("region", { name: `${seat}'s hand` })).getAllByRole("img")).toHaveLength(13);
     expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
-    fireEvent.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Recent hands");
     expect(screen.getByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toBeTruthy();
     expect(loadSoloData(window.localStorage).completedHands[0]!.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
   }, 30000);
@@ -803,18 +831,18 @@ describe("bridge table", () => {
     const user = userEvent.setup();
     const { container } = render(<App />);
 
-    await user.selectOptions(screen.getByLabelText("Scoring"), "single");
-    await user.selectOptions(screen.getByLabelText("Dealer"), "south");
-    await user.selectOptions(screen.getByLabelText("Vulnerability"), "Both");
+    setSetting("Scoring", "single");
+    setSetting("Dealer", "south");
+    setSetting("Vulnerability", "Both");
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
 
     expect(container.querySelector(".seat-south.dealer-seat .dealer-mark")).toBeTruthy();
     expect(container.querySelectorAll(".dealer-seat")).toHaveLength(1);
     expect(container.querySelectorAll(".vulnerable-seat")).toHaveLength(4);
     expect(screen.getByText("South to bid")).toBeTruthy();
-    await user.click(screen.getByLabelText("Table menu"));
-    await user.selectOptions(screen.getByLabelText("Dealer"), "west");
-    await user.selectOptions(screen.getByLabelText("Vulnerability"), "NS");
+    await user.click(menuToggle());
+    setSetting("Dealer", "west");
+    setSetting("Vulnerability", "NS");
     await user.click(screen.getByRole("button", { name: "Deal a new hand" }));
     expect(container.querySelector(".seat-west.dealer-seat")).toBeTruthy();
     expect([...container.querySelectorAll(".vulnerable-seat")].map((seat) => seat.classList.contains("seat-north") || seat.classList.contains("seat-south"))).toEqual([true, true]);
@@ -823,22 +851,22 @@ describe("bridge table", () => {
   it("runs the three non-user seats through the auction using the selected style", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.selectOptions(screen.getByLabelText("Opponents"), "bots");
-    await user.selectOptions(screen.getByLabelText("Your seat"), "south");
-    await user.selectOptions(screen.getByLabelText("Bot bidding style"), "2/1");
-    await user.selectOptions(screen.getByLabelText("Bot skill"), "expert");
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "south");
+    setSetting("Bot bidding style", "2/1");
+    setSetting("Bot skill", "expert");
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
 
-    await waitFor(() => expect(screen.getByText("South to bid")).toBeTruthy());
+    // Against bots your own turn reads as it does online.
+    await waitFor(() => expect(screen.getByText("Your call")).toBeTruthy());
     expect(screen.getByRole("region", { name: "Auction" }).querySelectorAll("li").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "Auction" }).querySelectorAll("li").length).toBeLessThan(3);
     expect(screen.getByRole("group", { name: "Contract bids by level and strain" })).toBeTruthy();
   });
 
   it("offers Beginner through Expert bot skills when bots are enabled", async () => {
-    const user = userEvent.setup();
     render(<App />);
-    await user.selectOptions(screen.getByLabelText("Opponents"), "bots");
+    setSetting("Opponents", "bots");
 
     expect(screen.getByLabelText("Bot skill").textContent).toContain("Beginner");
     expect(screen.getByLabelText("Bot skill").textContent).toContain("Intermediate");
@@ -849,20 +877,20 @@ describe("bridge table", () => {
   it("automates bot play and lets the user play the exposed dummy hand", async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.selectOptions(screen.getByLabelText("Opponents"), "bots");
-    await user.selectOptions(screen.getByLabelText("Your seat"), "north");
-    await user.selectOptions(screen.getByLabelText("Dealer"), "north");
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "north");
+    setSetting("Dealer", "north");
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
-    await waitFor(() => expect(screen.getByText("North to bid")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Your call")).toBeTruthy());
     await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
 
     for (let call = 0; call < 8; call += 1) {
       if (screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card").length > 0) break;
-      if (screen.queryByText("North to bid")) {
+      if (screen.queryByText("Your call")) {
         await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
         } else {
         await waitFor(() => {
-          const hasHumanTurn = !!screen.queryByText("North to bid");
+          const hasHumanTurn = !!screen.queryByText("Your call");
           const hasOpeningLead = screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card").length > 0;
           expect(hasHumanTurn || hasOpeningLead).toBe(true);
         });
@@ -908,7 +936,7 @@ describe("bridge table", () => {
 
     expect(container.querySelector(".seat-east.dealer-seat")).toBeTruthy();
     expect([...container.querySelectorAll(".vulnerable-seat")].map((seat) => [...seat.classList].find((name) => name.startsWith("seat-")))).toEqual(["seat-north", "seat-south"]);
-    await user.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Rubber score");
     expect(screen.getByRole("table", { name: "Rubber score" }).textContent).toContain("Games NS 1 · EW 0 · NS vulnerable");
   });
 
@@ -963,9 +991,8 @@ describe("bridge table", () => {
   async function playAsSouthAgainstBots() {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByLabelText("Table menu"));
-    await user.selectOptions(screen.getByLabelText("Opponents"), "bots");
-    await user.selectOptions(screen.getByLabelText("Your seat"), "south");
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "south");
     return user;
   }
 
@@ -974,12 +1001,12 @@ describe("bridge table", () => {
     storeCurrentGame(gameWithContract(["pass", "pass", "1notrump", "pass", "pass", "pass"]));
     const user = await playAsSouthAgainstBots();
 
-    await waitFor(() => expect(screen.getByText("North to play")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Play from dummy")).toBeTruthy());
     const dummyButtons = within(screen.getByRole("region", { name: "North's dummy hand" })).getAllByRole("button", { name: /^Play / });
     const ledSuit = currentLedSuit();
     await user.click(dummyButtons.find((button) => button.getAttribute("aria-label")?.endsWith(`of ${ledSuit}`)) ?? dummyButtons[0]!);
 
-    await waitFor(() => expect(screen.getByText("South to play")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Your play")).toBeTruthy());
     expect(within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / }).length).toBe(13);
   });
 
@@ -988,7 +1015,7 @@ describe("bridge table", () => {
     storeCurrentGame(gameWithContract(["1notrump", "pass", "pass", "pass"]));
     await playAsSouthAgainstBots();
 
-    await waitFor(() => expect(screen.getByText("South to play")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Your play")).toBeTruthy());
     expect(within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
   });
 
@@ -1006,7 +1033,7 @@ describe("bridge table", () => {
     storeCurrentGame(game);
     const user = await playAsSouthAgainstBots();
 
-    expect(screen.getByText("North to play")).toBeTruthy();
+    expect(screen.getByText("Play declarer's hand")).toBeTruthy();
     const declarerHand = within(screen.getByRole("region", { name: "North's hand" }));
     const declarerCards = declarerHand.getAllByRole("button", { name: /^Play / });
     expect(declarerCards.length).toBeGreaterThan(0);
@@ -1020,12 +1047,12 @@ describe("bridge table", () => {
   it("discards a queued bot decision when the user deals a replacement hand", async () => {
     vi.useFakeTimers();
     render(<App />);
-    fireEvent.change(screen.getByLabelText("Scoring"), { target: { value: "single" } });
-    fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
-    fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
+    setSetting("Scoring", "single");
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "south");
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
-    fireEvent.click(screen.getByLabelText("Table menu"));
-    fireEvent.change(screen.getByLabelText("Dealer"), { target: { value: "west" } });
+    fireEvent.click(menuToggle());
+    setSetting("Dealer", "west");
     fireEvent.click(screen.getByRole("button", { name: "Deal a new hand" }));
 
     await act(async () => { await vi.runAllTimersAsync(); });
@@ -1060,9 +1087,9 @@ describe("bridge table", () => {
       storeCurrentGame(game);
       render(<App />);
       expect(screen.queryAllByRole("button", { name: /^Queue / })).toHaveLength(0);
-      fireEvent.click(screen.getByLabelText("Table menu"));
-      fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
-      fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
+      fireEvent.click(menuToggle());
+      setSetting("Opponents", "bots");
+      setSetting("Your seat", "south");
     }
 
     /** Lets the bot to act decide, a timer tick at a time, until South is to play. */
@@ -1143,9 +1170,9 @@ describe("bridge table", () => {
     function renderAsSouthAgainstBots(game: GameState) {
       storeCurrentGame(game);
       render(<App />);
-      fireEvent.click(screen.getByLabelText("Table menu"));
-      fireEvent.change(screen.getByLabelText("Opponents"), { target: { value: "bots" } });
-      fireEvent.change(screen.getByLabelText("Your seat"), { target: { value: "south" } });
+      fireEvent.click(menuToggle());
+      setSetting("Opponents", "bots");
+      setSetting("Your seat", "south");
     }
 
     it("accepts a claim the robots prove and shows it in the result", async () => {
@@ -1168,7 +1195,7 @@ describe("bridge table", () => {
       await waitFor(() => expect(screen.getByText("East rejected the claim of 13 tricks")).toBeTruthy(), { timeout: 3000 });
       expect(screen.queryByText(/Checking…/)).toBeNull();
       expect(loadSoloData(window.localStorage).currentGame!.phase).toBe("play");
-      expect(screen.getByText("North to play")).toBeTruthy();
+      expect(screen.getByText("Play from dummy")).toBeTruthy();
       const playable = within(screen.getByRole("region", { name: "North's dummy hand" })).getAllByRole("button", { name: /^Play / }) as HTMLButtonElement[];
       expect(playable.every((button) => !button.disabled)).toBe(true);
     });
@@ -1176,7 +1203,7 @@ describe("bridge table", () => {
     it("applies a claim at once at a manual table, for the number of tricks chosen", () => {
       storeCurrentGame(southDeclaresAfterLead("1spades"));
       render(<App />);
-      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.click(menuToggle());
       fireEvent.click(claimItem()!);
       fireEvent.click(screen.getByRole("button", { name: "Fewer tricks" }));
       fireEvent.click(screen.getByRole("button", { name: "Fewer tricks" }));
@@ -1189,7 +1216,7 @@ describe("bridge table", () => {
     it("closes the picker on Cancel", () => {
       storeCurrentGame(southDeclaresAfterLead("1spades"));
       render(<App />);
-      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.click(menuToggle());
       fireEvent.click(claimItem()!);
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
       expect(screen.queryByRole("button", { name: "Claim all 13" })).toBeNull();
@@ -1205,16 +1232,16 @@ describe("bridge table", () => {
 
       storeCurrentGame(game);
       render(<App />);
-      fireEvent.click(screen.getByLabelText("Table menu"));
+      fireEvent.click(menuToggle());
       expect(claimItem()).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Let bots finish this hand" }));
+      fireEvent.click(menuItem("Auto play this hand")!);
       expect(claimItem()).toBeNull();
       cleanup();
 
       const hand: SavedHand = { id: "finished", game: completedGame(), savedAt: new Date().toISOString() };
       storeCurrentGame(game, [hand]);
       render(<App />);
-      fireEvent.click(screen.getByLabelText("Table menu"));
+      chooseMenu("Recent hands");
       fireEvent.click(screen.getByRole("button", { name: /^Review / }));
       expect(screen.getByRole("region", { name: "Hand review" })).toBeTruthy();
       expect(claimItem()).toBeNull();
@@ -1290,7 +1317,7 @@ describe("bridge table", () => {
     vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
     render(<App />);
 
-    await user.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Recent hands");
     await user.click(screen.getByRole("button", { name: /^Export PBN of / }));
 
     const download = createObjectURL.mock.calls[0]?.[0] as CapturedBlob | undefined;
@@ -1318,18 +1345,16 @@ describe("bridge table", () => {
     expect(screen.getAllByRole("listitem")[0]?.textContent).toBe("North1 clubs");
   });
 
-  it("can take back and redo the most recent action", async () => {
+  it("takes back the most recent action from the game menu", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+    expect(menuItem("Take back")!.disabled).toBe(true);
     await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
-    await user.click(screen.getByRole("button", { name: "Take back" }));
+    chooseMenu("Take back");
     expect(screen.getByText("North to bid")).toBeTruthy();
     expect(screen.queryByText("North1 clubs")).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Redo" }));
-    expect(screen.getByText("East to bid")).toBeTruthy();
-    expect(screen.getAllByRole("listitem")[0]?.textContent).toBe("North1 clubs");
+    expect(menuItem("Take back")!.disabled).toBe(true);
   });
 
   it("steps through a saved hand without changing the active hand", async () => {
@@ -1345,12 +1370,13 @@ describe("bridge table", () => {
     saveSoloData(window.localStorage, data);
     render(<App />);
 
-    await user.click(screen.getByLabelText("Table menu"));
+    chooseMenu("Recent hands");
     await user.click(screen.getByRole("button", { name: /^Review / }));
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("Reviewing action 0 of 56")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Next action" }));
     expect(screen.getByText("Reviewing action 1 of 56")).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: "Exit review" }));
+    chooseMenu("Exit review");
 
     expect(screen.getByText("East to bid")).toBeTruthy();
     expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.currentActor).toBe("east");
