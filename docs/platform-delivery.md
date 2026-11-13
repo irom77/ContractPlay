@@ -15,6 +15,8 @@ Install the workspace dependencies with `pnpm install --frozen-lockfile`.
 
 ### Windows and macOS
 
+> **On hold.** Windows and macOS builds are on hold and will probably be deprecated; the web app at https://contractplay.niuk.workers.dev is the supported way to play. The steps below are kept for reference.
+
 Install Rust stable and the Tauri platform prerequisites, then run:
 
 ```sh
