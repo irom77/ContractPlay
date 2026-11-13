@@ -256,7 +256,7 @@ const isUnknown = (token: string) => token === "?" || token === "-";
 
 /** Reads a PBN ScoreTable into traveller rows; player names and pair numbers are ignored. */
 export function parseScoreTable(header: string, rowsText: string, line: number): { rows: TravellerRow[]; diagnostics: PbnDiagnostic[] } {
-  const columns = header.split(";").map((column) => column.trim().replace(/\\\d+[LR]$/i, "").toLowerCase());
+  const columns = header.split(";").map((column) => column.trim().replace(/\\\d+[LR]?$/i, "").toLowerCase());
   const column = (name: string) => columns.indexOf(name.toLowerCase());
   const [nsColumn, ewColumn, contractColumn, declarerColumn, resultColumn, multiplicityColumn] =
     ["Score_NS", "Score_EW", "Contract", "Declarer", "Result", "Multiplicity"].map(column);
@@ -443,6 +443,7 @@ export function parsePbn(input: string): PbnDocument {
         activeSection = undefined;
       }
       if (name.toLowerCase() === "auction" || name.toLowerCase() === "play") {
+        if (value.startsWith("#")) current.diagnostics.push({ severity: "error", message: `Tag ${name} cannot inherit a value`, line: lineNumber });
         const seat = letterSeat[value.trim().toUpperCase()];
         const section: RawSection = { ...(seat ? { seat } : {}), text: "", line: lineNumber + 1 };
         if (name.toLowerCase() === "auction") current.auction = section;

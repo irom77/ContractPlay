@@ -224,6 +224,18 @@ describe("PBN tables, inheritance, and hand records", () => {
     expect(board!.diagnostics).toContainEqual(expect.objectContaining({ severity: "error", message: "Tag Dealer cannot inherit a value" }));
   });
 
+  it("refuses inheritance for Auction and Play", () => {
+    for (const name of ["Auction", "Play"]) {
+      const [board] = parsePbn(`[Dealer "N"]\n[Vulnerable "None"]\n[${name} "#"]`).boards;
+      expect(board!.diagnostics).toContainEqual(expect.objectContaining({ severity: "error", message: `Tag ${name} cannot inherit a value` }));
+    }
+  });
+
+  it("reads a column suffix without a justification letter", () => {
+    const [board] = parsePbn(minimal('[ScoreTable "Contract\\4;Score_NS\\6"]\n4S 420')).boards;
+    expect(board!.field).toEqual([{ nsScore: 420, contract: "4S", multiplicity: 1, artificial: false }]);
+  });
+
   it("keeps other tables' rows without warnings and writes them back", () => {
     const text = minimal('[OptimumResultTable "Declarer;Denomination\\2R;Result\\2R"]\nN C  7\nN D  8');
     const [board] = parsePbn(text).boards;
@@ -243,6 +255,10 @@ describe("PBN tables, inheritance, and hand records", () => {
 
   it("returns no record for a board without a deal or with an error", () => {
     expect(pbnBoardToRecord(parsePbn('[Dealer "N"]\n[Vulnerable "None"]').boards[0]!)).toBeUndefined();
-    expect(pbnBoardToRecord(parsePbn(`${header.replace('[Dealer "N"]', '[Dealer "#"]')}`).boards[0]!)).toBeUndefined();
+    const broken = parsePbn(header.replace('[Vulnerable "None"]', '[Vulnerable "Sideways"]')).boards[0]!;
+    expect(broken.deal).toBeDefined();
+    expect(broken.dealer).toBe("north");
+    expect(broken.diagnostics.some((entry) => entry.severity === "error")).toBe(true);
+    expect(pbnBoardToRecord(broken)).toBeUndefined();
   });
 });
