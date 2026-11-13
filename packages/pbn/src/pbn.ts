@@ -1,4 +1,4 @@
-import { applyAction, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction } from "@contractplay/core";
+import { applyAction, claimSeatFor, createGameState, remainingTricks, trickWinner, SEATS, SUITS, RANKS, isValidDeal, type Card, type Deal, type Seat, type Suit, type Vulnerability, type Bid, type GameAction, type HandRecord, type TravellerRow } from "@contractplay/core";
 
 export type PbnTag = Readonly<{ name: string; value: string; line?: number }>;
 export type PbnDiagnostic = Readonly<{ severity: "error" | "warning"; message: string; line: number }>;
@@ -21,6 +21,8 @@ export type PbnBoard = Readonly<{
   auctionText?: string;
   playStartSeat?: Seat;
   playText?: string;
+  tables?: Readonly<Record<string, string>>;
+  field?: readonly TravellerRow[];
   diagnostics: readonly PbnDiagnostic[];
 }>;
 export type PbnDocument = Readonly<{ boards: readonly PbnBoard[] }>;
@@ -107,14 +109,14 @@ export function exportPbn(hand: PbnHand): string {
 }
 
 type RawSection = { seat?: Seat; text: string; line: number };
-type RawBoard = { tags: PbnTag[]; comments: string[]; diagnostics: PbnDiagnostic[]; auction?: RawSection; play?: RawSection };
+type RawBoard = { tags: PbnTag[]; comments: string[]; diagnostics: PbnDiagnostic[]; auction?: RawSection; play?: RawSection; tables: Record<string, string> };
 
 function newRawBoard(): RawBoard {
-  return { tags: [], comments: [], diagnostics: [] };
+  return { tags: [], comments: [], diagnostics: [], tables: {} };
 }
 
 function hasBoardData(board: RawBoard): boolean {
-  return board.tags.length > 0 || board.auction !== undefined || board.play !== undefined || board.comments.length > 0;
+  return board.tags.length > 0 || board.auction !== undefined || board.play !== undefined || Object.keys(board.tables).length > 0 || board.comments.length > 0;
 }
 
 function stripComments(line: string, board: RawBoard, lineNumber: number): string {
@@ -249,6 +251,55 @@ function parseSection(board: RawBoard, section: RawSection | undefined, type: "b
   return starred;
 }
 
+const tokenizeRow = (row: string): string[] => Array.from(row.matchAll(/"([^"]*)"|(\S+)/g), (match) => match[1] ?? match[2]!);
+const isUnknown = (token: string) => token === "?" || token === "-";
+
+/** Reads a PBN ScoreTable into traveller rows; player names and pair numbers are ignored. */
+export function parseScoreTable(header: string, rowsText: string, line: number): { rows: TravellerRow[]; diagnostics: PbnDiagnostic[] } {
+  const columns = header.split(";").map((column) => column.trim().replace(/\\\d+[LR]$/i, "").toLowerCase());
+  const column = (name: string) => columns.indexOf(name.toLowerCase());
+  const [nsColumn, ewColumn, contractColumn, declarerColumn, resultColumn, multiplicityColumn] =
+    ["Score_NS", "Score_EW", "Contract", "Declarer", "Result", "Multiplicity"].map(column);
+  const rows: TravellerRow[] = [];
+  const diagnostics: PbnDiagnostic[] = [];
+  const score = (token: string | undefined): number | undefined => {
+    const match = token === undefined ? null : /^\^?([+-]?\d+)$/.exec(token);
+    return match ? Number(match[1]) : undefined;
+  };
+  rowsText.split(/\r?\n/).forEach((rowText, index) => {
+    if (!rowText.trim()) return;
+    const rowLine = line + 1 + index;
+    const tokens = tokenizeRow(rowText);
+    if (tokens.length !== columns.length) {
+      diagnostics.push({ severity: "warning", message: `ScoreTable row has ${tokens.length} values but ${columns.length} columns, skipped: ${rowText.trim()}`, line: rowLine });
+      return;
+    }
+    const at = (index: number) => (index >= 0 ? tokens[index] : undefined);
+    const ns = score(at(nsColumn!));
+    const ew = score(at(ewColumn!));
+    const nsScore = ns ?? (ew === undefined ? undefined : 0 - ew);
+    const contract = at(contractColumn!);
+    const declarer = letterSeat[at(declarerColumn!)?.toUpperCase() ?? ""];
+    const tricks = Number(at(resultColumn!));
+    let multiplicity = 1;
+    const multiplicityToken = at(multiplicityColumn!);
+    if (multiplicityToken !== undefined && !isUnknown(multiplicityToken)) {
+      const value = Number(multiplicityToken);
+      if (Number.isInteger(value) && value > 0) multiplicity = value;
+      else diagnostics.push({ severity: "warning", message: `Invalid Multiplicity, using 1: ${rowText.trim()}`, line: rowLine });
+    }
+    rows.push({
+      ...(nsScore !== undefined ? { nsScore } : {}),
+      ...(contract !== undefined && !isUnknown(contract) ? { contract } : {}),
+      ...(declarer ? { declarer } : {}),
+      ...(at(resultColumn!) !== undefined && Number.isInteger(tricks) && tricks >= 0 && tricks <= 13 ? { tricks } : {}),
+      multiplicity,
+      artificial: [at(nsColumn!), at(ewColumn!)].some((token) => token?.startsWith("^"))
+    });
+  });
+  return { rows, diagnostics };
+}
+
 function materializeBoard(raw: RawBoard): PbnBoard {
   const tagValue = (name: string) => raw.tags.find((tag) => tag.name.toLowerCase() === name.toLowerCase())?.value;
   const tagLine = (name: string) => raw.tags.find((tag) => tag.name.toLowerCase() === name.toLowerCase())?.line ?? 1;
@@ -310,6 +361,13 @@ function materializeBoard(raw: RawBoard): PbnBoard {
     if (claim && applyAction(playState, claim).ok) actions.push(claim);
     else raw.diagnostics.push({ severity: "warning", message: "Play ends with * but the Result tag does not match a claim", line: raw.play?.line ?? 1 });
   }
+  const scoreTable = Object.entries(raw.tables).find(([name]) => name.toLowerCase() === "scoretable");
+  let field: TravellerRow[] | undefined;
+  if (scoreTable) {
+    const parsed = parseScoreTable(tagValue(scoreTable[0]) ?? "", scoreTable[1], tagLine(scoreTable[0]));
+    field = parsed.rows;
+    raw.diagnostics.push(...parsed.diagnostics);
+  }
   return {
     tags: raw.tags,
     comments: raw.comments,
@@ -321,15 +379,55 @@ function materializeBoard(raw: RawBoard): PbnBoard {
     ...(raw.auction ? { auctionText: raw.auction.text } : {}),
     ...(raw.play?.seat ? { playStartSeat: raw.play.seat } : {}),
     ...(raw.play ? { playText: raw.play.text } : {}),
+    ...(Object.keys(raw.tables).length ? { tables: raw.tables } : {}),
+    ...(field ? { field } : {}),
     diagnostics: raw.diagnostics
   };
 }
 
+const nonInheritableTags = ["dealer", "vulnerable", "deal", "declarer", "contract", "auction", "play"];
+
+/** Resolves PBN 4.8 tag inheritance: `#` repeats the previous board's value, `##` sets a value for later boards too. */
+function resolveInheritance(rawBoards: RawBoard[]): void {
+  const sticky = new Map<string, PbnTag>();
+  let previous = new Map<string, string>();
+  for (const board of rawBoards) {
+    const present = new Set(board.tags.map((tag) => tag.name.toLowerCase()));
+    const resolved: PbnTag[] = [];
+    for (const tag of board.tags) {
+      const key = tag.name.toLowerCase();
+      const line = tag.line ?? 1;
+      if (!tag.value.startsWith("#")) {
+        resolved.push(tag);
+      } else if (nonInheritableTags.includes(key)) {
+        board.diagnostics.push({ severity: "error", message: `Tag ${tag.name} cannot inherit a value`, line });
+        resolved.push(tag);
+      } else if (tag.value.startsWith("##")) {
+        const value = tag.value.slice(2);
+        sticky.set(key, { ...tag, value });
+        resolved.push({ ...tag, value });
+      } else if (tag.value === "#") {
+        const value = previous.get(key);
+        if (value === undefined) board.diagnostics.push({ severity: "warning", message: `Tag ${tag.name} has no previous value to inherit`, line });
+        else resolved.push({ ...tag, value });
+      } else {
+        resolved.push(tag);
+      }
+    }
+    for (const [key, tag] of sticky) {
+      if (!present.has(key)) resolved.push({ name: tag.name, value: tag.value });
+    }
+    board.tags = resolved;
+    previous = new Map(resolved.map((tag) => [tag.name.toLowerCase(), tag.value]));
+  }
+}
+
 /** Parses PBN tag pairs, comments, deals, auctions, and card-play sections. */
 export function parsePbn(input: string): PbnDocument {
-  const boards: PbnBoard[] = [];
+  const rawBoards: RawBoard[] = [];
   let current = newRawBoard();
-  let activeSection: "auction" | "play" | undefined;
+  let activeSection: "auction" | "play" | "table" | undefined;
+  let activeTable = "";
   let lineNumber = 0;
   for (const line of input.split(/\r?\n/)) {
     lineNumber++;
@@ -340,7 +438,7 @@ export function parsePbn(input: string): PbnDocument {
       const boundary = ["board", "event", "dealer"].includes(name.toLowerCase());
       const repeated = current.tags.some((tag) => tag.name.toLowerCase() === name.toLowerCase());
       if (hasBoardData(current) && boundary && repeated) {
-        boards.push(materializeBoard(current));
+        rawBoards.push(current);
         current = newRawBoard();
         activeSection = undefined;
       }
@@ -350,6 +448,11 @@ export function parsePbn(input: string): PbnDocument {
         if (name.toLowerCase() === "auction") current.auction = section;
         else current.play = section;
         activeSection = name.toLowerCase() as "auction" | "play";
+      } else if (/table$/i.test(name)) {
+        current.tags.push({ name, value, line: lineNumber });
+        current.tables[name] = "";
+        activeSection = "table";
+        activeTable = name;
       } else {
         current.tags.push({ name, value, line: lineNumber });
         activeSection = undefined;
@@ -357,7 +460,9 @@ export function parsePbn(input: string): PbnDocument {
       continue;
     }
     if (!line.trim()) continue;
-    if (activeSection) {
+    if (activeSection === "table") {
+      current.tables[activeTable] += `${line}\n`;
+    } else if (activeSection) {
       const section = activeSection === "auction" ? current.auction : current.play;
       if (section) section.text += `${line}\n`;
     } else {
@@ -365,15 +470,16 @@ export function parsePbn(input: string): PbnDocument {
       if (content) current.diagnostics.push({ severity: "warning", message: `Ignored content outside a PBN section: ${content}`, line: lineNumber });
     }
   }
-  if (hasBoardData(current)) boards.push(materializeBoard(current));
-  return { boards };
+  if (hasBoardData(current)) rawBoards.push(current);
+  resolveInheritance(rawBoards);
+  return { boards: rawBoards.map(materializeBoard) };
 }
 
 /** Serializes parsed board records, retaining unknown tags and raw section text. */
 export function serializePbn(document: PbnDocument): string {
   return document.boards.map((board) => {
     const hasRawDeal = board.tags.some((tag) => tag.name.toLowerCase() === "deal");
-    if (board.auctionText === undefined && board.playText === undefined && board.dealer && board.vulnerability && (!hasRawDeal || board.deal)) {
+    if (board.auctionText === undefined && board.playText === undefined && board.tables === undefined && board.dealer && board.vulnerability && (!hasRawDeal || board.deal)) {
       return exportPbn({
         dealer: board.dealer,
         vulnerability: board.vulnerability,
@@ -384,7 +490,11 @@ export function serializePbn(document: PbnDocument): string {
       });
     }
 
-    const lines = board.tags.map(({ name, value }) => `[${name} "${escapeTag(value)}"]`);
+    const lines = board.tags.map(({ name, value }) => {
+      const table = board.tables?.[name];
+      // Table headers keep their `\<width>[LR]` column suffixes as written, so only quotes are escaped.
+      return table === undefined ? `[${name} "${escapeTag(value)}"]` : `[${name} "${value.replaceAll('"', '\\"')}"]\n${table.trim()}`;
+    });
     const rawSections = [board.auctionText, board.playText].filter((text): text is string => text !== undefined);
     for (const comment of board.comments) {
       if (!rawSections.some((section) => section.includes(`{${comment}}`))) lines.push(`{${comment}}`);
@@ -419,4 +529,21 @@ export function parsePbnMetadata(pbn: string): Pick<PbnHand, "dealer" | "vulnera
   if (!board?.dealer) throw new Error("PBN is missing a valid [Dealer] tag");
   if (!board.vulnerability) throw new Error("PBN is missing a valid [Vulnerable] tag");
   return { dealer: board.dealer, vulnerability: board.vulnerability };
+}
+
+/** Maps a parsed board to a hand record for comparing results with the field, or undefined when it has no usable deal. */
+export function pbnBoardToRecord(board: PbnBoard): HandRecord | undefined {
+  if (!board.deal || !board.dealer || board.diagnostics.some((entry) => entry.severity === "error")) return undefined;
+  const tag = (name: string) => board.tags.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value;
+  const [boardNumber, event, scoring] = [tag("Board"), tag("Event"), tag("Scoring")];
+  return {
+    ...(boardNumber !== undefined ? { board: boardNumber } : {}),
+    ...(event !== undefined ? { event } : {}),
+    ...(scoring !== undefined ? { scoring } : {}),
+    dealer: board.dealer,
+    vulnerability: board.vulnerability ?? "None",
+    deal: board.deal,
+    ...(board.actions.length ? { original: board.actions } : {}),
+    field: board.field ?? []
+  };
 }
