@@ -38,7 +38,8 @@ import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard
 import { ClaimPanel } from "./table/ClaimPanel.js";
 import { DraggableBanner } from "./table/DraggableBanner.js";
 import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
-import { ContractOutcome, RubberScoresheet, rubberHandText } from "./table/ResultSummary.js";
+import { ContractOutcome } from "./table/ResultSummary.js";
+import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
@@ -122,6 +123,8 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
     try { return persistence.storage.getItem(scoringStorageKey) === "single" ? "single" : "rubber"; } catch { return "rubber"; }
   });
   const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
+  // The hand whose end-of-hand scorecard the user closed.
+  const [closedScorecard, setClosedScorecard] = useState<string | null>(null);
   const [bidHint, setBidHint] = useState<{ game: GameState; bid: Bid; reason: string }>();
   const [playHint, setPlayHint] = useState<{ game: GameState; cardIds: ReadonlySet<string>; reason: string }>();
   const [explainedCall, setExplainedCall] = useState<{ key: string; index: number }>();
@@ -597,7 +600,10 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
       : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}</svg>
   </button>;
   const version = <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>;
-  const dialogTitles: Record<MenuDialog, string> = { settings: "Settings", rubber: "Rubber score", hands: "Recent hands", about: "ContractPlay" };
+  const dialogTitles: Record<MenuDialog, string> = { settings: "Settings", rubber: "Scores", hands: "Recent hands", about: "ContractPlay" };
+  // The scorecard calls the user's partnership "We" against bots; otherwise the compass sides.
+  const sideNames = playAgainstBots ? weTheySideNames(userSeat === "north" || userSeat === "south" ? "NS" : "EW") : compassSideNames;
+  const cardHands = handsOnCard(rubber, rubberSummary);
   const menuDialog = dialog ? <div className="about-backdrop" onClick={() => setDialog(undefined)}>
     <section className={`about-dialog ${dialog === "about" ? "" : "menu-dialog"}`} role="dialog" aria-modal="true" aria-label={dialogTitles[dialog]} onClick={(event) => event.stopPropagation()}>
       {dialog === "about" ? <span className="brand-mark" aria-hidden="true">C</span> : null}
@@ -612,8 +618,8 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
         <section className="menu-settings" aria-label="Next deal settings">{dealSettings}</section>
       </> : null}
       {dialog === "rubber" ? <section className="rubber-menu" aria-label="Rubber">
-        <RubberScoresheet summary={rubberSummary} />
-        <button className="secondary-button" type="button" onClick={() => { setDialog(undefined); setRubber(emptyRubber()); }}>Start a new rubber</button>
+        <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames}
+          actions={<button className="secondary-button" type="button" onClick={() => { setDialog(undefined); setRubber(emptyRubber()); }}>Start a new rubber</button>} />
       </section> : null}
       {dialog === "hands" ? <>{recentHandsPanel}{pbnImportForm}</> : null}
       <button className="primary-button" type="button" autoFocus onClick={() => setDialog(undefined)}>Close</button>
@@ -658,6 +664,8 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
   // The same game menu as at an online table: the hand's actions first, then this device's settings and hands, and
   // dealing again (which abandons a hand in progress) set apart at the end.
   const handLive = !isReviewing && liveTurn;
+  // The live hand counts towards the rubber when it was dealt for it, whatever the scoring choice for the next deal.
+  const inRubber = !isReviewing && !!currentHandId && rubber.activeHandId === currentHandId;
   const menuItems: GameMenuItem[] = isReviewing ? [
     { id: "exit-review", label: "Exit review", onSelect: () => { setReviewHandId(undefined); setLastTrickOpen(false); } },
     { id: "hands", label: "Recent hands", onSelect: () => setDialog("hands") },
@@ -669,7 +677,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
     ...(handLive && !botsFinishing ? [{ id: "auto-play", label: "Auto play this hand",
       title: "A bot makes your calls and plays your cards until this hand ends, then you play again", onSelect: () => setBotsFinishHandId(currentHandId) }] : []),
     { id: "settings", label: "Settings", title: "Scoring, dealer, opponents, hints, and forced cards for the next deal", onSelect: () => setDialog("settings") },
-    ...(scoring === "rubber" ? [{ id: "rubber", label: "Rubber score", onSelect: () => setDialog("rubber") }] : []),
+    ...(scoring === "rubber" || inRubber ? [{ id: "rubber", label: "Scores", title: "The rubber scorecard: above and below the line, games, totals, and the last hand's points", onSelect: () => setDialog("rubber") }] : []),
     { id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") },
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
     { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
@@ -679,20 +687,29 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
     {fullscreenButton}
   </>;
 
-  // The live hand counts towards the rubber when it was dealt for it, whatever the scoring choice for the next deal.
-  const inRubber = !isReviewing && !!currentHandId && rubber.activeHandId === currentHandId;
-  const rubberHand = inRubber ? rubber.hands.find((hand) => hand.handId === currentHandId) : undefined;
+  // At the end of a rubber hand the scorecard offers the next deal, or once the rubber is won, another rubber or the
+  // online tables; Close puts it away to look at the cards (Scores in the menu brings it back).
+  const scorecardClosed = !!currentHandId && closedScorecard === currentHandId;
+  const scorecardActions = <>
+    <button className="primary-button" type="button" autoFocus onClick={startHand}>{rubberSummary.winner ? "Play another rubber" : "Next deal"}</button>
+    {rubberSummary.winner && online ? <button className="secondary-button" type="button" onClick={goOnline}>Online tables</button> : null}
+    <button className="secondary-button" type="button" onClick={() => setClosedScorecard(currentHandId)}>Close</button>
+  </>;
   const duplicateScore = shownGame.score?.score ?? 0;
   const tableOverlay = <>
-    {phase === "complete" && shownGame.score && contract ? <section className={`score-panel ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
+    {phase === "complete" && shownGame.score && contract && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""} ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
       <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
       <ContractOutcome score={shownGame.score} />
       {shownGame.claim ? <p className="claim-line">{claimText(shownGame.claim, contract.declarer, remainingTricks(shownGame))}</p> : null}
-      <p className="hand-points-line">{rubberHand ? rubberHandText(rubberHand) : `${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
-      {inRubber ? <RubberScoresheet summary={rubberSummary} /> : null}
-      {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>{inRubber && rubberSummary.winner ? "Deal a new rubber" : "Next deal"}</button> : null}
+      {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} actions={scorecardActions} /> : <>
+        <p className="hand-points-line">{`${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
+        {!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}
+      </>}
     </section> : null}
-    {phase === "passed-out" ? <div className="score-panel"><h2>Passed out</h2>{inRubber ? <RubberScoresheet summary={rubberSummary} /> : null}{!isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}</div> : null}
+    {phase === "passed-out" && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""}`} aria-label="Hand result"><h2>Passed out</h2>
+      {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} passedOut actions={scorecardActions} />
+        : !isReviewing ? <button className="primary-button" type="button" onClick={startHand}>Next deal</button> : null}
+    </section> : null}
 
     {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">
       <button className="secondary-button" aria-label="Previous action" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}><span aria-hidden="true">‹</span> Previous</button>

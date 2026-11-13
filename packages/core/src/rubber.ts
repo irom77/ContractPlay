@@ -11,7 +11,12 @@ export type RubberHand = Readonly<{
   handId: string;
   below: SidePoints;
   above: SidePoints;
+  /** How the points were earned, for the scorecard's breakdown. Missing on hands scored before breakdowns. */
+  detail?: RubberHandDetail;
 }>;
+
+/** The contract a rubber hand was played in, the tricks declarer took, and each line of its score. */
+export type RubberHandDetail = Readonly<{ contract: Contract; tricksTaken: number; vulnerable: boolean; items: readonly RubberScoreItem[] }>;
 
 /** A rubber in progress: its scored hands, the dealer of its latest deal, and the hand being played for it. */
 export type Rubber = Readonly<{
@@ -20,7 +25,27 @@ export type Rubber = Readonly<{
   activeHandId?: string;
 }>;
 
-export type RubberGame = Readonly<{ below: SidePoints; winner?: Side }>;
+/** What a line of a hand's rubber score is for. */
+export type RubberItemKind = "contract" | "overtricks" | "insult" | "slam" | "undertricks" | "honors";
+
+/** One line of a hand's rubber score: who scores it, where it is written, and why. `count` is the over- or undertricks. */
+export type RubberScoreItem = Readonly<{ side: Side; line: "above" | "below"; kind: RubberItemKind; points: number; count?: number }>;
+
+/** One score written on the pad, and the hand it came from (`rubber-bonus` for the bonus that ends the rubber). */
+export type RubberEntry = Readonly<{ handId: string; points: number }>;
+export type SideEntries = Readonly<Record<Side, readonly RubberEntry[]>>;
+
+/** The id of the rubber bonus entry above the line. */
+export const RUBBER_BONUS_ENTRY = "rubber-bonus";
+
+export type RubberGame = Readonly<{
+  below: SidePoints;
+  winner?: Side;
+  /** Each hand's trick points written below the line in this game, in order. */
+  entries: SideEntries;
+  /** The hand that won the game. */
+  wonOn?: string;
+}>;
 
 export type RubberSummary = Readonly<{
   /** Games in order; the last one has no winner while it is still being played. */
@@ -28,15 +53,22 @@ export type RubberSummary = Readonly<{
   gamesWon: SidePoints;
   /** Points above the line, including the rubber bonus once the rubber is over. */
   above: SidePoints;
+  /** Each score written above the line, in order, ending with the rubber bonus once the rubber is over. */
+  aboveEntries: SideEntries;
   totals: SidePoints;
   vulnerability: Vulnerability;
   winner?: Side;
   rubberBonus?: number;
+  /** The hand that won the rubber. Hands recorded after it are not part of this rubber. */
+  wonOn?: string;
 }>;
 
 const nextSeatClockwise = (seat: Seat): Seat => SEATS[(SEATS.indexOf(seat) + 1) % 4]!;
+const SIDES: readonly Side[] = ["NS", "EW"];
 const zero: SidePoints = { NS: 0, EW: 0 };
 const other = (side: Side): Side => (side === "NS" ? "EW" : "NS");
+const noEntries: SideEntries = { NS: [], EW: [] };
+const addEntry = (entries: SideEntries, side: Side, entry: RubberEntry): SideEntries => ({ ...entries, [side]: [...entries[side], entry] });
 const add = (points: SidePoints, side: Side, amount: number): SidePoints => ({ ...points, [side]: points[side] + amount });
 
 export const emptyRubber = (): Rubber => ({ hands: [] });
@@ -56,7 +88,35 @@ export function honorsBonus(contract: Contract, deal: Deal): Readonly<{ side: Si
   return undefined;
 }
 
-/** Rubber points for a played contract. Game and part-score bonuses do not exist in rubber; the rubber bonus comes at the end. */
+/**
+ * The lines of a played contract's rubber score: trick points below the line; overtricks, the insult, slam bonuses,
+ * undertricks, and honors above it. Game and part-score bonuses do not exist in rubber; the rubber bonus comes at the end.
+ */
+export function rubberHandItems(contract: Contract, tricksTaken: number, vulnerability: Vulnerability, deal?: Deal): RubberScoreItem[] {
+  const declaring = partnership(contract.declarer);
+  const vulnerable = isVulnerable(contract.declarer, vulnerability);
+  const required = contract.level + 6;
+  const items: RubberScoreItem[] = [];
+  if (tricksTaken < required) {
+    const count = required - tricksTaken;
+    items.push({ side: other(declaring), line: "above", kind: "undertricks", points: undertrickPenalty(count, vulnerable, contract.doubled), count });
+  } else {
+    const overtricks = tricksTaken - required;
+    items.push({ side: declaring, line: "below", kind: "contract", points: contractTrickPoints(contract) });
+    const perOvertrick = contract.doubled === 0
+      ? (contract.strain === "clubs" || contract.strain === "diamonds" ? 20 : 30)
+      : (vulnerable ? 200 : 100) * contract.doubled;
+    if (overtricks) items.push({ side: declaring, line: "above", kind: "overtricks", points: overtricks * perOvertrick, count: overtricks });
+    if (contract.doubled) items.push({ side: declaring, line: "above", kind: "insult", points: contract.doubled * 50 });
+    if (contract.level === 6) items.push({ side: declaring, line: "above", kind: "slam", points: vulnerable ? 750 : 500 });
+    if (contract.level === 7) items.push({ side: declaring, line: "above", kind: "slam", points: vulnerable ? 1500 : 1000 });
+  }
+  const honors = deal ? honorsBonus(contract, deal) : undefined;
+  if (honors) items.push({ side: honors.side, line: "above", kind: "honors", points: honors.points });
+  return items;
+}
+
+/** Rubber points for a played contract: the sum of its `rubberHandItems` below and above the line. */
 export function scoreRubberHand(
   handId: string,
   contract: Contract,
@@ -64,54 +124,52 @@ export function scoreRubberHand(
   vulnerability: Vulnerability,
   deal?: Deal
 ): RubberHand {
-  const declaring = partnership(contract.declarer);
-  const vulnerable = isVulnerable(contract.declarer, vulnerability);
-  const required = contract.level + 6;
   let below = zero;
   let above = zero;
-  if (tricksTaken < required) {
-    above = add(above, other(declaring), undertrickPenalty(required - tricksTaken, vulnerable, contract.doubled));
-  } else {
-    const overtricks = tricksTaken - required;
-    below = add(below, declaring, contractTrickPoints(contract));
-    const perOvertrick = contract.doubled === 0
-      ? (contract.strain === "clubs" || contract.strain === "diamonds" ? 20 : 30)
-      : (vulnerable ? 200 : 100) * contract.doubled;
-    let bonus = overtricks * perOvertrick;
-    if (contract.level === 6) bonus += vulnerable ? 750 : 500;
-    if (contract.level === 7) bonus += vulnerable ? 1500 : 1000;
-    bonus += contract.doubled * 50;
-    above = add(above, declaring, bonus);
+  const items = rubberHandItems(contract, tricksTaken, vulnerability, deal);
+  for (const item of items) {
+    if (item.line === "below") below = add(below, item.side, item.points);
+    else above = add(above, item.side, item.points);
   }
-  const honors = deal ? honorsBonus(contract, deal) : undefined;
-  if (honors) above = add(above, honors.side, honors.points);
-  return { handId, below, above };
+  return { handId, below, above, detail: { contract, tricksTaken, vulnerable: isVulnerable(contract.declarer, vulnerability), items } };
 }
 
 /** Works the rubber out from its hands: games, vulnerability, and the 700 or 500 bonus once a side wins two games. */
 export function summarizeRubber(rubber: Rubber): RubberSummary {
   const games: RubberGame[] = [];
   let current = zero;
+  let currentEntries = noEntries;
   let gamesWon = zero;
   let above = zero;
+  let aboveEntries = noEntries;
   let winner: Side | undefined;
+  let wonOn: string | undefined;
   for (const hand of rubber.hands) {
     if (winner) break;
+    for (const side of SIDES) {
+      if (hand.above[side]) aboveEntries = addEntry(aboveEntries, side, { handId: hand.handId, points: hand.above[side] });
+      if (hand.below[side]) currentEntries = addEntry(currentEntries, side, { handId: hand.handId, points: hand.below[side] });
+    }
     above = { NS: above.NS + hand.above.NS, EW: above.EW + hand.above.EW };
     current = { NS: current.NS + hand.below.NS, EW: current.EW + hand.below.EW };
     const gameWinner: Side | undefined = current.NS >= 100 ? "NS" : current.EW >= 100 ? "EW" : undefined;
     if (gameWinner) {
-      games.push({ below: current, winner: gameWinner });
+      games.push({ below: current, winner: gameWinner, entries: currentEntries, wonOn: hand.handId });
       gamesWon = add(gamesWon, gameWinner, 1);
       current = zero;
-      if (gamesWon[gameWinner] === 2) winner = gameWinner;
+      currentEntries = noEntries;
+      if (gamesWon[gameWinner] === 2) {
+        winner = gameWinner;
+        wonOn = hand.handId;
+      }
     }
   }
   const rubberBonus = winner ? (gamesWon[other(winner)] === 0 ? 700 : 500) : 0;
   if (winner) {
     above = add(above, winner, rubberBonus);
+    aboveEntries = addEntry(aboveEntries, winner, { handId: RUBBER_BONUS_ENTRY, points: rubberBonus });
   } else {
-    games.push({ below: current });
+    games.push({ below: current, entries: currentEntries });
   }
   const belowTotal = games.reduce((sum, game) => ({ NS: sum.NS + game.below.NS, EW: sum.EW + game.below.EW }), zero);
   const vulnerability: Vulnerability = gamesWon.NS && gamesWon.EW ? "Both" : gamesWon.NS ? "NS" : gamesWon.EW ? "EW" : "None";
@@ -119,9 +177,10 @@ export function summarizeRubber(rubber: Rubber): RubberSummary {
     games,
     gamesWon,
     above,
+    aboveEntries,
     totals: { NS: belowTotal.NS + above.NS, EW: belowTotal.EW + above.EW },
     vulnerability,
-    ...(winner ? { winner, rubberBonus } : {})
+    ...(winner && wonOn ? { winner, rubberBonus, wonOn } : {})
   };
 }
 

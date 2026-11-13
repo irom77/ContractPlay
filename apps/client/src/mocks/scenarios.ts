@@ -1,4 +1,4 @@
-import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, SUITS, type Bid, type Card, type Deal, type GameAction, type GameState, type Rank, type Rubber, type Seat } from "@contractplay/core";
+import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type GameState, type Rank, type Rubber, type Seat } from "@contractplay/core";
 import type { SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
@@ -58,7 +58,7 @@ function table(name: string, people: People, bots: readonly Seat[] = []): TableS
  * as the first hand of a new rubber. `earlier` puts hands already scored on that rubber.
  */
 function dealt(state: TableState, earlier: Rubber["hands"] = []): TableState {
-  const game: GameState = createGameState({ deal: DEAL, dealer: "north", vulnerability: "None" });
+  const game: GameState = createGameState({ deal: DEAL, dealer: "north", vulnerability: summarizeRubber({ hands: earlier }).vulnerability });
   const rubber: Rubber = { hands: earlier, lastDealer: "north", activeHandId: rubberHandId(1) };
   return { ...state, handNumber: 1, revision: state.revision + 1, game, rubber, turnSince: AT, lastHumanAt: AT, trickJustCompleted: false };
 }
@@ -211,11 +211,11 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points, and the contract, the hand's rubber points, the rubber scoresheet, and Deal in the middle.",
+    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points, and the contract with the rubber scorecard in the middle: North–South's 120 below the line wins game 1 (dotted line, arrow to them), the last hand's points explained, and Deal.",
     build: () => playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete")
   },
   {
-    id: "rubber-score", title: "Rubber score", detail: "Rubber score from the game menu, mid-hand: East-West made 2♥ with an overtrick and North-South went down in 3NT, so the first game is still open and nobody is vulnerable.",
+    id: "rubber-score", title: "Scores", detail: "Scores from the game menu, mid-hand: East-West made 2♥ with an overtrick and North-South went down in 3NT, so the first game is still open, nobody is vulnerable, and the last hand's undertrick is explained.",
     build: () => {
       const people: People = { north: "Alex" };
       const earlier = [
@@ -224,6 +224,15 @@ const onlineScreens: readonly PreviewScreen[] = [
       ];
       const playing = playUntil(bid(dealt(table("Friday club", people, others("north")), earlier), 8), moment(["north", "south"], 2));
       return { ...view(playing, "north", people), rubberOpen: true };
+    }
+  },
+  {
+    id: "rubber-won", title: "Rubber won", detail: "North–South already have game 1 from 3NT; 4♠ makes game 2 and the rubber: the scorecard ends with the 700 rubber bonus, the final score, and Deal a new rubber, Seating, Back to lobby, or Leave the table.",
+    build: () => {
+      const people: People = { north: "Alex" };
+      const earlier = [scoreRubberHand("preview-3nt", { level: 3, strain: "notrump", declarer: "south", doubled: 0 }, 9, "None")];
+      const state = playUntil(bid(dealt(table("Friday club", people, others("north")), earlier), 8), (game) => game.phase === "complete");
+      return view(state, "north", people);
     }
   }
 ];
@@ -241,9 +250,9 @@ function soloAct(game: GameState, action: GameAction): GameState {
 }
 
 /** The solo hand after `calls` calls, then played on until `stop` holds. */
-function soloGame(calls: number, stop: (game: GameState) => boolean = () => true): GameState {
+function soloGame(calls: number, stop: (game: GameState) => boolean = () => true, vulnerability: GameState["vulnerability"] = "None"): GameState {
   let game = AUCTION.slice(0, calls).reduce((current, [seat, call]) => soloAct(current, { type: "bid", seat, bid: call }),
-    createGameState({ deal: DEAL, dealer: "north", vulnerability: "None" }));
+    createGameState({ deal: DEAL, dealer: "north", vulnerability }));
   while (!stop(game)) {
     if (game.phase !== "play") throw new Error("The preview hand ended before reaching its moment.");
     game = soloAct(game, { type: "play", seat: game.currentActor, card: nextCard(game) });
@@ -303,8 +312,16 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "hands" })
   },
   {
-    id: "solo-result", title: "Solo: hand result with rubber score", detail: "4♠ made: the whole deal face-up, the rubber score for this hand, and the scoresheet so far.",
+    id: "solo-result", title: "Solo: hand result with scorecard", detail: "4♠ made: the whole deal face-up, and the scorecard: They (East–West) have 60 below from 2♥, We (North–South) add 120 to win game 1, and the breakdown explains the hand.",
     build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north" })
+  },
+  {
+    id: "solo-rubber-won", title: "Solo: rubber won", detail: "We already have game 1 from 3NT; 4♠ makes game 2 and the rubber 2–0: the 700 bonus, the final score, and Play another rubber, Online tables, or Close.",
+    build: () => solo(soloGame(8, (game) => game.phase === "complete", "NS"), { userSeat: "north" }, { rubber: {
+      hands: [scoreRubberHand("preview-3nt", { level: 3, strain: "notrump", declarer: "south", doubled: 0 }, 9, "None", DEAL)],
+      lastDealer: "north",
+      activeHandId: SOLO_HAND
+    } })
   },
   {
     id: "solo-review", title: "Solo: reviewing a saved hand", detail: "A finished hand opened from Recent hands, stepped to the third trick with Previous and Next.",

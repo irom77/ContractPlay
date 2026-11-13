@@ -59,7 +59,7 @@ const menuToggle = () => screen.getByLabelText("Game menu", { selector: "summary
 /** Items currently offered in the game menu, open or not. */
 const menuItem = (name: string) => within(screen.getByRole("group", { name: "Game menu", hidden: true })).queryByRole("button", { name, hidden: true }) as HTMLButtonElement | null;
 
-/** Opens the game menu's entry `name` (Settings, Rubber score, Recent hands, About ContractPlay, ...). */
+/** Opens the game menu's entry `name` (Settings, Scores, Recent hands, About ContractPlay, ...). */
 function chooseMenu(name: string) {
   fireEvent.click(menuToggle());
   fireEvent.click(within(screen.getByRole("group", { name: "Game menu", hidden: true })).getByRole("button", { name, hidden: true }));
@@ -341,15 +341,15 @@ describe("bridge table", () => {
     expect(menu.closest("details")!.classList.contains("game-menu")).toBe(true);
     // The hand's actions first, then this device's settings and hands, and dealing again apart at the end.
     expect(within(menu).getAllByRole("button", { hidden: true }).map((button) => button.textContent))
-      .toEqual(["Online tables", "Take back", "Auto play this hand", "Settings", "Rubber score", "Recent hands", "About ContractPlay", "Deal a new hand"]);
+      .toEqual(["Online tables", "Take back", "Auto play this hand", "Settings", "Scores", "Recent hands", "About ContractPlay", "Deal a new hand"]);
     expect(menuItem("Take back")!.disabled).toBe(true);
     expect(menuItem("Deal a new hand")!.classList.contains("menu-danger")).toBe(true);
 
     chooseMenu("Settings");
     expect(within(screen.getByRole("dialog", { name: "Settings" })).getByLabelText("Scoring")).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Close" }));
-    chooseMenu("Rubber score");
-    expect(within(screen.getByRole("dialog", { name: "Rubber score" })).getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    chooseMenu("Scores");
+    expect(within(screen.getByRole("dialog", { name: "Scores" })).getByRole("region", { name: "Scorecard" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Close" }));
     chooseMenu("Recent hands");
     const hands = screen.getByRole("dialog", { name: "Recent hands" });
@@ -817,7 +817,7 @@ describe("bridge table", () => {
     expect(result.getByText(/^(Made|Down \d+)$/)).toBeTruthy();
     expect(result.getByText(/^\d+ of 7 tricks needed$/)).toBeTruthy();
     expect(result.getByText(/^(\d+ (over|under)tricks?|exactly)$/)).toBeTruthy();
-    expect(result.getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    expect(result.getByRole("region", { name: "Scorecard" })).toBeTruthy();
     // Once the last trick clears, the whole deal lies face-up at the seats, each with its high-card points.
     await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
     for (const seat of ["North", "East", "South", "West"]) expect(within(screen.getByRole("region", { name: `${seat}'s hand` })).getAllByRole("img")).toHaveLength(13);
@@ -936,8 +936,11 @@ describe("bridge table", () => {
 
     expect(container.querySelector(".seat-east.dealer-seat")).toBeTruthy();
     expect([...container.querySelectorAll(".vulnerable-seat")].map((seat) => [...seat.classList].find((name) => name.startsWith("seat-")))).toEqual(["seat-north", "seat-south"]);
-    chooseMenu("Rubber score");
-    expect(screen.getByRole("table", { name: "Rubber score" }).textContent).toContain("Games NS 1 · EW 0 · NS vulnerable");
+    chooseMenu("Scores");
+    const card = within(screen.getByRole("dialog", { name: "Scores" })).getByRole("region", { name: "Scorecard" });
+    expect(card.textContent).toContain("Games: N–S 1, E–W 0 · N–S vulnerable");
+    // A hand stored before breakdowns were kept is still explained by its points above and below the line.
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/N–S: \+120 below the line[\s\S]*N–S win game 1/);
   });
 
   it("adds a finished rubber hand to the scoresheet and keeps it after a reload", () => {
@@ -946,9 +949,22 @@ describe("bridge table", () => {
     render(<App />);
 
     const result = within(screen.getByRole("region", { name: "Hand result" }));
-    expect(document.querySelector(".hand-points-line")?.textContent).toMatch(/the line$/);
-    expect(result.getByRole("table", { name: "Rubber score" })).toBeTruthy();
+    const breakdown = result.getByRole("region", { name: "Last hand's points" });
+    expect(breakdown.textContent).toMatch(/Last hand: /);
+    expect(breakdown.querySelectorAll("li").length).toBeGreaterThan(0);
     expect(loadSoloData(window.localStorage).rubber?.hands.map((hand) => hand.handId)).toEqual(["test-hand"]);
+    expect(loadSoloData(window.localStorage).rubber?.hands[0]?.detail?.contract).toEqual(finished.contract);
+  });
+
+  it("closes the end-of-hand scorecard to see the cards, and Scores in the menu brings it back", async () => {
+    const user = userEvent.setup();
+    storeRubber({ hands: [], lastDealer: "north", activeHandId: "test-hand" }, completedGame());
+    render(<App />);
+
+    await user.click(within(screen.getByRole("region", { name: "Scorecard" })).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Hand result" })).toBeNull();
+    chooseMenu("Scores");
+    expect(within(screen.getByRole("dialog", { name: "Scores" })).getByRole("region", { name: "Scorecard" })).toBeTruthy();
   });
 
   it("offers a new rubber once a side has won two games and starts it unvulnerable", async () => {
@@ -961,8 +977,10 @@ describe("bridge table", () => {
     const { container } = render(<App />);
 
     // The stored rubber was already over, so this hand's score is ignored and the panel offers a fresh rubber.
-    expect(within(screen.getByRole("region", { name: "Hand result" })).getByRole("table", { name: "Rubber score" }).textContent).toContain("EW win the rubber 2–0 (+700 bonus)");
-    await user.click(screen.getByRole("button", { name: "Deal a new rubber" }));
+    const card = within(screen.getByRole("region", { name: "Hand result" })).getByRole("region", { name: "Scorecard" });
+    expect(within(card).getByRole("status").textContent).toMatch(/E–W win the rubber 2–0[\s\S]*Final score N–S 0 · E–W 920 · E–W by 920 points/);
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/E–W: \+700 rubber bonus \(2–0 in games\)/);
+    await user.click(within(card).getByRole("button", { name: "Play another rubber" }));
 
     expect(container.querySelectorAll(".vulnerable-seat")).toHaveLength(0);
     expect(container.querySelector(".seat-north.dealer-seat")).toBeTruthy();

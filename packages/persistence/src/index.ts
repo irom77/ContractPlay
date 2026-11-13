@@ -98,6 +98,23 @@ function isRubber(value: unknown): value is Rubber {
     (value.activeHandId === undefined || typeof value.activeHandId === "string");
 }
 
+const isScoreItem = (item: unknown): boolean => isRecord(item) && (item.side === "NS" || item.side === "EW") &&
+  (item.line === "above" || item.line === "below") && typeof item.kind === "string" && Number.isFinite(item.points);
+
+function isHandDetail(detail: unknown): boolean {
+  return isRecord(detail) && isRecord(detail.contract) && isSeat(detail.contract.declarer) && Number.isInteger(detail.contract.level) &&
+    typeof detail.contract.strain === "string" && Number.isInteger(detail.tricksTaken) && typeof detail.vulnerable === "boolean" &&
+    Array.isArray(detail.items) && detail.items.every(isScoreItem);
+}
+
+/** A rubber with any malformed hand breakdown dropped; the hand's points stay on the scorecard. */
+function cleanRubber(rubber: Rubber): Rubber {
+  return { ...rubber, hands: rubber.hands.map((hand) => {
+    if (hand.detail === undefined || isHandDetail(hand.detail)) return hand;
+    return { handId: hand.handId, below: hand.below, above: hand.above };
+  }) };
+}
+
 function normalize(value: unknown): SoloData {
   if (!isRecord(value)) return emptyData();
   if (value.version === 0) {
@@ -111,7 +128,7 @@ function normalize(value: unknown): SoloData {
     currentGame,
     ...(isPbnMetadata(value.currentPbnMetadata) ? { currentPbnMetadata: value.currentPbnMetadata } : {}),
     completedHands: Array.isArray(value.completedHands) ? value.completedHands.filter(isSavedHand) : [],
-    ...(isRubber(value.rubber) ? { rubber: value.rubber } : {})
+    ...(isRubber(value.rubber) ? { rubber: cleanRubber(value.rubber) } : {})
   };
 }
 

@@ -61,7 +61,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(menu).getByRole("button", { name: "Back to lobby" })).toBeTruthy();
     expect((within(menu).getByRole("button", { name: "Take back" }) as HTMLButtonElement).disabled).toBe(false);
     expect(within(menu).getByRole("button", { name: "Cancel this hand" })).toBeTruthy();
-    expect(within(menu).getByRole("button", { name: "Rubber score" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Scores" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "Leave the table" })).toBeTruthy();
   },
   "auto-play": () => {
@@ -80,21 +80,37 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   result: () => {
     const result = screen.getByRole("region", { name: "Hand result" });
-    // A rubber table: the hand's points below and above the line, and the rubber scoresheet with the game won.
-    expect(result.textContent).toMatch(/4♠ by North[\s\S]*NS 120 below the line/);
-    expect(within(result).getByRole("table", { name: "Rubber score" }).textContent).toMatch(/Games NS 1 · EW 0/);
+    // A rubber table: the scorecard with the players' names, the game won by North–South, and the hand explained.
+    expect(result.textContent).toMatch(/4♠ by North/);
+    const card = within(result).getByRole("region", { name: "Scorecard" });
+    expect(within(card).getByRole("heading", { name: "Alex & Bot" })).toBeTruthy();
+    expect(within(card).getByText("Games: N–S 1, E–W 0 · N–S vulnerable")).toBeTruthy();
+    expect(within(card).getByRole("img", { name: "Game 1 to N–S" })).toBeTruthy();
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/N–S: \+120 for making 4♠ \(below the line\)[\s\S]*N–S win game 1/);
     expect(within(result).getByRole("button", { name: "Deal" })).toBeTruthy();
     // All 52 cards face-up at their seats around the result, each hand with its high-card points.
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
     expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
   },
   "rubber-score": () => {
-    const dialog = screen.getByRole("dialog", { name: "Rubber score" });
-    const sheet = within(dialog).getByRole("table", { name: "Rubber score" });
-    expect(sheet.textContent).toMatch(/Games NS 0 · EW 0 · Neither side vulnerable/);
-    expect(sheet.textContent).toMatch(/Game 1 \(in play\)/);
+    const dialog = screen.getByRole("dialog", { name: "Scores" });
+    const card = within(dialog).getByRole("region", { name: "Scorecard" });
+    expect(within(card).getByText("Games: N–S 0, E–W 0 · Neither side vulnerable")).toBeTruthy();
+    expect(within(card).getByRole("list", { name: "E–W above the line: 30, 50" })).toBeTruthy();
+    expect(within(card).getByRole("list", { name: "E–W game 1: 60" })).toBeTruthy();
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/E–W: \+50 for defeating 3NT by 1/);
+    expect(within(card).queryByRole("img", { name: /^Game 1 to/ })).toBeNull();
     // Opened over a hand in play.
     expect(screen.getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
+  },
+  "rubber-won": () => {
+    const result = screen.getByRole("region", { name: "Hand result" });
+    const card = within(result).getByRole("region", { name: "Scorecard" });
+    expect(within(card).getByRole("status").textContent).toMatch(/N–S win the rubber 2–0[\s\S]*Final score N–S 920 · E–W 0 · N–S by 920 points/);
+    expect(within(card).getByRole("list", { name: "N–S above the line: 700" })).toBeTruthy();
+    expect(within(card).getAllByRole("img", { name: /to N–S$/ })).toHaveLength(2);
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/N–S win game 2[\s\S]*\+700 rubber bonus/);
+    for (const name of ["Deal a new rubber", "Seating", "Back to lobby", "Leave the table", "Close"]) expect(within(card).getByRole("button", { name })).toBeTruthy();
   },
   "solo-setup": () => {
     expect(screen.getByRole("region", { name: "New deal" })).toBeTruthy();
@@ -131,7 +147,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const menu = screen.getByRole("group", { name: "Game menu" });
     expect(menu.closest("details")!.open).toBe(true);
     expect(within(menu).getAllByRole("button").map((button) => button.textContent)).toEqual(
-      ["Online tables", "Claim", "Take back", "Auto play this hand", "Settings", "Rubber score", "Recent hands", "About ContractPlay", "Deal a new hand"]);
+      ["Online tables", "Claim", "Take back", "Auto play this hand", "Settings", "Scores", "Recent hands", "About ContractPlay", "Deal a new hand"]);
     // No Take back or Redo buttons on the table itself.
     expect(document.querySelector(".history-controls")).toBeNull();
   },
@@ -148,9 +164,20 @@ const expectations: Record<string, () => Promise<void> | void> = {
   "solo-result": () => {
     const result = screen.getByRole("region", { name: "Hand result" });
     expect(result.textContent).toMatch(/4♠ by North/);
-    expect(within(result).getByRole("table", { name: "Rubber score" })).toBeTruthy();
-    expect(within(result).getByRole("button", { name: "Next deal" })).toBeTruthy();
+    const card = within(result).getByRole("region", { name: "Scorecard" });
+    expect(within(card).getByRole("heading", { name: "We (N–S)" })).toBeTruthy();
+    expect(within(card).getByRole("list", { name: "They game 1: 60" })).toBeTruthy();
+    expect(within(card).getByRole("list", { name: "We game 1: 120" })).toBeTruthy();
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/We: \+120 for making 4♠[\s\S]*We win game 1/);
+    expect(within(card).getByRole("button", { name: "Next deal" })).toBeTruthy();
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
+  },
+  "solo-rubber-won": () => {
+    const card = within(screen.getByRole("region", { name: "Hand result" })).getByRole("region", { name: "Scorecard" });
+    expect(within(card).getByRole("status").textContent).toMatch(/We win the rubber 2–0/);
+    expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/\+700 rubber bonus/);
+    expect(within(card).getByRole("button", { name: "Play another rubber" })).toBeTruthy();
+    expect(within(card).getByRole("button", { name: "Online tables" })).toBeTruthy();
   },
   "solo-review": () => {
     expect(screen.getByRole("region", { name: "Hand review" })).toBeTruthy();

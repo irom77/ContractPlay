@@ -17,6 +17,7 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 
 - [x] Score solo play as rubber bridge by default, with single deals as an option.
 - [x] Score online tables as rubber bridge by default (dealer from North, vulnerability from games won, Rubber score in the game menu), with running totals as a choice when creating a table; tables made before this keep running totals.
+- [x] Replace the end-of-hand rubber score with a paper-pad scorecard in solo and online play: partnerships either side of a divider, above and below the line, dotted game lines with an arrow to the winner, totals, a breakdown of the last hand's points, a rubber-over summary with next steps, and **Scores** in the game menu.
 
 ## Online multiplayer
 

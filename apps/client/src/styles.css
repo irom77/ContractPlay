@@ -349,17 +349,48 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .outcome-made strong { background: var(--gold); color: var(--deep); }
 .outcome-down strong { background: #b8423b; color: #fdfcf8; }
 .score-panel .hand-points-line { font-size: var(--text-m); }
-.rubber-sheet { border-collapse: collapse; min-width: calc(30 * var(--u)); color: #d6e0d8; font-size: var(--text-m); font-variant-numeric: tabular-nums; }
-.rubber-sheet caption { padding-bottom: calc(.6 * var(--u)); color: var(--gold); font-weight: 700; }
-.rubber-sheet th, .rubber-sheet td { padding: calc(.3 * var(--u)) calc(1.2 * var(--u)); text-align: right; }
-.rubber-sheet th[scope="row"] { text-align: left; font-weight: 600; }
-.rubber-sheet thead th { border-bottom: 1px solid rgba(255, 255, 255, .2); }
-.rubber-sheet .first-game th, .rubber-sheet .first-game td { border-top: 2px solid rgba(255, 255, 255, .55); }
-.rubber-sheet .game-winner { color: var(--gold); font-weight: 800; }
-.rubber-sheet tfoot th, .rubber-sheet tfoot td { border-top: 1px solid rgba(255, 255, 255, .2); font-weight: 800; }
 .menu-settings .setup-check, .setup-controls .setup-check { display: flex; flex: 1 1 100%; flex-direction: row; align-items: center; gap: 8px; }
 .setup-check input { width: auto; margin: 0; }
 .contract-outcome span + span::before { content: "· "; color: #8fa59a; }
+/* The rubber scorecard: a paper bridge pad with the partnerships either side of a divider, the line, and the totals. */
+.scorecard { --pad-ink: #1f2f3a; --rule: #6f8fa6; --paper: #fbf6df; display: grid; gap: calc(.8 * var(--u)); width: min(100%, calc(52 * var(--u))); min-width: min(260px, 100%); color: #d6e0d8; text-align: center; }
+.scorecard .pad-status { margin: 0; color: #c9d6cc; font-size: var(--text-s); }
+.pad-result { display: grid; gap: 2px; }
+.pad-result h3 { margin: 0; color: var(--gold); font: 800 var(--text-l)/1.2 system-ui, sans-serif; }
+.pad-result p { margin: 0; font-size: var(--text-m); }
+.pad { position: relative; display: grid; border: 1px solid #c9bf94; border-radius: 4px; padding: calc(.6 * var(--u)) calc(.8 * var(--u)); background: var(--paper) repeating-linear-gradient(transparent 0 calc(2.6 * var(--u) - 1px), rgba(111, 143, 166, .14) calc(2.6 * var(--u) - 1px) calc(2.6 * var(--u))); color: var(--pad-ink); box-shadow: 0 calc(.6 * var(--u)) calc(1.6 * var(--u)) #0006, inset 0 0 0 1px #fffbe8; font: 600 var(--text-m)/1.35 "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive; font-variant-numeric: tabular-nums; }
+.pad-row { display: grid; grid-template-columns: 1fr 1fr; }
+.pad-cell { min-width: 0; padding: 2px calc(.8 * var(--u)); overflow-wrap: anywhere; }
+/* The divider between the partnerships runs unbroken from the heading to the totals, through each game line. */
+.pad::before { position: absolute; top: calc(.6 * var(--u)); bottom: calc(.6 * var(--u)); left: 50%; border-left: 2px solid var(--rule); content: ""; pointer-events: none; }
+.pad-head .pad-cell { padding-bottom: calc(.5 * var(--u)); border-bottom: 1px solid var(--rule); color: #8b2d2d; font: 700 var(--text-s)/1.25 system-ui, sans-serif; }
+.pad-entries { display: flex; flex-direction: column; align-items: center; margin: 0; padding: 0; list-style: none; }
+/* Above the line, scores are written upwards from the line: the newest is highest. */
+.pad-above .pad-entries { flex-direction: column-reverse; justify-content: flex-start; }
+.pad-above .pad-cell { display: flex; flex-direction: column; justify-content: flex-end; min-height: calc(6 * var(--u)); padding-top: calc(.8 * var(--u)); padding-bottom: calc(.4 * var(--u)); }
+.pad-line { height: 0; border-top: 3px solid var(--rule); }
+.pad-below .pad-cell { min-height: calc(3 * var(--u)); padding-top: calc(.4 * var(--u)); padding-bottom: calc(.4 * var(--u)); }
+.pad-entries .pad-new { color: #0b5cad; font-weight: 800; }
+.pad-entries .pad-bonus { color: #8b2d2d; font-weight: 800; }
+/* A won game: a dotted line across the pad with an arrow at the winning side's edge, pointing to it. */
+.pad-game-line { position: relative; height: 10px; margin: 2px 0; }
+.pad-game-line::before { position: absolute; top: 50%; left: 14px; right: 14px; border-top: 2px dotted var(--pad-ink); content: ""; }
+.pad-arrow { position: absolute; top: 0; width: 16px; height: 10px; fill: none; stroke: var(--pad-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.pad-game-NS .pad-arrow { left: 0; }
+.pad-game-EW .pad-arrow { right: 0; transform: scaleX(-1); }
+.pad-total { margin-top: calc(.4 * var(--u)); border-top: 4px double var(--pad-ink); font-weight: 800; }
+.pad-total .pad-cell { padding-top: calc(.5 * var(--u)); }
+.pad-total .pad-winner { color: #8b2d2d; }
+.pad-breakdown { border-radius: 4px; padding: calc(.6 * var(--u)) calc(1.2 * var(--u)); background: #fffdf3; color: var(--pad-ink); font-size: var(--text-s); text-align: left; }
+.pad-breakdown p { margin: 0; color: var(--pad-ink) !important; font-size: var(--text-s) !important; }
+.pad-breakdown .pad-breakdown-title { margin-bottom: 2px; font-weight: 700; }
+.pad-breakdown ul { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.pad-breakdown .red-card { color: #c0281e; }
+.pad-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--u); }
+/* The end-of-hand panel holding the scorecard scrolls rather than spilling off a short screen. */
+.score-panel.scorecard-panel { max-height: calc(100% - 4 * var(--u)); overflow-y: auto; overscroll-behavior: contain; background: #0c2822; }
+.hands-revealed .score-panel.scorecard-panel { max-width: min(calc(56 * var(--u)), calc(100% - 4 * var(--u))); }
+.menu-dialog .scorecard { width: 100%; }
 .rubber-menu { display: grid; gap: var(--u); justify-items: start; margin-top: 6px; border-top: 1px solid rgba(255, 255, 255, .12); padding-top: 10px; }
 
 .error-message { position: absolute; z-index: 7; bottom: calc(8 * var(--u)); left: calc(2 * var(--u)); max-width: min(420px, calc(100% - 4 * var(--u))); margin: 0; border-left: 3px solid #ff8a78; border-radius: 6px; padding: 9px 13px; background: rgba(60, 16, 14, .94); color: #ffd9d0; font-size: var(--text-m); box-shadow: 0 6px 18px #0008; }
@@ -468,7 +499,8 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .online-table .pos-left.has-dummy .seat-auction-calls, .online-table .pos-right.has-dummy .seat-auction-calls { grid-row: 2; grid-column: 1 / -1; }
 .online-totals { border-radius: 7px; padding: calc(.5 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .55); font-size: var(--text-m); font-weight: 700; white-space: nowrap; }
 .lobby-panel .online-totals { justify-self: start; margin: 0; }
-.lobby-panel > .rubber-sheet { justify-self: center; }.online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
+.lobby-panel > .scorecard { justify-self: center; }
+.online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
 /* The Auto play / bot-playing banner floats in the top-right corner under the menu and last trick, clear of every hand; the player can drag it anywhere on the table. */
 .online-resume { position: absolute; z-index: 7; top: calc(14 * var(--u)); right: calc(2 * var(--u)); display: flex; align-items: center; gap: 8px; width: max-content; max-width: max(300px, calc(44 * var(--u))); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 4px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-s); line-height: 1.3; cursor: grab; touch-action: none; user-select: none; }
 .online-resume:active { cursor: grabbing; }

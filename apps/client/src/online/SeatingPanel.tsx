@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { RubberHand, RubberSummary, Seat, SkillLevel } from "@contractplay/core";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
-import { ContractOutcome, RubberScoresheet, rubberHandText } from "../table/ResultSummary.js";
+import { ContractOutcome } from "../table/ResultSummary.js";
 import { claimText, contractText, seatNames, seats } from "../table/labels.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
@@ -9,10 +9,12 @@ export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
 
 /** Between hands, or for anyone unseated: the four seats with their controls, the totals, the last result, and Deal. */
-export function SeatingPanel({ view, totals, rubberSummary, rubberHand, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
+export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecard, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
   view: TableViewData; totals: string;
   /** A rubber table's rubber, shown as its scoresheet, and the last hand's line on it. */
-  rubberSummary?: RubberSummary | undefined; rubberHand?: RubberHand | undefined; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void;
+  rubberSummary?: RubberSummary | undefined; rubberHand?: RubberHand | undefined;
+  /** A rubber table's scorecard. */
+  scorecard?: React.ReactNode; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void;
   /** Back to the finished hand laid out on the table, when there is one. */
   onShowResult?: (() => void) | undefined;
   send(message: Outgoing): void;
@@ -61,7 +63,7 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, statusLi
             <h2>{view.name}</h2>
             <span className="quiet-copy">{view.style}{rubberSummary ? " · Rubber bridge" : ""}</span>
           </div>
-          {rubberSummary ? <RubberScoresheet summary={rubberSummary} /> : <p className="online-totals">{totals}</p>}
+          {rubberSummary ? scorecard : <p className="online-totals">{totals}</p>}
           {copyNote ? <p className="quiet-copy online-copy-note" role="status">{copyNote}</p> : null}
           {view.handInProgress && !yourSeat ? <p>A hand is in progress. You can take a seat when it ends.</p> : null}
           {view.revealed && view.game ? <section className="online-result" aria-label="Last hand">
@@ -94,7 +96,8 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, statusLi
 
 /**
  * The finished hand's contract, how it went, and its score: the centre of the result table, and a reminder on the seating screen.
- * At a rubber table `rubberHand` is the hand's line on the scoresheet (null when it is not on the sheet).
+ * At a rubber table `rubberHand` is the hand's line on the scorecard (null when it is not on it); its points are told
+ * by the scorecard's breakdown, so only a running-totals table shows them here.
  */
 export function HandResultSummary({ game, rubberHand }: { game: PublicGame; rubberHand?: RubberHand | null | undefined }) {
   const contract = game.contract;
@@ -104,6 +107,6 @@ export function HandResultSummary({ game, rubberHand }: { game: PublicGame; rubb
     <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
     <ContractOutcome score={score} />
     {game.claim ? <p className="claim-line">{claimText(game.claim, contract.declarer, 13 - game.completedTricks.length)}</p> : null}
-    <p className="hand-points-line">{rubberHand !== undefined ? (rubberHand ? rubberHandText(rubberHand) : "No score") : `${score.score >= 0 ? "NS" : "EW"} +${Math.abs(score.score)}`}</p>
+    {rubberHand === undefined ? <p className="hand-points-line">{`${score.score >= 0 ? "NS" : "EW"} +${Math.abs(score.score)}`}</p> : null}
   </>;
 }
