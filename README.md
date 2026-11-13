@@ -115,7 +115,35 @@ pnpm tauri:dev
 pnpm tauri:build
 ```
 
-The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file, and completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set, played board by board, with the result compared against the file's field and the original auction and play viewable after each hand. See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
+The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file, and completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set (experimental; see [Board sets against the field](#board-sets-against-the-field-experimental)). See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
+
+## Board sets against the field (experimental)
+
+> **Experimental.** This feature is a first release, still being worked on. It has been checked with automated tests and a generated sample file, not yet with a wide range of real club files, so expect rough edges. Solo play only. Open work is listed under "Hand records and replays" in [TODO.md](TODO.md).
+
+Play boards that were really played at a club or tournament, then see how your result compares with the other tables (the *field*).
+
+- **Import.** In solo play, open **Import a PBN deal** (on the start screen, or ☰ → **Recent hands**) and choose a `.pbn` file. A file with several boards, or with a `ScoreTable` (the field's results), opens as a *board set*; a single board without results imports as one deal, as before. Boards that cannot be read are skipped with a message saying how many.
+- **Play.** Each board is dealt fresh, with its dealer and vulnerability; the top-left status card shows where you are, for example "Board 7 · 1 of 24". **Next board**, **Finish board set**, and **Leave the board set** are in the game menu. Board-set hands stay out of the rubber.
+- **Compare.** When a board ends, **Against the field** scores your result by the file's `Scoring` tag (matchpoints by default, Butler IMPs for `IMP` or `Butler`, cross-IMPs for `Cross`) and shows the field's results with your row highlighted. A board without field results shows your own score only.
+- **Original play.** If the file records the auction and play, **View original play** steps through them with Previous and Next; **Back to your result** returns to the comparison.
+- **Privacy.** Files stay in this browser. Player names in a `ScoreTable` are never stored or shown; only the deals, contracts, and scores are kept.
+- **Saved progress.** The active board set and your place in it survive a reload in the same browser; finished boards go to Recent hands with their field. Leaving or finishing the set, or importing another file, drops it (a library of sets is on the roadmap).
+
+### Where to find played boards and their fields
+
+Use files you are entitled to: your own club's games or downloads a site offers to its players. BBO's terms forbid scraping and redistributing its records, and travellers with names are personal data, so ContractPlay does not ship or fetch any of these itself. Research and sources: [`docs/research/2026-11-13-hand-record-archives.md`](docs/research/2026-11-13-hand-record-archives.md).
+
+| Source | What you can get | Field in the PBN? |
+|---|---|---|
+| **ACBL Live for Clubs** ([live.acbl.org](https://live.acbl.org)) | Each club game links a PBN hand record, a USEBIO XML results file, and an ACBLscore game file. | Usually not: the field is in the USEBIO file, which ContractPlay cannot read yet. |
+| **BridgeWebs** club sites | Results with travellers; some clubs offer the PBN deal file. | Usually not. |
+| **Your club's director** (Bridgemate, ACBLscore, other scoring programs) | Hand records exported as `.pbn`; some programs can write a PBN with a `ScoreTable`. | Sometimes: ask for "PBN with score table". |
+| **Pianola** | Results pages with hands and travellers. | No (directors can download USEBIO). |
+| **Vugraph Project** (Nikos Sarantakos) | Historic championship matches with full bidding and play, as `.pbn` / `.lin`. | No field, but **View original play** works. The site now redirects elsewhere; reach it through the Wayback Machine. |
+| **Dealing programs** (Bridge Composer, Dealer4, BigDeal) | Files you make yourself. | Only if you add a `ScoreTable`. |
+
+A typical club PBN carries the deals only. It still plays as a board set, but without a field comparison. Reading USEBIO results and BBO's LIN files is the next step on the roadmap.
 
 ## Project guidance
 
