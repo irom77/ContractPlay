@@ -30,7 +30,7 @@ import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestP
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
-import { createHandName, handNameFromId } from "./handNames.js";
+import { createHandName, savedHandName } from "./handNames.js";
 import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
@@ -59,7 +59,6 @@ function claimAnswerer(game: GameState, claimSeat: Seat): Seat {
   return samePartnership(claimSeat, declarer) ? seats.find((seat) => !samePartnership(seat, declarer))! : declarer;
 }
 
-const savedHandName = (hand: SavedHand): string => hand.name ?? handNameFromId(hand.id);
 const playedOn = (hand: SavedHand): string => new Date(hand.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 function reviewState(hand: SavedHand, cursor: number): GameState {
@@ -202,7 +201,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       const existing = completedHands.find((hand) => hand.id === currentHandId);
       const record: SavedHand = {
         id: currentHandId,
-        name: existing?.name ?? createHandName(new Set(completedHands.map(savedHandName))),
+        // Named after the dealt cards of the player's seat against bots, otherwise South's.
+        name: existing?.name ?? createHandName(game.initialDeal[playAgainstBots ? userSeat : "south"], new Set(completedHands.map(savedHandName))),
         game,
         savedAt: new Date().toISOString(),
         ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {})

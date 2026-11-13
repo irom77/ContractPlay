@@ -1,27 +1,33 @@
-const adjectives = [
-  "Bold", "Quiet", "Golden", "Lucky", "Crafty", "Daring", "Gentle", "Hidden", "Nimble", "Patient", "Silver", "Steady",
-  "Swift", "Wily", "Bright", "Clever", "Royal", "Velvet", "Midnight", "Sunny", "Brave", "Sly", "Grand", "Rapid"
-] as const;
-const nouns = [
-  "Finesse", "Squeeze", "Ruff", "Endplay", "Overtrick", "Slam", "Trump", "Lead", "Rubber", "Signal", "Tenace", "Singleton",
-  "Void", "Honor", "Crossruff", "Discard", "Holdup", "Gambit", "Stopper", "Entry", "Overcall", "Sacrifice", "Jump", "Double"
-] as const;
-const nameCount = adjectives.length * nouns.length;
-const nameAt = (index: number): string => `${adjectives[index % adjectives.length]!} ${nouns[Math.floor(index / adjectives.length) % nouns.length]!}`;
+import type { Hand, Suit } from "@contractplay/core";
+import type { SavedHand } from "@contractplay/persistence";
 
-/** A random two-word name for a played hand, avoiding the names already in the history where possible. */
-export function createHandName(taken: ReadonlySet<string> = new Set(), random: () => number = Math.random): string {
-  const start = Math.floor(random() * nameCount);
-  for (let offset = 0; offset < nameCount; offset += 1) {
-    const name = nameAt((start + offset) % nameCount);
-    if (!taken.has(name)) return name;
-  }
-  return nameAt(start);
+/** Suits in name order, with the letter that starts each suit's cards. */
+const suitLetters: readonly (readonly [Suit, string])[] = [["spades", "S"], ["hearts", "H"], ["clubs", "C"], ["diamonds", "D"]];
+const rankOrder = "AKQJT98765432";
+
+/**
+ * A hand written as its cards, suit by suit: each suit's letter followed by its ranks from the ace down, T for ten,
+ * suits joined by underscores, for example `SKT9_HKQJ32_CA2_D543`. A void is its letter alone (`SAKQJT98765_H_C43_D2`).
+ */
+export function handName(hand: Hand): string {
+  return suitLetters.map(([suit, letter]) => letter + hand
+    .filter((card) => card.suit === suit)
+    .map((card) => card.rank)
+    .sort((a, b) => rankOrder.indexOf(a) - rankOrder.indexOf(b))
+    .join("")).join("_");
 }
 
-/** A stable name for a hand saved before hands were named, derived from its id. */
-export function handNameFromId(id: string): string {
-  let hash = 0;
-  for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return nameAt(hash % nameCount);
+/** The name for a newly saved hand: the player's dealt cards, with `_2`, `_3`, … added if the history already has it. */
+export function createHandName(hand: Hand, taken: ReadonlySet<string> = new Set()): string {
+  const base = handName(hand);
+  if (!taken.has(base)) return base;
+  for (let copy = 2; ; copy += 1) {
+    const name = `${base}_${copy}`;
+    if (!taken.has(name)) return name;
+  }
+}
+
+/** A saved hand's name; a hand saved before hands were named is called after South's dealt cards. */
+export function savedHandName(hand: SavedHand): string {
+  return hand.name ?? handName(hand.game.initialDeal.south);
 }

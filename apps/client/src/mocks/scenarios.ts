@@ -3,6 +3,7 @@ import type { SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
+import { handName } from "../handNames.js";
 import { botToAct, createTable, reduce, rubberHandId, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
 
 /*
@@ -267,7 +268,11 @@ const rubberUnderway = (): Rubber => ({
   activeHandId: SOLO_HAND
 });
 
-const savedHand = (): SavedHand => ({ id: "preview-saved", name: "Friday practice", game: soloGame(8, (game) => game.phase === "complete"), savedAt: new Date(AT).toISOString() });
+/** A finished hand in the history, named after North's dealt cards as when you played it from North. */
+const savedHand = (): SavedHand => {
+  const game = soloGame(8, (finished) => finished.phase === "complete");
+  return { id: "preview-saved", name: handName(game.initialDeal.north), game, savedAt: new Date(AT).toISOString() };
+};
 
 function solo(game: GameState | null, table: Omit<SoloPreview, "storage">, extra: Partial<SoloData> = {}): PreviewData {
   return {

@@ -162,7 +162,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   "solo-hands": () => {
     const dialog = screen.getByRole("dialog", { name: "Recent hands" });
-    expect(within(dialog).getByRole("button", { name: /^Review Friday practice/ })).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: /^Review SAKJ74_HK83_CQ92_DA6, played / })).toBeTruthy();
     expect(within(dialog).getByText("Import a PBN deal")).toBeTruthy();
   },
   "solo-result": () => {

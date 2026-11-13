@@ -6,6 +6,7 @@ import type { GameState, Solver } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSoloData, saveSoloData, type SavedHand, type SoloData } from "@contractplay/persistence";
+import { handName } from "./handNames.js";
 import App from "./App.js";
 import { suitSymbols } from "./table/labels.js";
 
@@ -406,7 +407,7 @@ describe("bridge table", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("lists saved hands by name and date played, naming older saves from their id", async () => {
+  it("lists saved hands by name and date played, naming older saves after South's dealt cards", async () => {
     const user = userEvent.setup();
     const named = { id: "named-hand", name: "Quiet Squeeze", game: completedGame(), savedAt: "2026-10-28T15:30:00.000Z" };
     const legacy = { id: "legacy-hand", game: completedGame(), savedAt: "2026-10-27T15:30:00.000Z" };
@@ -420,7 +421,8 @@ describe("bridge table", () => {
     expect(within(recent).getByText("Quiet Squeeze")).toBeTruthy();
     expect(within(recent).getByText(`Played ${played}`)).toBeTruthy();
     expect(within(recent).queryByText(/^Hand \d/)).toBeNull();
-    expect(within(recent).getAllByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toHaveLength(2);
+    expect(within(recent).getByRole("button", { name: /^Review Quiet Squeeze, played / })).toBeTruthy();
+    expect(within(recent).getByRole("button", { name: `Review ${handName(legacy.game.initialDeal.south)}, played ${new Date(legacy.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` })).toBeTruthy();
   });
 
   it("draws a faint, non-interactive felt watermark under the table", async () => {
@@ -823,8 +825,11 @@ describe("bridge table", () => {
     for (const seat of ["North", "East", "South", "West"]) expect(within(screen.getByRole("region", { name: `${seat}'s hand` })).getAllByRole("img")).toHaveLength(13);
     expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
     chooseMenu("Recent hands");
-    expect(screen.getByRole("button", { name: /^Review [A-Z][a-z]+ [A-Z][a-z]+, played / })).toBeTruthy();
-    expect(loadSoloData(window.localStorage).completedHands[0]!.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+    // Without bots at the table, a hand is named after South's dealt cards.
+    const saved = loadSoloData(window.localStorage).completedHands[0]!;
+    expect(saved.name).toBe(handName(saved.game.initialDeal.south));
+    expect(saved.name).toMatch(/^S[AKQJT2-9]*_H[AKQJT2-9]*_C[AKQJT2-9]*_D[AKQJT2-9]*$/);
+    expect(screen.getByRole("button", { name: new RegExp(`^Review ${saved.name}, played `) })).toBeTruthy();
   }, 30000);
 
   it("uses the chosen dealer and vulnerability for a new deal", async () => {
@@ -862,6 +867,17 @@ describe("bridge table", () => {
     expect(screen.getByRole("region", { name: "Auction" }).querySelectorAll("li").length).toBeGreaterThan(0);
     expect(screen.getByRole("region", { name: "Auction" }).querySelectorAll("li").length).toBeLessThan(3);
     expect(screen.getByRole("group", { name: "Contract bids by level and strain" })).toBeTruthy();
+  });
+
+  it("names a hand finished against bots after the player's own dealt cards", async () => {
+    const game = gameAfterPlays(51);
+    storeCurrentGame(game);
+    render(<App />);
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "east");
+    // The last card is forced, so it plays itself whoever holds it.
+    await waitFor(() => expect(loadSoloData(window.localStorage).completedHands).toHaveLength(1), { timeout: 5000 });
+    expect(loadSoloData(window.localStorage).completedHands[0]!.name).toBe(handName(game.initialDeal.east));
   });
 
   it("offers Beginner through Expert bot skills when bots are enabled", async () => {

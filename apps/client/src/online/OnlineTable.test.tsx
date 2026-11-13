@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionStatus, connectTable } from "./connection.js";
 import { cardLabel } from "../table/labels.js";
 import { saveIdentity } from "./identity.js";
+import { handName } from "../handNames.js";
 import { OnlineTable } from "./OnlineTable.js";
 
 function memoryStorage(): StorageLike {
@@ -656,7 +657,8 @@ describe("OnlineTable play", () => {
     const hands = loadSoloData(service.storage).completedHands;
     expect(hands).toHaveLength(1);
     expect(hands[0]!.id).toBe("online-ABC234-1");
-    expect(hands[0]!.name).toBeTruthy();
+    // Named after the viewer's (North's) dealt cards.
+    expect(hands[0]!.name).toBe(handName(finished.initialDeal.north));
     expect(hands[0]!.game.completedTricks).toEqual(finished.completedTricks);
     const result = screen.getByRole("region", { name: "Hand result" });
     expect(result.textContent).toContain("by North");

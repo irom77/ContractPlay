@@ -3,7 +3,7 @@ import { cardId, emptyRubber, forcedCard, summarizeRubber, type Bid, type GameAc
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
-import { createHandName, handNameFromId } from "../handNames.js";
+import { createHandName, savedHandName } from "../handNames.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
@@ -110,7 +110,8 @@ function saveToHistory(storage: StorageLike, view: TableViewData): void {
     if (data.completedHands.some((hand) => hand.id === id)) return;
     const hand = savedHandFrom(view, id, new Date().toISOString());
     if (!hand) return;
-    const name = createHandName(new Set(data.completedHands.map((saved) => saved.name ?? handNameFromId(saved.id))));
+    // Named after the viewer's dealt cards (South's for someone not seated).
+    const name = createHandName(hand.game.initialDeal[view.yourSeat ?? "south"], new Set(data.completedHands.map(savedHandName)));
     saveSoloData(storage, { ...data, completedHands: [{ ...hand, name }, ...data.completedHands].slice(0, HISTORY_LIMIT) });
   } catch {
     // Storage is full or unavailable: the hand is simply not kept.
