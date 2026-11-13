@@ -17,6 +17,7 @@ import {
   undoAction,
   type Bid,
   type GameState,
+  type HandRecord,
   type Rubber,
   type Seat,
   type SkillLevel,
@@ -25,7 +26,8 @@ import {
   type Vulnerability
 } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
-import { deleteSavedHand, loadSoloData, saveSoloData, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
+import { boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
+import { deleteSavedHand, loadSoloData, saveSoloData, type BoardSet, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
@@ -123,6 +125,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     try { return persistence.storage.getItem(scoringStorageKey) === "single" ? "single" : "rubber"; } catch { return "rubber"; }
   });
   const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
+  const [boardSet, setBoardSet] = useState<BoardSet | undefined>(() => soloData.boardSet);
+  const [currentRecord, setCurrentRecord] = useState<HandRecord | undefined>(() => soloData.currentRecord);
   // The hand whose end-of-hand scorecard the user closed.
   const [closedScorecard, setClosedScorecard] = useState<string | null>(null);
   const [bidHint, setBidHint] = useState<{ game: GameState; bid: Bid; reason: string }>();
@@ -205,7 +209,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
         name: existing?.name ?? createHandName(game.initialDeal[playAgainstBots ? userSeat : "south"], new Set(completedHands.map(savedHandName))),
         game,
         savedAt: new Date().toISOString(),
-        ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {})
+        ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {}),
+        ...(currentRecord ? { record: currentRecord } : {})
       };
       completedHands = [record, ...completedHands.filter((hand) => hand.id !== currentHandId)].slice(0, 25);
     }
@@ -215,12 +220,14 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       currentGame: game,
       ...(currentPbnMetadata ? { currentPbnMetadata } : {}),
       completedHands,
-      rubber
+      rubber,
+      ...(boardSet ? { boardSet } : {}),
+      ...(currentRecord ? { currentRecord } : {})
     };
     latestSoloData.current = nextData;
     saveSoloData(persistence.storage, nextData);
     setSoloData(nextData);
-  }, [game, currentHandId, currentPbnMetadata, rubber]);
+  }, [game, currentHandId, currentPbnMetadata, rubber, boardSet, currentRecord]);
 
   // A rubber hand is scored when it ends, and loses its score again if it is taken back from the end.
   useEffect(() => {
@@ -412,12 +419,34 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setCurrentHandId(id);
     setGame(createGameState({ deal: deal(), dealer: handDealer, vulnerability: handVulnerability }));
     setCurrentPbnMetadata(undefined);
+    setBoardSet(undefined);
+    setCurrentRecord(undefined);
     setAuctionShown(false);
     setReviewHandId(undefined);
     setMessage("");
   }
 
+  // A board of an imported set is dealt as recorded; it stays out of the rubber and leaves the next-deal settings alone.
+  function startBoard(set: BoardSet) {
+    const record = set.records[set.position]!;
+    setCurrentHandId(createHandId());
+    setGame(createGameState({ deal: record.deal, dealer: record.dealer, vulnerability: record.vulnerability }));
+    setCurrentRecord(record);
+    setBoardSet(set);
+    setCurrentPbnMetadata(undefined);
+    setAuctionShown(false);
+    setReviewHandId(undefined);
+    setDialog(undefined);
+  }
+
   function importHand(contents = pbnInput) {
+    const { set, skipped } = boardSetFromPbn(contents);
+    if (set && isBoardSetFile(set)) {
+      startBoard(set);
+      setPbnInput("");
+      setMessage(skipped ? `Skipped ${skipped} board(s) that could not be read.` : "");
+      return;
+    }
     const board = parsePbn(contents).boards[0];
     const diagnostic = board?.diagnostics.find((entry) => entry.severity === "error");
     if (!board?.deal || !board.dealer || diagnostic) {
@@ -435,6 +464,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     }
     setCurrentHandId(createHandId());
     setGame(imported);
+    setBoardSet(undefined);
+    setCurrentRecord(undefined);
     setAuctionShown(false);
     setCurrentPbnMetadata({ tags: board.tags, comments: board.comments });
     setDialog(undefined);
@@ -683,7 +714,14 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     ...(scoring === "rubber" || inRubber ? [{ id: "rubber", label: "Scores", title: "The rubber scorecard: above and below the line, games, totals, and the last hand's points", onSelect: () => setDialog("rubber") }] : []),
     { id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") },
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
-    { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
+    ...(boardSet ? [
+      { id: "leave-set", label: "Leave the board set", title: "Keep this hand and stop playing the board set", onSelect: () => { setBoardSet(undefined); setCurrentRecord(undefined); } },
+      boardSet.position + 1 < boardSet.records.length
+        ? { id: "deal", label: "Next board", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and play the next" } : {}), onSelect: () => startBoard({ ...boardSet, position: boardSet.position + 1 }) }
+        : { id: "deal", label: "Finish board set", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and end the board set" } : {}), onSelect: () => setBoardSet(undefined) }
+    ] : [
+      { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
+    ])
   ];
   const tableTools = <>
     <GameMenu items={menuItems} defaultOpen={preview?.menuOpen ?? false} />

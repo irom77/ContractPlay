@@ -1323,6 +1323,41 @@ describe("bridge table", () => {
     expect(screen.queryByRole("button", { name: /^Play / })).toBeNull();
   });
 
+  it("imports a PBN board set, plays it board by board, and keeps its place across a reload", async () => {
+    const user = userEvent.setup();
+    const table = `[ScoreTable "PairId_NS\\2R;PairId_EW\\2R;Names_NS;Contract\\4L;Declarer\\1R;Result\\2R;Score_NS\\6R;Score_EW\\6R"]
+ 1  5 "Smith - Jones" 4S   N 10    420      -
+ 2  6 "Lee - Patel"   4S   N  9      -     50
+`;
+    const pbn = `${exportPbn({ dealer: "east", vulnerability: "None", actions: [], deal: deal() })}\n${table}\n${exportPbn({ dealer: "south", vulnerability: "EW", actions: [], deal: deal() })}`;
+    const firstRender = render(<App />);
+    await user.click(screen.getByText("Import a PBN deal"));
+    fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: pbn } });
+    await user.click(screen.getByRole("button", { name: "Import hand" }));
+
+    expect(screen.getByText("East to bid")).toBeTruthy();
+    expect(menuItem("Next board")).toBeTruthy();
+    expect(menuItem("Deal a new hand")).toBeNull();
+    expect(menuItem("Leave the board set")).toBeTruthy();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet.position).toBe(0));
+
+    fireEvent.click(menuItem("Next board")!);
+    expect(screen.getByText("South to bid")).toBeTruthy();
+    expect(menuItem("Finish board set")).toBeTruthy();
+    expect(menuItem("Next board")).toBeNull();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet.position).toBe(1));
+
+    firstRender.unmount();
+    render(<App />);
+    expect(screen.getByText("South to bid")).toBeTruthy();
+    expect(menuItem("Finish board set")).toBeTruthy();
+
+    fireEvent.click(menuItem("Leave the board set")!);
+    expect(menuItem("Deal a new hand")).toBeTruthy();
+    expect(screen.getByText("South to bid")).toBeTruthy();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).toBeUndefined());
+  });
+
   it("exports a saved hand as PBN with its metadata", async () => {
     const user = userEvent.setup();
     const game = completedGame();
