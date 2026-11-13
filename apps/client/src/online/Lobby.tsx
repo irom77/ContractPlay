@@ -19,6 +19,8 @@ export type LobbyProps = {
   storage: StorageLike;
   onOpenTable(id: string): void;
   onSolo(): void;
+  /** Opens the device's recent hands, solo and online alike. */
+  onRecentHands(): void;
   api?: LobbyApi;
 };
 
@@ -34,7 +36,7 @@ function seatLabel(seat: SeatInfo): string {
   return seat.kind === "human" ? seat.name : seat.kind === "bot" ? "Bot" : "Open";
 }
 
-export function Lobby({ baseUrl, storage, onOpenTable, onSolo, api = defaultApi }: LobbyProps) {
+export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, api = defaultApi }: LobbyProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
   const [editingName, setEditingName] = useState(false);
 
@@ -43,7 +45,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onSolo, api = defaultApi 
       onSaved={(saved) => { setIdentity(saved); setEditingName(false); }} secondary={{ label: "Solo play", onClick: onSolo }} />;
   }
 
-  return <LobbyTables identity={identity} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo}
+  return <LobbyTables identity={identity} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
     onChangeName={() => setEditingName(true)} />;
 }
 
@@ -70,8 +72,8 @@ export function NameGate({ storage, initialName = "", onSaved, secondary }: {
   );
 }
 
-function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName }: {
-  identity: Identity; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onChangeName(): void;
+function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, onChangeName }: {
+  identity: Identity; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void; onChangeName(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
   const [listError, setListError] = useState(false);
@@ -138,6 +140,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onChangeName
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
             <button className="secondary-button" type="button" onClick={onChangeName}>Change name</button>
+            <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
             <button className="secondary-button" type="button" onClick={onSolo}>Solo play</button>
           </span>
         </div>

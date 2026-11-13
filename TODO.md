@@ -30,6 +30,7 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 - [x] Align solo play with online tables: the shared game menu (Take back in it, no Redo), the draggable Auto play banner, and online turn wording.
 - [x] Offer Auto play during the auction too (solo and online), and start its banner in the top-right corner, clear of the side seats.
 - [x] Gather online table controls into a collapsible game menu: Back to lobby, Take back (your last call or card, with any bot play since), Cancel this hand (host), and Leave the table at any time (a bot finishes the hand).
+- [x] Reach the device's recent hands (solo and online alike) from the lobby and the online game menu, and from the solo start screen when no hand is in progress.
 - [x] Add a development-only `/admin` page to list and remove listed or unlisted online tables; its open access must be replaced with RBAC before public production use.
 - [ ] Repeat the two-window check on the deployed address and confirm the Workers free-plan CPU limit holds for bot decisions (if not, the paid Workers plan is the owner's decision).
 - [ ] Offer online play in the desktop and iOS builds (allow the service address in the app's content security policy and add cross-origin access on the service).

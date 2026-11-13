@@ -28,7 +28,9 @@ const HINTS_STORAGE_KEY = "contractplay.hints";
 const resumeBannerKey = "contractplay.resumeBanner";
 
 export type OnlineTableProps = {
-  baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void; connect?: typeof defaultConnect;
+  baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void;
+  /** Opens the device's recent hands, where finished online hands are saved; the seat is kept as with Back to lobby. */
+  onRecentHands(): void; connect?: typeof defaultConnect;
   /** Opens the game menu on arrival (the UI previews show it this way). */
   menuOpen?: boolean;
   /** Opens the Rubber score dialog on arrival (the UI previews show it this way). */
@@ -157,7 +159,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={identity} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -456,6 +458,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, identity, connect 
       ...(canClaim && !pickingClaim ? [{ id: "claim", label: "Claim", disabled: inputDisabled,
         title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(view.revision) }] : []),
       ...rubberItem,
+      { id: "hands", label: "Recent hands", onSelect: onRecentHands, title: "Review finished hands saved on this device; you keep your seat" },
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",

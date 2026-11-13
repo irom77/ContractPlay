@@ -24,8 +24,9 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
   const createTable = vi.fn(options.create ?? (() => Promise.resolve({ id: "NEW123" })));
   const onOpenTable = vi.fn();
   const onSolo = vi.fn();
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} api={{ listTables, createTable }} />);
-  return { storage, listTables, createTable, onOpenTable, onSolo };
+  const onRecentHands = vi.fn();
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable }} />);
+  return { storage, listTables, createTable, onOpenTable, onSolo, onRecentHands };
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -116,6 +117,13 @@ describe("Lobby", () => {
     expect(screen.getByRole("button", { name: "New table" })).toBeTruthy();
   });
 
+  it("opens recent hands", async () => {
+    const user = userEvent.setup();
+    const { onRecentHands } = setup();
+    await user.click(await screen.findByRole("button", { name: "Recent hands" }));
+    expect(onRecentHands).toHaveBeenCalled();
+  });
+
   it("lets the player change their name", async () => {
     const user = userEvent.setup();
     const { storage } = setup();
@@ -133,7 +141,7 @@ describe("Lobby", () => {
     const list = vi.fn(() => new Promise<TableSummary[]>((r) => { resolve = r; }));
     const storage = memoryStorage();
     saveIdentity(storage, "Bob");
-    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} api={{ listTables: list, createTable: vi.fn() }} />);
+    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn() }} />);
     expect(list).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
     expect(list).toHaveBeenCalledTimes(1);

@@ -93,7 +93,8 @@ export type MenuDialog = "settings" | "rubber" | "hands" | "about";
 /** Shared with online play, so the Auto play banner stays where the player last put it. */
 const autoPlayBannerKey = "contractplay.resumeBanner";
 
-export default function App({ solver, preview }: { solver?: Solver; preview?: SoloPreview } = {}) {
+/** `initialDialog` opens a menu dialog on arrival, as when online play links to Recent hands. */
+export default function App({ solver, preview, initialDialog }: { solver?: Solver; preview?: SoloPreview; initialDialog?: MenuDialog } = {}) {
   const frozen = !!preview;
   const persistence = useMemo(() => createClientPersistenceAdapter(preview?.storage ?? window.localStorage), [preview]);
   const [soloData, setSoloData] = useState<SoloData>(() => loadSoloData(persistence.storage));
@@ -132,7 +133,7 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
   const [reviewHandId, setReviewHandId] = useState<string | undefined>(preview?.review?.handId);
   const [reviewCursor, setReviewCursor] = useState(preview?.review?.cursor ?? 0);
-  const [dialog, setDialog] = useState<MenuDialog | undefined>(preview?.dialog);
+  const [dialog, setDialog] = useState<MenuDialog | undefined>(preview?.dialog ?? initialDialog);
   // The hand the user has handed over: bots make every remaining call and play for it.
   const [botsFinishHandId, setBotsFinishHandId] = useState<string | undefined>(preview?.autoPlay ? currentHandId : undefined);
   // A card the user picked before their turn, played for them when it comes.
@@ -634,9 +635,11 @@ export default function App({ solver, preview }: { solver?: Solver; preview?: So
           <div className="setup-controls">{dealSettings}</div>
           <button className="primary-button" onClick={startHand}>Start a new hand</button>
           {online ? <button className="secondary-button" type="button" onClick={goOnline}>Play online</button> : null}
+          {soloData.completedHands.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
           {pbnImportForm}
         </section>
         {message ? <p className="error-message" role="alert">{message}</p> : null}
+        {menuDialog}
       </main>
     );
   }

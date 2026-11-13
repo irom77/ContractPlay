@@ -102,12 +102,13 @@ function setup(options: { named?: boolean; storage?: StorageLike } = {}) {
   if (options.named !== false) saveIdentity(storage, "Bob");
   const service = fakeService();
   const onLeave = vi.fn();
+  const onRecentHands = vi.fn();
   const frames: Frame[] = [];
   const utils = render(<Profiler id="table" onRender={() => frames.push(frameNow())}>
-    <OnlineTable baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={onLeave} connect={service.connect} />
+    <OnlineTable baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={onLeave} onRecentHands={onRecentHands} connect={service.connect} />
   </Profiler>);
   if (options.named !== false) service.status("open");
-  return { ...service, storage, onLeave, frames, unmount: utils.unmount };
+  return { ...service, storage, onLeave, onRecentHands, frames, unmount: utils.unmount };
 }
 
 /** Plays from `game` until just before the fourth card of a trick that North or South wins, so declarer leads next. */
@@ -789,6 +790,15 @@ describe("OnlineTable connection", () => {
       await user.click(item("Back to lobby"));
       expect(service.onLeave).toHaveBeenCalled();
       expect(details.open).toBe(false);
+    });
+
+    it("opens recent hands from the menu", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      await user.click(item("Recent hands"));
+      expect(service.onRecentHands).toHaveBeenCalled();
+      expect(service.onLeave).not.toHaveBeenCalled();
     });
 
     it("offers Take back only after the viewer's own call with only bots since, and sends it", async () => {

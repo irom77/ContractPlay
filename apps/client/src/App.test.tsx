@@ -1375,6 +1375,26 @@ describe("bridge table", () => {
     expect(menuItem("Take back")!.disabled).toBe(true);
   });
 
+  it("opens and reviews recent hands from the start screen when no hand is in progress", async () => {
+    const user = userEvent.setup();
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: null, currentGame: null,
+      completedHands: [{ id: "online-ABC234-1", name: "Online hand", game: completedGame(), savedAt: "2026-10-25T12:00:00.000Z" }]
+    });
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Recent hands" }));
+    const dialog = screen.getByRole("dialog", { name: "Recent hands" });
+    await user.click(within(dialog).getByRole("button", { name: /^Review Online hand/ }));
+    expect(screen.getByText("Reviewing action 0 of 56")).toBeTruthy();
+  });
+
+  it("shows no Recent hands button on the start screen before any hand is saved", () => {
+    render(<App />);
+    expect(screen.getByRole("button", { name: "Start a new hand" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Recent hands" })).toBeNull();
+  });
+
   it("steps through a saved hand without changing the active hand", async () => {
     const user = userEvent.setup();
     const finished = completedGame();

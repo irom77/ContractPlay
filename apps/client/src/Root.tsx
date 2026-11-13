@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import App from "./App.js";
+import App, { type MenuDialog } from "./App.js";
 import { serviceUrl } from "./online/connection.js";
 import { Lobby } from "./online/Lobby.js";
 import { OnlineTable } from "./online/OnlineTable.js";
@@ -12,6 +12,8 @@ const Previews = lazy(() => import("./mocks/Previews.js").then((module) => ({ de
 export default function Root() {
   const [route, setRoute] = useState<Route>(() => parseRoute(location.hash));
   const storage = useMemo(() => window.localStorage, []);
+  // Online play opens the solo app at its Recent hands dialog, where finished online hands are kept too.
+  const [soloDialog, setSoloDialog] = useState<MenuDialog | undefined>();
   useEffect(() => {
     const onHashChange = () => setRoute(parseRoute(location.hash));
     window.addEventListener("hashchange", onHashChange);
@@ -25,6 +27,7 @@ export default function Root() {
     else location.hash = hash;
     setRoute(next);
   };
+  const openSolo = (dialog?: MenuDialog) => { setSoloDialog(dialog); navigate({ screen: "solo" }); };
 
   if (route.screen === "mocks") {
     return <Suspense fallback={<main className="app-shell" />}><Previews index={route.index} onIndex={(index) => navigate({ screen: "mocks", index })} /></Suspense>;
@@ -34,9 +37,9 @@ export default function Root() {
     if (baseUrl !== undefined) return <Admin baseUrl={baseUrl} />;
     return <main className="app-shell"><section className="empty-table lobby admin-page"><div className="lobby-panel">Online table administration is unavailable in this build.</div></section></main>;
   }
-  if (baseUrl === undefined || route.screen === "solo") return <App />;
+  if (baseUrl === undefined || route.screen === "solo") return <App {...(soloDialog ? { initialDialog: soloDialog } : {})} />;
   if (route.screen === "lobby") {
-    return <Lobby baseUrl={baseUrl} storage={storage} onOpenTable={(id) => navigate({ screen: "table", id })} onSolo={() => navigate({ screen: "solo" })} />;
+    return <Lobby baseUrl={baseUrl} storage={storage} onOpenTable={(id) => navigate({ screen: "table", id })} onSolo={() => openSolo()} onRecentHands={() => openSolo("hands")} />;
   }
-  return <OnlineTable key={route.id} baseUrl={baseUrl} tableId={route.id} storage={storage} onLeave={() => navigate({ screen: "lobby" })} />;
+  return <OnlineTable key={route.id} baseUrl={baseUrl} tableId={route.id} storage={storage} onLeave={() => navigate({ screen: "lobby" })} onRecentHands={() => openSolo("hands")} />;
 }

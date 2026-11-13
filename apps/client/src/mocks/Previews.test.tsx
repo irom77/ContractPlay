@@ -12,7 +12,10 @@ const surface = () => document.querySelector(".table-surface");
 
 /** What each preview must actually show, so a change that breaks a screen fails here instead of drifting. */
 const expectations: Record<string, () => Promise<void> | void> = {
-  lobby: async () => { await screen.findByRole("heading", { name: "Open tables" }); },
+  lobby: async () => {
+    await screen.findByRole("heading", { name: "Open tables" });
+    expect(screen.getByRole("button", { name: "Recent hands" })).toBeTruthy();
+  },
   seating: () => {
     expect(within(screen.getByRole("group", { name: "West seat" })).getByRole("button", { name: "Add bot" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Deal" })).toBeTruthy();
@@ -62,6 +65,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((within(menu).getByRole("button", { name: "Take back" }) as HTMLButtonElement).disabled).toBe(false);
     expect(within(menu).getByRole("button", { name: "Cancel this hand" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "Scores" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Recent hands" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "Leave the table" })).toBeTruthy();
   },
   "auto-play": () => {

@@ -35,6 +35,25 @@ describe("Root", () => {
     expect(location.hash).toBe("");
   });
 
+  it("opens the solo app's Recent hands dialog from the lobby, listing saved online hands", async () => {
+    const { applyAction, createGameState, deal, legalCards } = await import("@contractplay/core");
+    const { saveSoloData, loadSoloData } = await import("@contractplay/persistence");
+    const { saveIdentity } = await import("./online/identity.js");
+    // A finished hand: 1♣ passed out to North, then the first legal card each turn.
+    let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+    const step = (action: Parameters<typeof applyAction>[1]) => { const result = applyAction(game, action); if (!result.ok) throw new Error(result.error.message); game = result.state; };
+    for (const [seat, bid] of [["north", "1clubs"], ["east", "pass"], ["south", "pass"], ["west", "pass"]] as const) step({ type: "bid", seat, bid });
+    while (game.phase === "play") step({ type: "play", seat: game.currentActor, card: legalCards(game.hands[game.currentActor], game.currentTrick[0]?.card.suit)[0]! });
+    saveSoloData(window.localStorage, { ...loadSoloData(window.localStorage), completedHands: [{ id: "online-ABC234-1", name: "Online hand", game, savedAt: "2026-11-01T10:00:00.000Z" }] });
+    saveIdentity(window.localStorage, "Bob");
+    location.hash = "#/online";
+    render(<Root />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Recent hands" }));
+    const dialog = await screen.findByRole("dialog", { name: "Recent hands" });
+    expect(dialog.textContent).toContain("Online hand");
+    expect(location.hash).toBe("");
+  });
+
   it("follows hashchange", async () => {
     render(<Root />);
     await act(async () => { location.hash = "#/online"; });
