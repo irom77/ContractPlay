@@ -292,7 +292,7 @@ function boardSetExtra(): Partial<SoloData> {
       { nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false },
       { nsScore: 450, contract: "4S", declarer: "north", tricks: 11, multiplicity: 1, artificial: false },
       { nsScore: 170, contract: "3S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false },
-      { nsScore: -100, contract: "4HX", declarer: "east", tricks: 7, multiplicity: 1, artificial: false },
+      { nsScore: 500, contract: "4HX", declarer: "east", tricks: 7, multiplicity: 1, artificial: false },
       { nsScore: 0, contract: "Pass", multiplicity: 1, artificial: true }
     ]
   };
