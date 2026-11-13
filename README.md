@@ -4,24 +4,25 @@
 >
 > | # | Screen | # | Screen |
 > |---|---|---|---|
-> | 1 | Lobby | 14 | Scores |
-> | 2 | Seating | 15 | Rubber won |
-> | 3 | Auction: your call | 16 | Solo: new deal |
-> | 4 | Auction with hints | 17 | Solo: your call against bots |
-> | 5 | Declaring 4♠ with dummy | 18 | Solo: declaring against bots |
-> | 6 | Dummy playing for a bot declarer | 19 | Solo: auto play |
-> | 7 | Defending, dummy on your left | 20 | Solo: claiming |
-> | 8 | Defending, dummy on your right | 21 | Solo: game menu |
-> | 9 | Card queued | 22 | Solo: settings |
-> | 10 | Game menu | 23 | Solo: recent hands |
-> | 11 | Auto play | 24 | Solo: hand result with scorecard |
-> | 12 | Claim waiting on you | 25 | Solo: rubber won |
-> | 13 | Hand result | 26 | Solo: reviewing a saved hand |
+> | 1 | Lobby | 15 | Rubber won |
+> | 2 | Seating | 16 | Solo: new deal |
+> | 3 | Auction: your call | 17 | Solo: your call against bots |
+> | 4 | Auction with hints | 18 | Solo: declaring against bots |
+> | 5 | Declaring 4♠ with dummy | 19 | Solo: auto play |
+> | 6 | Dummy playing for a bot declarer | 20 | Solo: claiming |
+> | 7 | Defending, dummy on your left | 21 | Solo: game menu |
+> | 8 | Defending, dummy on your right | 22 | Solo: settings |
+> | 9 | Card queued | 23 | Solo: recent hands |
+> | 10 | Game menu | 24 | Solo: hand result with scorecard |
+> | 11 | Auto play | 25 | Solo: rubber won |
+> | 12 | Claim waiting on you | 26 | Solo: reviewing a saved hand |
+> | 13 | Hand result | 27 | Solo: result against the field |
+> | 14 | Scores | 28 | Solo: viewing the original play |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/26` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/28` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
-> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components; the solo screens (16–26) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components; the solo screens (16–28) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
 
 <p align="center">
@@ -114,7 +115,7 @@ pnpm tauri:dev
 pnpm tauri:build
 ```
 
-The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file, and completed hands can be exported as PBN. See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
+The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file, and completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set, played board by board, with the result compared against the file's field and the original auction and play viewable after each hand. See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
 
 ## Project guidance
 

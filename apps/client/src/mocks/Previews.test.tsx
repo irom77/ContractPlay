@@ -187,6 +187,16 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByRole("region", { name: "Hand review" })).toBeTruthy();
     expect(document.querySelector(".status-pill")!.textContent).toBe("Reviewing action 18 of 60");
     expect(screen.getByRole("group", { name: "Review controls" })).toBeTruthy();
+  },
+  "solo-field-result": () => {
+    expect(screen.getByRole("region", { name: "Result against the field" })).toBeTruthy();
+    expect(screen.getByText("Board 7 · 1 of 3")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "View original play" })).toBeTruthy();
+    expect(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Next board" })).toBeTruthy();
+  },
+  "solo-original-play": () => {
+    expect(document.querySelector(".status-pill")!.textContent).toMatch(/Original play: action 8 of/);
+    expect(screen.getByRole("button", { name: "Back to your result" })).toBeTruthy();
   }
 };
 

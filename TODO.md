@@ -21,7 +21,8 @@ The core rules, PBN package, and solo client are in place, and the solo app road
 
 ## Hand records and replays
 
-- [ ] Play boards from tournament or online hand records (PBN first, then LIN and USEBIO results) instead of random deals, compare the player's score with the real field (matchpoints or IMPs), and optionally view the original auction and play. Research: `docs/research/2026-11-13-hand-record-archives.md`.
+- [x] Play PBN board sets (several boards or a `ScoreTable`) board by board in solo play, compare the result with the file's field by its `Scoring` method (matchpoints, Butler IMPs, or cross-IMPs), and view the original auction and play after each hand. Research: `docs/research/2026-11-13-hand-record-archives.md`.
+- [ ] Extend hand records beyond the PBN MVP: LIN and USEBIO travellers, Butler-2 and Neuberg comparison, double-dummy par, licensed board sets, and online board sets.
 - [ ] Replay a previously played random deal from recent hands and compare the new result with earlier attempts at the same deal (built on the same board source and comparison scoring as hand records).
 
 ## Online multiplayer

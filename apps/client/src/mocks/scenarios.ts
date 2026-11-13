@@ -1,4 +1,4 @@
-import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type GameState, type Rank, type Rubber, type Seat } from "@contractplay/core";
+import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type HandRecord, type GameState, type Rank, type Rubber, type Seat } from "@contractplay/core";
 import type { SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
@@ -283,6 +283,24 @@ function solo(game: GameState | null, table: Omit<SoloPreview, "storage">, extra
   };
 }
 
+/** Board 7 of an imported club game: this hand as the record, with a five-row field (one row an artificial score). */
+function boardSetExtra(): Partial<SoloData> {
+  const game = soloGame(8, (finished) => finished.phase === "complete");
+  const record: HandRecord = {
+    board: "7", event: "Club Pairs", scoring: "MP", original: game.history.actions, dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal,
+    field: [
+      { nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false },
+      { nsScore: 450, contract: "4S", declarer: "north", tricks: 11, multiplicity: 1, artificial: false },
+      { nsScore: 170, contract: "3S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false },
+      { nsScore: -100, contract: "4HX", declarer: "east", tricks: 7, multiplicity: 1, artificial: false },
+      { nsScore: 0, contract: "Pass", multiplicity: 1, artificial: true }
+    ]
+  };
+  const record2: HandRecord = { ...record, board: "8" };
+  const record3: HandRecord = { ...record, board: "9" };
+  return { boardSet: { name: "Club Pairs", records: [record, record2, record3], position: 0 }, currentRecord: record, rubber: { hands: [] } };
+}
+
 export const soloScreens: readonly PreviewScreen[] = [
   {
     id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, bot skill, and bidding style.",
@@ -331,6 +349,14 @@ export const soloScreens: readonly PreviewScreen[] = [
   {
     id: "solo-review", title: "Solo: reviewing a saved hand", detail: "A finished hand opened from Recent hands, stepped to the third trick with Previous and Next.",
     build: () => solo(null, { userSeat: "north", review: { handId: "preview-saved", cursor: 8 + 10 } })
+  },
+  {
+    id: "solo-field-result", title: "Solo: result against the field", detail: "4♠ made on board 7 of an imported club game: your +420 placed in the field's traveller with your matchpoint percentage, the original play one click away, and Next board.",
+    build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north" }, boardSetExtra())
+  },
+  {
+    id: "solo-original-play", title: "Solo: viewing the original play", detail: "The same board as it was really bid and played, stepped through with Previous and Next; Back to your result returns to the comparison.",
+    build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north", viewOriginal: 8 }, boardSetExtra())
   }
 ];
 
