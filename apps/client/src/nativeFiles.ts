@@ -12,7 +12,7 @@ export async function openPbnFile(): Promise<string | null> {
     multiple: false,
     directory: false,
     fileAccessMode: "scoped",
-    filters: [{ name: "Bridge hand", extensions: ["pbn", "txt"] }]
+    filters: [{ name: "Bridge hand or board set backup", extensions: ["pbn", "txt", "json"] }]
   });
   if (!path) return null;
   return readTextFile(path);
@@ -22,7 +22,7 @@ export async function savePbnFile(fileName: string, contents: string): Promise<b
   const path = await save({
     title: "Export bridge hand",
     defaultPath: fileName,
-    filters: [{ name: "Portable Bridge Notation", extensions: ["pbn"] }]
+    filters: [{ name: fileName.endsWith(".json") ? "Board set backup" : "Portable Bridge Notation", extensions: [fileName.endsWith(".json") ? "json" : "pbn"] }]
   });
   if (!path) return false;
   await writeTextFile(path, contents);

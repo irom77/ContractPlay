@@ -1,6 +1,6 @@
 import { applyAction, claimSeatFor, createGameState, deal, validatePlay, type GameAction, type HandRecord } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { deleteSavedHand, exportSavedHand, loadSoloData, saveSoloData, type BoardSet, type SoloData } from "./index.js";
+import { deleteSavedHand, exportSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, MAX_BOARD_SET_LIBRARY_CHARS, MAX_BOARD_SET_LIBRARY_ENTRIES, type BoardSet, type BoardSetLibraryEntry, type SoloData } from "./index.js";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -169,6 +169,34 @@ describe("local solo store", () => {
       field: [{ nsScore: 90, contract: "1C", declarer: "north", tricks: 8, multiplicity: 2, artificial: false }, { multiplicity: 1, artificial: true }]
     };
     const boardSet: BoardSet = { name: "Club night", records: [handRecord, { ...handRecord, board: "2" }], position: 1 };
+    const libraryEntry: BoardSetLibraryEntry = { id: "set-1", name: "Club night", records: boardSet.records, progress: 1, completed: false };
+
+    it("round-trips a board-set library alongside the active set", () => {
+      const storage = new MemoryStorage();
+      const data: SoloData = { ...emptyData, boardSet, boardSetLibrary: [libraryEntry] };
+      saveSoloData(storage, data);
+      expect(loadSoloData(storage)).toEqual(data);
+    });
+
+    it("drops malformed library entries and caps its retained size", () => {
+      const storage = new MemoryStorage();
+      const entries = Array.from({ length: MAX_BOARD_SET_LIBRARY_ENTRIES + 1 }, (_, index) => ({ ...libraryEntry, id: `set-${index}` }));
+      saveSoloData(storage, { ...emptyData, boardSetLibrary: [...entries, { ...libraryEntry, id: "bad", progress: 3 }] });
+      expect(loadSoloData(storage).boardSetLibrary).toHaveLength(MAX_BOARD_SET_LIBRARY_ENTRIES);
+      const tooLarge = { ...libraryEntry, id: "large", name: "x".repeat(MAX_BOARD_SET_LIBRARY_CHARS) };
+      expect(upsertBoardSetLibrary([], tooLarge).stored).toBe(false);
+    });
+
+    it("updates a set's stored progress without making a duplicate", () => {
+      const updated = upsertBoardSetLibrary([libraryEntry], { ...libraryEntry, progress: 2, completed: true });
+      expect(updated.stored).toBe(true);
+      expect(updated.entries).toEqual([{ ...libraryEntry, progress: 2, completed: true }]);
+    });
+
+    it("round-trips a portable board-set backup and rejects malformed JSON", () => {
+      expect(parseBoardSetBackup(serializeBoardSetBackup(libraryEntry))).toEqual(libraryEntry);
+      expect(parseBoardSetBackup('{"format":"ContractPlay board set","version":1,"boardSet":{"records":[]}}')).toBeUndefined();
+    });
 
     it("round-trips a board set, current record and saved hand record", () => {
       const storage = new MemoryStorage();

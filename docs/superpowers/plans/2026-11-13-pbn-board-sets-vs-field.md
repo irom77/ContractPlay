@@ -340,6 +340,10 @@ Behaviour in `App.tsx`:
 ### Post-MVP follow-up
 
 PBN `Scoring` modifier `Butler-2` is now supported in `packages/core/src/field.ts`: its datum excludes one lowest and one highest real field score (respecting row multiplicity), then rounds to the nearest 10. The remaining format and scoring extensions stay listed in `TODO.md`.
+
+### Board set library follow-up (2026-11-13)
+
+Implemented in `packages/persistence` and `apps/client/src/App.tsx`: Recent hands stores up to eight imported sets within a 1.5 MB serialized-data cap, tracks progress, and offers resume, restart, delete, and portable JSON backup export/import. Browser downloads and Tauri's scoped file dialogs both support JSON backups. The remaining hand-record extensions are tracked in `TODO.md`.
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.

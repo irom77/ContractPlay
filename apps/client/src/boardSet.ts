@@ -39,7 +39,11 @@ export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number
     const field = games.map(tableResult).filter((row): row is TravellerRow => row !== undefined);
     records.push({ ...record, field });
   }
-  return records.length ? { set: { name: records[0]!.event || "Imported boards", records, position: 0 }, skipped, boards } : { skipped, boards };
+  return records.length ? { set: { id: createBoardSetId(), name: records[0]!.event || "Imported boards", records, position: 0 }, skipped, boards } : { skipped, boards };
+}
+
+export function createBoardSetId(): string {
+  return `board-set-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** A file played as a set: several boards, or boards that carry the field's results. */

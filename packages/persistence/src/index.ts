@@ -17,7 +17,13 @@ export type SavedHand = Readonly<{
 }>;
 
 /** An imported PBN file's boards; `position` is the index of the board being played. */
-export type BoardSet = Readonly<{ name: string; records: readonly HandRecord[]; position: number }>;
+export type BoardSet = Readonly<{ id?: string; name: string; records: readonly HandRecord[]; position: number }>;
+
+/** A set kept in Recent hands; progress is the number of boards already completed. */
+export type BoardSetLibraryEntry = Readonly<{ id: string; name: string; records: readonly HandRecord[]; progress: number; completed: boolean }>;
+export const MAX_BOARD_SET_LIBRARY_ENTRIES = 8;
+/** Leave room in localStorage for current play, completed hands, and app settings. */
+export const MAX_BOARD_SET_LIBRARY_CHARS = 1_500_000;
 
 export type PbnMetadata = Readonly<{
   tags?: readonly Readonly<{ name: string; value: string }>[];
@@ -33,6 +39,7 @@ export type SoloData = Readonly<{
   /** The rubber being played in rubber-bridge scoring; absent until the first rubber deal. */
   rubber?: Rubber;
   boardSet?: BoardSet;
+  boardSetLibrary?: readonly BoardSetLibraryEntry[];
   currentRecord?: HandRecord;
 }>;
 
@@ -94,8 +101,48 @@ function isHandRecord(value: unknown): value is HandRecord {
 }
 
 function isBoardSet(value: unknown): value is BoardSet {
-  return isRecord(value) && typeof value.name === "string" && Array.isArray(value.records) && value.records.length > 0 && value.records.every(isHandRecord) &&
+  return isRecord(value) && (value.id === undefined || typeof value.id === "string") && typeof value.name === "string" && Array.isArray(value.records) && value.records.length > 0 && value.records.every(isHandRecord) &&
     Number.isInteger(value.position) && Number(value.position) >= 0 && Number(value.position) < value.records.length;
+}
+
+function isBoardSetLibraryEntry(value: unknown): value is BoardSetLibraryEntry {
+  return isRecord(value) && typeof value.id === "string" && typeof value.name === "string" && Array.isArray(value.records) && value.records.length > 0 && value.records.every(isHandRecord) &&
+    Number.isInteger(value.progress) && Number(value.progress) >= 0 && Number(value.progress) <= value.records.length && typeof value.completed === "boolean";
+}
+
+function withinBoardSetLibraryLimits(entries: readonly BoardSetLibraryEntry[]): readonly BoardSetLibraryEntry[] {
+  const kept: BoardSetLibraryEntry[] = [];
+  for (const entry of entries) {
+    if (kept.length >= MAX_BOARD_SET_LIBRARY_ENTRIES) break;
+    const candidate = [...kept, entry];
+    if (JSON.stringify(candidate).length > MAX_BOARD_SET_LIBRARY_CHARS) break;
+    kept.push(entry);
+  }
+  return kept;
+}
+
+/** Portable JSON is deliberately limited to hand records, never stored player names. */
+export function serializeBoardSetBackup(entry: BoardSetLibraryEntry): string {
+  return JSON.stringify({ format: "ContractPlay board set", version: 1, boardSet: entry }, null, 2);
+}
+
+export function parseBoardSetBackup(text: string): BoardSetLibraryEntry | undefined {
+  try {
+    const value: unknown = JSON.parse(text);
+    if (isRecord(value) && value.format === "ContractPlay board set" && value.version === 1 && isBoardSetLibraryEntry(value.boardSet)) return value.boardSet;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/** Add or update the most recently used set within the per-browser library limit. */
+export function upsertBoardSetLibrary(
+  entries: readonly BoardSetLibraryEntry[],
+  entry: BoardSetLibraryEntry
+): { entries: readonly BoardSetLibraryEntry[]; stored: boolean } {
+  const updated = withinBoardSetLibraryLimits([entry, ...entries.filter((candidate) => candidate.id !== entry.id)]);
+  return { entries: updated, stored: updated.some((candidate) => candidate.id === entry.id) };
 }
 
 function isGame(value: unknown): value is GameState {
@@ -171,6 +218,7 @@ function normalize(value: unknown): SoloData {
     completedHands: Array.isArray(value.completedHands) ? value.completedHands.filter(isSavedHand).map(cleanSavedHand) : [],
     ...(isRubber(value.rubber) ? { rubber: cleanRubber(value.rubber) } : {}),
     ...(isBoardSet(value.boardSet) ? { boardSet: value.boardSet } : {}),
+    ...(Array.isArray(value.boardSetLibrary) ? { boardSetLibrary: withinBoardSetLibraryLimits(value.boardSetLibrary.filter(isBoardSetLibraryEntry)) } : {}),
     ...(isHandRecord(value.currentRecord) ? { currentRecord: value.currentRecord } : {})
   };
 }

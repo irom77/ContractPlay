@@ -356,7 +356,7 @@ describe("bridge table", () => {
     const hands = screen.getByRole("dialog", { name: "Recent hands" });
     expect(within(hands).getByRole("region", { name: "Recent hands" })).toBeTruthy();
     await user.click(within(hands).getByText("Import a PBN deal"));
-    expect(within(hands).getByRole("button", { name: "Choose PBN file" })).toBeTruthy();
+    expect(within(hands).getByRole("button", { name: "Choose file" })).toBeTruthy();
     expect(within(hands).getByRole("button", { name: "Import hand" })).toBeTruthy();
   });
 
@@ -1313,7 +1313,7 @@ describe("bridge table", () => {
     const pbn = exportPbn({ dealer: "north", vulnerability: "None", actions: [], deal: deal() });
     render(<App />);
     await user.click(screen.getByText("Import a PBN deal"));
-    await user.click(screen.getByRole("button", { name: "Choose PBN file" }));
+    await user.click(screen.getByRole("button", { name: "Choose file" }));
     const file = new File([pbn], "board.pbn", { type: "text/plain" });
     Object.defineProperty(file, "text", { value: () => Promise.resolve(pbn) });
     fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
@@ -1411,6 +1411,21 @@ describe("bridge table", () => {
     await user.click(screen.getByRole("button", { name: "Import hand" }));
     return user;
   }
+
+  it("keeps imported board sets in Recent hands and updates their saved progress", async () => {
+    await importTwoBoards();
+    fireEvent.click(menuItem("Next board")!);
+    expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSetLibrary[0]).toMatchObject({
+      name: "Imported boards", progress: 1, completed: false
+    });
+
+    chooseMenu("Recent hands");
+    const recent = screen.getByRole("region", { name: "Recent hands" });
+    expect(within(recent).getByText("Imported boards")).toBeTruthy();
+    expect(within(recent).getByText("1 of 2 played")).toBeTruthy();
+    expect(within(recent).getByRole("button", { name: "Resume" })).toBeTruthy();
+    expect(within(recent).getByRole("button", { name: "Restart" })).toBeTruthy();
+  });
 
   const fieldPanel = () => screen.queryByRole("region", { name: "Result against the field" });
 

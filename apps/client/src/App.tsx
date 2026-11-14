@@ -29,9 +29,9 @@ import {
   type Vulnerability
 } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
-import { deleteSavedHand, loadSoloData, saveSoloData, type BoardSet, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
+import { deleteSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
-import { boardLabel, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
+import { boardLabel, boardSetFromPbn, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
@@ -132,6 +132,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   });
   const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
   const [boardSet, setBoardSet] = useState<BoardSet | undefined>(() => soloData.boardSet);
+  const [boardSetLibrary, setBoardSetLibrary] = useState<readonly BoardSetLibraryEntry[]>(() => soloData.boardSetLibrary ?? []);
   const [currentRecord, setCurrentRecord] = useState<HandRecord | undefined>(() => soloData.currentRecord);
   // The hand whose end-of-hand scorecard the user closed.
   const [closedScorecard, setClosedScorecard] = useState<string | null>(null);
@@ -234,12 +235,13 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       completedHands,
       rubber,
       ...(boardSet ? { boardSet } : {}),
+      ...(boardSetLibrary.length ? { boardSetLibrary } : {}),
       ...(currentRecord ? { currentRecord } : {})
     };
     latestSoloData.current = nextData;
     saveSoloData(persistence.storage, nextData);
     setSoloData(nextData);
-  }, [game, currentHandId, currentPbnMetadata, rubber, boardSet, currentRecord]);
+  }, [game, currentHandId, currentPbnMetadata, rubber, boardSet, boardSetLibrary, currentRecord]);
 
   // A rubber hand is scored when it ends, and loses its score again if it is taken back from the end.
   useEffect(() => {
@@ -441,22 +443,42 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setMessage("");
   }
 
+  function rememberBoardSet(entry: BoardSetLibraryEntry): boolean {
+    const result = upsertBoardSetLibrary(boardSetLibrary, entry);
+    setBoardSetLibrary(result.entries);
+    return result.stored;
+  }
+
+  function boardSetEntry(set: BoardSet, progress: number, completed = false): BoardSetLibraryEntry {
+    return { id: set.id ?? createBoardSetId(), name: set.name, records: set.records, progress, completed };
+  }
+
   // A board of an imported set is dealt as recorded; it stays out of the rubber and leaves the next-deal settings alone.
   function startBoard(set: BoardSet) {
-    const record = set.records[set.position]!;
+    const identified = { ...set, id: set.id ?? createBoardSetId() };
+    const stored = rememberBoardSet(boardSetEntry(identified, identified.position));
+    const record = identified.records[identified.position]!;
     setCurrentHandId(createHandId());
     setGame(createGameState({ deal: record.deal, dealer: record.dealer, vulnerability: record.vulnerability }));
     setCurrentRecord(record);
-    setBoardSet(set);
+    setBoardSet(identified);
     setCurrentPbnMetadata(undefined);
     setAuctionShown(false);
     setReviewHandId(undefined);
     setOriginal(undefined);
     setDialog(undefined);
-    setMessage("");
+    if (!stored) setMessage("This board set exceeds the local library limit; it is available only while active.");
+    else setMessage("");
   }
 
   function importHand(contents = pbnInput) {
+    const backup = parseBoardSetBackup(contents);
+    if (backup) {
+      const stored = rememberBoardSet(backup);
+      setPbnInput("");
+      setMessage(stored ? `Imported ${backup.name} into Recent hands.` : "This board set exceeds the local library limit and could not be stored.");
+      return;
+    }
     const { set, skipped, boards } = boardSetFromPbn(contents);
     if (set && isBoardSetFile(set)) {
       startBoard(set);
@@ -492,6 +514,51 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setOriginal(undefined);
     setPbnInput("");
     setMessage(skipped ? `Skipped ${skipped} board(s) that could not be read.` : "");
+  }
+
+  function advanceBoardSet() {
+    if (!boardSet) return;
+    const nextPosition = boardSet.position + 1;
+    const completed = nextPosition >= boardSet.records.length;
+    const entry = boardSetEntry(boardSet, completed ? boardSet.records.length : nextPosition, completed);
+    const stored = rememberBoardSet(entry);
+    if (completed) setBoardSet(undefined);
+    else startBoard({ ...boardSet, position: nextPosition });
+    if (!stored) setMessage("Board set progress could not be saved because the local library limit was reached.");
+  }
+
+  function finishBoardSet() {
+    if (!boardSet) return;
+    const stored = rememberBoardSet(boardSetEntry(boardSet, boardSet.records.length, true));
+    setBoardSet(undefined);
+    if (!stored) setMessage("Board set progress could not be saved because the local library limit was reached.");
+  }
+
+  function resumeBoardSet(entry: BoardSetLibraryEntry, restart = false) {
+    const position = restart || entry.completed ? 0 : Math.min(entry.progress, entry.records.length - 1);
+    startBoard({ id: entry.id, name: entry.name, records: entry.records, position });
+  }
+
+  function deleteBoardSet(entry: BoardSetLibraryEntry) {
+    setBoardSetLibrary((items) => items.filter((item) => item.id !== entry.id));
+    if (boardSet?.id === entry.id) setBoardSet(undefined);
+  }
+
+  async function exportBoardSet(entry: BoardSetLibraryEntry) {
+    const contents = serializeBoardSetBackup(entry);
+    const fileName = `${entry.name.replace(/[^\w.-]+/g, "-") || "board-set"}.json`;
+    if (isNativeClient()) {
+      try { await savePbnFile(fileName, contents); } catch (error) {
+        setMessage(`Cannot export board set: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   async function choosePbnFile() {
@@ -682,8 +749,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     <summary>Import a PBN deal</summary>
     <form onSubmit={(event) => { event.preventDefault(); importHand(); }}>
       <label htmlFor="pbn-input">PBN deal</label>
-      <input ref={pbnFileInput} aria-label="PBN file" type="file" accept=".pbn,.txt,text/plain" onChange={(event) => { void importSelectedPbnFile(event); }} hidden />
-      <button className="secondary-button" type="button" onClick={() => { void choosePbnFile(); }}>Choose PBN file</button>
+      <input ref={pbnFileInput} aria-label="PBN or board set backup file" type="file" accept=".pbn,.txt,.json,text/plain,application/json" onChange={(event) => { void importSelectedPbnFile(event); }} hidden />
+      <button className="secondary-button" type="button" onClick={() => { void choosePbnFile(); }}>Choose file</button>
       <textarea id="pbn-input" value={pbnInput} onChange={(event) => setPbnInput(event.target.value)} placeholder={'[Dealer "N"]\n[Vulnerable "None"]\n[Deal "N:..."]'} />
       <button className="secondary-button" type="submit">Import hand</button>
     </form>
@@ -694,6 +761,10 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       <button className="review-link" aria-label={`Review ${savedHandName(hand)}, played ${playedOn(hand)}`} onClick={() => openReview(hand)}><strong>{savedHandName(hand)}</strong><span>Played {playedOn(hand)}</span></button>
       <div className="recent-actions">{(!hand.record || hand.record.event === "Previous attempts") && !hand.pbnMetadata && hand.game.score ? <button onClick={() => replaySavedDeal(hand)} aria-label={`Play this deal again from ${savedHandName(hand)}`}>Play this deal again</button> : null}<button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}
+    {boardSetLibrary.length ? <><h3>Imported board sets</h3><ul className="recent-list">{boardSetLibrary.map((entry) => <li key={entry.id}>
+      <div className="review-link"><strong>{entry.name}</strong><span>{entry.completed ? `Complete · ${entry.records.length} boards` : `${entry.progress} of ${entry.records.length} played`}</span></div>
+      <div className="recent-actions"><button type="button" onClick={() => resumeBoardSet(entry)}>Resume</button><button type="button" onClick={() => resumeBoardSet(entry, true)}>Restart</button><button type="button" onClick={() => { void exportBoardSet(entry); }}>Export backup</button><button type="button" onClick={() => deleteBoardSet(entry)}>Delete</button></div>
+    </li>)}</ul></> : null}
   </section>;
   const fullscreenButton = <button className="icon-button" type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} aria-pressed={fullscreen} title={`${fullscreen ? "Exit full screen" : "Full screen"} (F)`} onClick={() => { void toggleFullscreen(); }}>
     <svg viewBox="0 0 24 24" aria-hidden="true">{fullscreen
@@ -735,7 +806,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
           <div className="setup-controls">{dealSettings}</div>
           <button className="primary-button" onClick={startHand}>Start a new hand</button>
           {online ? <button className="secondary-button" type="button" onClick={goOnline}>Play online</button> : null}
-          {soloData.completedHands.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
+          {soloData.completedHands.length || boardSetLibrary.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
           {pbnImportForm}
         </section>
         {message ? <p className="error-message" role="alert">{message}</p> : null}
@@ -788,8 +859,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     ...(boardSet ? [
       { id: "leave-set", label: "Leave the board set", title: "Stop playing this board set; this hand stays on the table", onSelect: () => setBoardSet(undefined) },
       boardSet.position + 1 < boardSet.records.length
-        ? { id: "deal", label: "Next board", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and play the next" } : {}), onSelect: () => startBoard({ ...boardSet, position: boardSet.position + 1 }) }
-        : { id: "deal", label: "Finish board set", title: "End the board set; this hand stays on the table", onSelect: () => setBoardSet(undefined) }
+        ? { id: "deal", label: "Next board", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and play the next" } : {}), onSelect: advanceBoardSet }
+        : { id: "deal", label: "Finish board set", title: "End the board set; this hand stays on the table", onSelect: finishBoardSet }
     ] : [
       { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
     ])
@@ -813,8 +884,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   // While a board set is active, the result moves on through the set instead of dealing afresh.
   const nextButton = isReviewing ? null : boardSet
     ? boardSet.position + 1 < boardSet.records.length
-      ? <button className="primary-button" type="button" onClick={() => startBoard({ ...boardSet, position: boardSet.position + 1 })}>Next board</button>
-      : <button className="primary-button" type="button" onClick={() => setBoardSet(undefined)}>Finish board set</button>
+      ? <button className="primary-button" type="button" onClick={advanceBoardSet}>Next board</button>
+      : <button className="primary-button" type="button" onClick={finishBoardSet}>Finish board set</button>
     : <button className="primary-button" type="button" onClick={startHand}>Next deal</button>;
   const handOver = phase === "complete" || phase === "passed-out";
   const fieldResult = shownRecord ? <FieldResult
