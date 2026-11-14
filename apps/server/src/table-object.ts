@@ -188,12 +188,18 @@ export class TableObject extends DurableObject<Env> {
     const state = await this.load();
     if (!state) return this.gone(ws);
     const parsed = parseClientMessage(message);
-    if (parsed?.type !== "hello" || (!attachmentOf(ws)?.account && parsed.secret === undefined)) return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
+    if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
+    const account = attachmentOf(ws)?.account;
+    if ((account || parsed.expectedPlayerId !== undefined) && parsed.expectedPlayerId !== account?.primaryPlayerId) {
+      send(ws, { type: "account-changed" });
+      ws.close(1008, "account changed");
+      return;
+    }
+    if (!account && parsed.secret === undefined) return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
     if (this.openSockets().filter((other) => other !== ws && identityOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
       ws.close(1013, "too many connections");
       return;
     }
-    const account = attachmentOf(ws)?.account;
     let player: PlayerId;
     let name = parsed.name;
     if (account) {

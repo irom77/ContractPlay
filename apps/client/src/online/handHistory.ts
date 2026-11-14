@@ -1,10 +1,9 @@
 import { isSavedHand, loadSoloData, saveSoloData, type SavedHand, type StorageLike } from "@contractplay/persistence";
 import type { AccountSession } from "./auth.js";
+import { isOnlineHand as isOnline, newestHands as newest, retainHandHistory } from "../handHistoryRetention.js";
 
 const path = "/api/account/online-hands";
-const isOnline = (hand: SavedHand) => hand.id.startsWith("online-");
 const belongsTo = (hand: SavedHand, account: AccountSession) => !hand.onlineHistory?.ownerPlayerId || hand.onlineHistory.ownerPlayerId === account.playerId;
-const newest = (hands: readonly SavedHand[]) => [...hands].sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt) || b.id.localeCompare(a.id));
 const queues = new WeakMap<StorageLike, Promise<void>>();
 const owners = new WeakMap<StorageLike, string>();
 
@@ -23,9 +22,10 @@ function merge(storage: StorageLike, account: AccountSession, remote: readonly S
   if (owners.get(storage) !== account.playerId) return;
   // Reload at commit time: solo play and other completed hands may have changed during the request.
   const data = loadSoloData(storage);
-  const online = new Map(data.completedHands.filter(hand => isOnline(hand) && belongsTo(hand, account)).map(hand => [hand.id, hand]));
-  for (const hand of remote) online.set(hand.id, { ...hand, onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } });
-  const completedHands = [...data.completedHands.filter(hand => !isOnline(hand)), ...newest([...online.values()]).slice(0, 25)];
+  const owned = (hand: SavedHand): SavedHand => ({ ...hand, onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } });
+  const online = new Map(data.completedHands.filter(hand => isOnline(hand) && belongsTo(hand, account)).map(hand => [hand.id, owned(hand)]));
+  for (const hand of remote) online.set(hand.id, owned(hand));
+  const completedHands = retainHandHistory([...online.values(), ...data.completedHands.filter(hand => !isOnline(hand) || !belongsTo(hand, account))]);
   saveSoloData(storage, { ...data, completedHands });
 }
 

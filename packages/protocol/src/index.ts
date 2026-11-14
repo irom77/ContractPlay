@@ -1,7 +1,7 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = 7;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -46,8 +46,8 @@ export type TableView = TableSummary & {
 };
 
 export type ClientMessage =
-  // A missing secret requires a session identity verified by the server at the WebSocket upgrade.
-  | { type: "hello"; version: number; secret?: string; name: string }
+  // expectedPlayerId only guards a captured account against a changed cookie; the server verifies identity.
+  | { type: "hello"; version: number; secret?: string; expectedPlayerId?: string; name: string }
   | { type: "sit"; seat: Seat } | { type: "leave" } | { type: "refresh" }
   | { type: "setBot"; seat: Seat; skill: SkillLevel }
   | { type: "clearSeat"; seat: Seat }
@@ -64,7 +64,8 @@ export type ServerMessage =
   | { type: "refused"; reason: RefusalReason; view: TableView }
   | { type: "reload" }
   | { type: "gone" }
-  | { type: "identity-conflict" };
+  | { type: "identity-conflict" }
+  | { type: "account-changed" };
 
 const SKILLS: readonly string[] = ["beginner", "intermediate", "advanced", "expert"];
 const SECRET = /^[A-Za-z0-9_-]{32,128}$/;
@@ -118,7 +119,9 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
     case "hello": {
       const name = cleanName(data.name, MAX_PLAYER_NAME);
       if (typeof data.version !== "number" || (data.secret !== undefined && (typeof data.secret !== "string" || !SECRET.test(data.secret))) || name === undefined) return undefined;
-      return { type: "hello", version: data.version, ...(typeof data.secret === "string" ? { secret: data.secret } : {}), name };
+      if (data.expectedPlayerId !== undefined && (typeof data.expectedPlayerId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(data.expectedPlayerId))) return undefined;
+      return { type: "hello", version: data.version, ...(typeof data.secret === "string" ? { secret: data.secret } : {}),
+        ...(typeof data.expectedPlayerId === "string" ? { expectedPlayerId: data.expectedPlayerId } : {}), name };
     }
     case "sit": case "clearSeat": case "handToBot": {
       const seat = seatOf(data.seat);

@@ -51,15 +51,23 @@ describe("connectTable", () => {
     expect(statuses).toEqual(["connecting", "open"]);
   });
 
-  it("uses the cookie-bearing socket URL and omits guest secrets and account IDs for accounts", () => {
+  it("binds initial and reconnect account hellos to the captured player", () => {
     const { sockets } = setup(true);
     expect(sockets[0]?.url).toBe("wss://example.com/api/tables/ABC234/ws");
     sockets[0]?.open();
-    expect(JSON.parse(sockets[0]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in" });
+    expect(JSON.parse(sockets[0]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in", expectedPlayerId: "untrusted-client-id" });
     sockets[0]?.drop();
     vi.advanceTimersByTime(1000);
     sockets[1]?.open();
-    expect(JSON.parse(sockets[1]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in" });
+    expect(JSON.parse(sockets[1]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in", expectedPlayerId: "untrusted-client-id" });
+  });
+
+  it("stops a reconnect when the cookie account changed", () => {
+    const { sockets, statuses } = setup(true);
+    sockets[0]?.open(); sockets[0]?.drop(); vi.advanceTimersByTime(1000); sockets[1]?.open();
+    sockets[1]?.receive({ type: "account-changed" }); sockets[1]?.drop(); vi.advanceTimersByTime(60_000);
+    expect(statuses.at(-1)).toBe("account-changed");
+    expect(sockets).toHaveLength(2);
   });
 
   it("stops permanently on an identity conflict", () => {

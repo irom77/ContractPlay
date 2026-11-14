@@ -110,11 +110,11 @@
 - Modify: `apps/client/src/online/connection.ts`
 - Modify: `apps/client/src/online/connection.test.ts`
 
-**Implementation notes:** Shared protocol version 6 supports secret-free account hello and terminal `identity-conflict`; dedicated `table-object.test.ts` covers the Worker-to-table identity boundary. The connection accepts either a guest `Identity` or restored `AccountSession`; OnlineTable account restoration/conflict messaging is handed off to its next integration task.
+**Implementation notes:** Shared protocol version 7 supports account hello with a captured `expectedPlayerId`, checked against the session identity at every upgrade/reconnect, and terminal `identity-conflict` / `account-changed`; dedicated `table-object.test.ts` covers the Worker-to-table identity boundary. The connection accepts either a guest `Identity` or restored `AccountSession`; OnlineTable account restoration/conflict messaging is handed off to its next integration task.
 
 **Interfaces:**
 - Authenticated WebSocket requests are resolved by the Worker from the session cookie and forwarded internally with a verified account identity; clients cannot supply account IDs as authority.
-- The table object accepts either the existing guest hello or a verified internal account identity and resolves to the uniquely seated linked player ID when present.
+- The table object accepts either the existing guest hello or a verified internal account identity and resolves to the uniquely seated linked player ID when present. Authenticated hello must include the captured primary player ID as a mismatch guard; changed or absent sessions and missing/mismatched expectations produce terminal `account-changed` before seat access.
 
 - [x] **Step 1: Write failing table identity tests** for new account identity, one linked seated guest identity, no linked identity seated, and multiple linked identities seated (explicit identity conflict without taking control of either seat).
 - [x] **Step 2: Write failing connection tests** confirming guest hello remains unchanged and authenticated sockets omit the guest secret while using same-origin cookies.
@@ -136,7 +136,7 @@
 **Interfaces:**
 - `GET /api/account/online-hands`, `POST /api/account/online-hands/import`, and `PUT /api/account/online-hands/:handId` derive account ownership exclusively from the session.
 - Every history request carries the captured account's `X-Expected-Player-ID`; the Worker rejects a missing or mismatched value with `409 account-changed` before reading or writing archives. This detects cookies changed by another tab and never authorizes an account.
-- Client history sync merges canonical remote hands with the local 25 most recent online hands by stable hand ID; imported records are marked as user-imported and are never submitted as competitive results.
+- Client history sync merges canonical remote hands with the local 25 most recent online hands by stable hand ID; imported records are marked as user-imported and are never submitted as competitive results. Solo history, guest online history, and each account online cache have independent 25-hand limits. Switching accounts preserves other-owner cached uploads without importing them. Recent Hands sorts newest-first and shows one entry per stable hand ID while retaining account-specific retry copies.
 
 - [x] **Step 1: Write failing server tests** for unauthenticated rejection, caller-supplied account ID ignored, schema/serialized-size limits, duplicate hand ID idempotency, imported archive marking, and 25-record retention.
 - [x] **Step 2: Write failing client tests** for initial guest history import after account link and merge of remote history on another device without duplicating local records.

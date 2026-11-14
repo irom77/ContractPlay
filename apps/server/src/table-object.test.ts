@@ -79,11 +79,30 @@ async function seatGuest(id: string, secret: string, seat: "north" | "east") {
 const accountHello = { type: "hello", version: PROTOCOL_VERSION, name: "Untrusted name" };
 
 describe("authenticated table identities", () => {
-  it("reloads the previous guest-only protocol before accepting an account identity", async () => {
+  it("rejects a reconnect captured for A after the session changes to B or disappears", async () => {
+    const id = await table();
+    const first = await account();
+    const initial = await socket(id, { Cookie: first.cookie });
+    initial.send({ ...accountHello, expectedPlayerId: first.account.primaryPlayerId });
+    await initial.view();
+    const second = await account();
+    const before = await stored(id);
+    for (const headers of [{ Cookie: second.cookie }, {}]) {
+      const reconnect = await socket(id, headers);
+      reconnect.send({ ...accountHello, expectedPlayerId: first.account.primaryPlayerId });
+      expect(await reconnect.next()).toEqual({ type: "account-changed" });
+      expect(await stored(id)).toEqual(before);
+    }
+    const missingExpectation = await socket(id, { Cookie: second.cookie });
+    missingExpectation.send(accountHello);
+    expect(await missingExpectation.next()).toEqual({ type: "account-changed" });
+    expect(await stored(id)).toEqual(before);
+  });
+  it("reloads the previous protocol before accepting an account identity", async () => {
     const id = await table();
     const auth = await account();
     const client = await socket(id, { Cookie: auth.cookie });
-    client.send({ ...accountHello, version: 5 });
+    client.send({ ...accountHello, version: PROTOCOL_VERSION - 1 });
     expect(await client.next()).toEqual({ type: "reload" });
     expect((await stored(id))?.connections).toEqual({});
   });
@@ -92,7 +111,7 @@ describe("authenticated table identities", () => {
     const id = await table();
     const auth = await account();
     const client = await socket(id, { Cookie: auth.cookie });
-    client.send(accountHello);
+    client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
     expect((await client.view()).yourSeat).toBeUndefined();
     client.send({ type: "sit", seat: "north" });
     expect((await client.view()).seats.north).toMatchObject({ kind: "human", name: "Account name" });
@@ -105,7 +124,7 @@ describe("authenticated table identities", () => {
     const guestPlayer = await hash(secretB);
     const auth = await account([await hash(secretA), guestPlayer]);
     const client = await socket(id, { Cookie: auth.cookie });
-    client.send(accountHello);
+    client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
     const view = await client.view();
     expect(view.yourSeat).toBe("east");
     expect(view.seats.east).toMatchObject({ away: false });
@@ -121,7 +140,7 @@ describe("authenticated table identities", () => {
     for (let i = 0; i < 50 && (await stored(id))?.connections[guestPlayer]; i++) await new Promise((resolve) => setTimeout(resolve, 20));
     expect((await stored(id))?.connections[guestPlayer]).toBeUndefined();
     const reconnected = await socket(id, { Cookie: auth.cookie });
-    reconnected.send(accountHello);
+    reconnected.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
     expect((await reconnected.view()).yourSeat).toBe("east");
     expect((await stored(id))?.connections[guestPlayer]).toBe(1);
   });
@@ -130,7 +149,7 @@ describe("authenticated table identities", () => {
     const id = await table();
     const auth = await account([await hash(secretA), await hash(secretB)]);
     const client = await socket(id, { Cookie: auth.cookie });
-    client.send(accountHello);
+    client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
     await client.view();
     expect((await stored(id))?.connections).toEqual({ [auth.account.primaryPlayerId]: 1 });
   });
@@ -142,7 +161,7 @@ describe("authenticated table identities", () => {
     const auth = await account([await hash(secretA), await hash(secretB)]);
     const before = await stored(id);
     const client = await socket(id, { Cookie: auth.cookie });
-    client.send(accountHello);
+    client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
     expect(await client.next()).toEqual({ type: "identity-conflict" });
     expect(await stored(id)).toEqual(before);
   });
@@ -152,7 +171,7 @@ describe("authenticated table identities", () => {
     await seatGuest(id, secretB, "east");
     const auth = await account();
     const client = await socket(id, { Cookie: auth.cookie });
-    client.send({ ...accountHello, secret: secretB });
+    client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId, secret: secretB });
     expect((await client.view()).yourSeat).toBeUndefined();
     expect((await stored(id))?.connections[auth.account.primaryPlayerId]).toBe(1);
   });
@@ -161,10 +180,11 @@ describe("authenticated table identities", () => {
     const id = await table();
     const auth = await account();
     const client = await socket(id, { "X-ContractPlay-Account": JSON.stringify({ id: auth.account.id, primaryPlayerId: auth.account.primaryPlayerId, displayName: "Account name" }) }, `?accountId=${auth.account.id}&playerId=${auth.account.primaryPlayerId}`);
-    client.send(accountHello);
-    expect(await client.next()).toMatchObject({ type: "refused", reason: "bad-message" });
-    client.send({ ...accountHello, secret: secretA });
-    await client.view();
+    client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
+    expect(await client.next()).toEqual({ type: "account-changed" });
+    const guest = await socket(id);
+    guest.send({ ...accountHello, secret: secretA });
+    await guest.view();
     expect((await stored(id))?.connections).toEqual({ [await hash(secretA)]: 1 });
   });
 
@@ -175,8 +195,8 @@ describe("authenticated table identities", () => {
       if (revoked) await store.revokeSession(auth.sessionHash, Date.now());
       else await env.DB.prepare("UPDATE sessions SET expires_at = 0 WHERE session_hash = ?").bind(auth.sessionHash).run();
       const client = await socket(id, { Cookie: auth.cookie });
-      client.send(accountHello);
-      expect(await client.next()).toMatchObject({ type: "refused", reason: "bad-message" });
+      client.send({ ...accountHello, expectedPlayerId: auth.account.primaryPlayerId });
+      expect(await client.next()).toEqual({ type: "account-changed" });
       expect((await stored(id))?.connections).toEqual({});
     }
   });

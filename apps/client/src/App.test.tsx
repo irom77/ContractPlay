@@ -101,6 +101,16 @@ describe("bridge table", () => {
   afterEach(() => vi.useRealTimers());
   beforeEach(() => window.localStorage.clear());
 
+  it("keeps online archives separate from the solo completion limit", () => {
+    const game = completedGame();
+    const saved = (id: string): SavedHand => ({ id, game, savedAt: "2026-10-01T00:00:00.000Z" });
+    storeCurrentGame(game, [...Array.from({ length: 25 }, (_, i) => saved(`online-ABC234-${i}`)), saved("solo-older-1"), saved("solo-older-2")]);
+    render(<App />);
+    const hands = loadSoloData(window.localStorage).completedHands;
+    expect(hands.filter(h => h.id.startsWith("online-"))).toHaveLength(25);
+    expect(hands.filter(h => !h.id.startsWith("online-")).map(h => h.id)).toEqual(["test-hand", "solo-older-2", "solo-older-1"]);
+  });
+
   it("keeps a completed trick visible for two seconds", () => {
     vi.useFakeTimers();
     const game = gameAfterPlays(3);
@@ -427,6 +437,14 @@ describe("bridge table", () => {
     expect(within(recent).queryByText(/^Hand \d/)).toBeNull();
     expect(within(recent).getByRole("button", { name: /^Review Quiet Squeeze, played / })).toBeTruthy();
     expect(within(recent).getByRole("button", { name: `Review ${handName(legacy.game.initialDeal.south)}, played ${new Date(legacy.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}` })).toBeTruthy();
+  });
+
+  it("shows one recent entry for the same hand cached by two accounts", () => {
+    const hand = { id: "online-ABC234-1", name: "Same table hand", game: completedGame(), savedAt: "2026-10-28T15:30:00.000Z" };
+    storeCurrentGame(gameAfterPlays(0), ["account-a", "account-b"].map(ownerPlayerId => ({ ...hand, onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId } })));
+    render(<App />); chooseMenu("Recent hands");
+    expect(screen.getAllByRole("button", { name: /Review Same table hand/ })).toHaveLength(1);
+    expect(loadSoloData(window.localStorage).completedHands).toHaveLength(2);
   });
 
   it("draws a faint, non-interactive felt watermark under the table", async () => {

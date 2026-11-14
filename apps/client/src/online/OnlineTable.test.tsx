@@ -3,7 +3,7 @@ import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
-import { loadSoloData, type StorageLike } from "@contractplay/persistence";
+import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { ClientMessage, PublicGame, RefusalReason, SeatInfo, TableView } from "@contractplay/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConnectionStatus, connectTable } from "./connection.js";
@@ -677,6 +677,30 @@ describe("OnlineTable play", () => {
     expect((within(result).getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("keeps solo hands and another account's cache when a guest hand finishes", () => {
+    const service = setup();
+    const finished = playCards(oneNoTrump(), 52);
+    const saved = (id: string) => ({ id, game: finished, savedAt: "2026-10-01T00:00:00.000Z" });
+    const solo = Array.from({ length: 25 }, (_, i) => saved(`solo-${i}`));
+    const other = Array.from({ length: 25 }, (_, i) => ({ ...saved(`online-OTHER2-${i}`), onlineHistory: { source: "user-imported" as const, competitive: false as const, ownerPlayerId: "other-account" } }));
+    saveSoloData(service.storage, { ...loadSoloData(service.storage), completedHands: [...solo, ...other] });
+    service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+    const hands = loadSoloData(service.storage).completedHands;
+    expect(hands.filter(h => !h.id.startsWith("online-"))).toHaveLength(25);
+    expect(hands.filter(h => h.onlineHistory?.ownerPlayerId === "other-account")).toHaveLength(25);
+    expect(hands[0]?.id).toBe("online-ABC234-1");
+  });
+
+  it("saves a separate local attempt when another account cached the same table hand", () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+    const service = setup({ account: { playerId: "account-b", displayName: "B" } });
+    const finished = playCards(oneNoTrump(), 52);
+    saveSoloData(service.storage, { ...loadSoloData(service.storage), completedHands: [{ id: "online-ABC234-1", game: finished, savedAt: "2026-10-01T00:00:00.000Z", onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: "account-a" } }] });
+    service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+    expect(loadSoloData(service.storage).completedHands.map(h => h.onlineHistory?.ownerPlayerId)).toEqual(["account-b", "account-a"]);
+    vi.unstubAllGlobals();
+  });
+
   it("lays the whole deal face-up at the seats around the result, with each hand's high-card points", async () => {
     const user = userEvent.setup();
     const service = setup();
@@ -1036,6 +1060,14 @@ it("restores an account on a fresh device and connects without a guest identity"
     expect(screen.getByRole("region", { name: "Account seat conflict" }).textContent).toMatch(/host/i);
     expect(screen.getByRole("button", { name: "Back to lobby" })).toBeTruthy();
   } finally { vi.unstubAllGlobals(); }
+});
+
+it("explains an account change and returns to the lobby", () => {
+  const service = setup({ account: { playerId: "account-player", displayName: "Account" } });
+  service.status("account-changed");
+  expect(screen.getByRole("region", { name: "Account changed" }).textContent).toMatch(/another tab/i);
+  fireEvent.click(screen.getByRole("button", { name: "Back to lobby" }));
+  expect(service.onLeave).toHaveBeenCalled();
 });
 
 it("uploads a completed account hand and uses its canonical archive response", async () => {

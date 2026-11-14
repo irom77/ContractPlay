@@ -5,7 +5,7 @@ import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
 import type { AccountSession } from "./auth.js";
 
-export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone" | "identity-conflict";
+export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone" | "identity-conflict" | "account-changed";
 export type TableConnection = { send(message: Exclude<ClientMessage, { type: "hello" }>): void; close(): void };
 export type SessionBoardInput = Readonly<{ number: number; deal: Deal; dealer: Seat; vulnerability: Vulnerability }>;
 
@@ -38,6 +38,7 @@ function parseServerMessage(data: unknown): ServerMessage | undefined {
     case "reload": return { type: "reload" };
     case "gone": return { type: "gone" };
     case "identity-conflict": return { type: "identity-conflict" };
+    case "account-changed": return { type: "account-changed" };
     default: return undefined;
   }
 }
@@ -76,7 +77,7 @@ export function connectTable(input: {
       // Browser WebSockets carry same-origin cookies automatically; account IDs never authenticate a socket.
       const hello: ClientMessage = "secret" in input.identity
         ? { type: "hello", version: PROTOCOL_VERSION, secret: input.identity.secret, name: input.identity.name }
-        : { type: "hello", version: PROTOCOL_VERSION, name: input.identity.displayName };
+        : { type: "hello", version: PROTOCOL_VERSION, expectedPlayerId: input.identity.playerId, name: input.identity.displayName };
       current.send(JSON.stringify(hello));
       input.onStatus("open");
     };

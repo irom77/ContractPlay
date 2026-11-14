@@ -28,6 +28,11 @@ const valid: ClientMessage[] = [
 const parse = (v: unknown) => parseClientMessage(JSON.stringify(v));
 
 describe("parseClientMessage", () => {
+  it("preserves a bounded expected account player ID in hello", () => {
+    const hello = { type: "hello", version: PROTOCOL_VERSION, name: "Ann", expectedPlayerId: "account-player" };
+    expect(parse(hello)).toEqual(hello);
+    for (const expectedPlayerId of [null, 42, "", "x".repeat(129), "bad player"]) expect(parse({ ...hello, expectedPlayerId })).toBeUndefined();
+  });
   it.each(valid)("round-trips %j", (m) => expect(parse(m)).toEqual(m));
 
   it("rejects non-JSON, arrays, and non-objects", () => {

@@ -29,6 +29,7 @@ import {
   type Vulnerability
 } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
+import { newestHands, retainHandHistory } from "./handHistoryRetention.js";
 import sampleBoardSetUrl from "./fixtures/bridge-training-ruffing-short-hand-level-1.pbn?url&no-inline";
 import { deleteSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
@@ -238,7 +239,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
         ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {}),
         ...(currentRecord ? { record: currentRecord } : {})
       };
-      completedHands = [record, ...completedHands.filter((hand) => hand.id !== currentHandId)].slice(0, 25);
+      completedHands = retainHandHistory([record, ...completedHands.filter((hand) => hand.id !== currentHandId)]);
     }
     const nextData: SoloData = {
       version: 1,
@@ -287,7 +288,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill]);
 
   const actor = game?.currentActor;
-  const selectedHand = reviewHandId ? soloData.completedHands.find((hand) => hand.id === reviewHandId) : undefined;
+  const selectedHand = reviewHandId ? newestHands(soloData.completedHands).find((hand) => hand.id === reviewHandId) : undefined;
   // The original play is looked at over the hand it belongs to, live or reviewed.
   const reviewedGame = original?.game ?? selectedHand?.game;
   const shownGame = reviewedGame ? reviewState(reviewedGame, reviewCursor) : game;
@@ -688,7 +689,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   }
 
   async function downloadHand(id: string) {
-    const hand = soloData.completedHands.find((candidate) => candidate.id === id);
+    const hand = newestHands(soloData.completedHands).find((candidate) => candidate.id === id);
     if (!hand) return;
     const contents = exportPbn({
       dealer: hand.game.dealer,
@@ -791,9 +792,11 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     </form>
     <p>Practice with the <a className="secondary-button" href={sampleBoardSetUrl} download="bridge-training-ruffing-short-hand-level-1.pbn">8-board CC0 sample set</a> from <a href="https://www.bridge-training.com/en/themes/short-hand-ruff/">Bridge Training</a>.</p>
   </details>;
+  // Account caches can hold the same table hand; list it once while retaining each owner's retry copy.
+  const recentHands = newestHands(soloData.completedHands).filter((hand, index, hands) => hands.findIndex(candidate => candidate.id === hand.id) === index);
   const recentHandsPanel = <section className="recent-panel" aria-label="Recent hands">
-    <div className="section-heading"><h2>Recent hands</h2><span className="auction-count">{soloData.completedHands.length}</span></div>
-    {soloData.completedHands.length ? <ul className="recent-list">{soloData.completedHands.map((hand) => <li key={hand.id}>
+    <div className="section-heading"><h2>Recent hands</h2><span className="auction-count">{recentHands.length}</span></div>
+    {recentHands.length ? <ul className="recent-list">{recentHands.map((hand) => <li key={hand.id}>
       <button className="review-link" aria-label={`Review ${savedHandName(hand)}, played ${playedOn(hand)}`} onClick={() => openReview(hand)}><strong>{savedHandName(hand)}</strong><span>Played {playedOn(hand)}</span></button>
       <div className="recent-actions">{(!hand.record || hand.record.event === "Previous attempts") && !hand.pbnMetadata && hand.game.score ? <button onClick={() => replaySavedDeal(hand)} aria-label={`Play this deal again from ${savedHandName(hand)}`}>Play this deal again</button> : null}<button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}

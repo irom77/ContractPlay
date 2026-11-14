@@ -4,6 +4,7 @@ import { loadSoloData, saveSoloData, type SavedHand, type StorageLike } from "@c
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createHandName, savedHandName } from "../handNames.js";
+import { retainHandHistory } from "../handHistoryRetention.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
@@ -24,7 +25,6 @@ import { HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.j
 const IDLE_MS = 120_000;
 const TRICK_HOLD_MS = 2000;
 const NOTICE_MS = 5000;
-const HISTORY_LIMIT = 25;
 const HINTS_STORAGE_KEY = "contractplay.hints";
 /** Where the player last dragged the Auto play / bot-playing banner. */
 const resumeBannerKey = "contractplay.resumeBanner";
@@ -120,16 +120,14 @@ function saveToHistory(storage: StorageLike, view: TableViewData, account?: Acco
   try {
     const data = loadSoloData(storage);
     const id = `online-${view.id}-${view.handNumber}`;
-    const existing = data.completedHands.find((hand) => hand.id === id);
+    const existing = data.completedHands.find((hand) => hand.id === id && hand.onlineHistory?.ownerPlayerId === account?.playerId);
     if (existing) return existing;
     const hand = savedHandFrom(view, id, new Date().toISOString());
     if (!hand) return;
     // Named after the viewer's dealt cards (South's for someone not seated).
     const name = createHandName(hand.game.initialDeal[view.yourSeat ?? "south"], new Set(data.completedHands.map(savedHandName)));
     const saved: SavedHand = { ...hand, name, ...(account ? { onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } } : {}) };
-    const solo = data.completedHands.filter(hand => !hand.id.startsWith("online-"));
-    const online = data.completedHands.filter(hand => hand.id.startsWith("online-"));
-    saveSoloData(storage, { ...data, completedHands: [saved, ...online].slice(0, HISTORY_LIMIT).concat(solo) });
+    saveSoloData(storage, { ...data, completedHands: retainHandHistory([saved, ...data.completedHands]) });
     return saved;
   } catch {
     // Storage is full or unavailable: the hand is simply not kept.
@@ -403,6 +401,11 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     {notice ? <p className="error-message" role="alert">{notice.text}</p> : null}
   </>;
 
+  if (status === "account-changed") {
+    return <main className="app-shell"><section className="empty-table lobby" aria-label="Account changed">
+      <div className="lobby-panel"><p>Your signed-in account changed or signed out in another tab. Return to the lobby to reconnect with your current account.</p>{backButton}</div>
+    </section></main>;
+  }
   if (status === "identity-conflict") {
     return <main className="app-shell"><section className="empty-table lobby" aria-label="Account seat conflict">
       <div className="lobby-panel"><p>This account is linked to multiple seats at this table. Ask the host to free the extra seat between hands, then reopen the table.</p>{backButton}</div>

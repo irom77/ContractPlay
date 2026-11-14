@@ -59,7 +59,7 @@ it("never imports another account's cached history", async () => {
     return Response.json({ hands: [] });
   }));
   await syncOnlineHands(storage, { playerId: "other-account", displayName: "Other" });
-  expect(loadSoloData(storage).completedHands).toEqual([]);
+  expect(loadSoloData(storage).completedHands[0]?.onlineHistory?.ownerPlayerId).toBe(account.playerId);
 });
 it("merges the canonical response after a completed hand upload", async () => {
   const storage = storageWith([hand("online-ABC234-1")]);
@@ -85,5 +85,26 @@ it("imports at most the newest 25 online hands while preserving solo data", asyn
   }));
   await syncOnlineHands(storage, account);
   expect(loadSoloData(storage).completedHands).toHaveLength(26);
-  expect(loadSoloData(storage).completedHands[0]?.id).toBe("solo-1");
+  expect(loadSoloData(storage).completedHands.at(-1)?.id).toBe("solo-1");
+});
+
+it("preserves a failed upload when syncing another account without importing it", async () => {
+  const local = { ...hand("online-ABC234-1"), onlineHistory: { source: "user-imported" as const, competitive: false as const, ownerPlayerId: account.playerId } };
+  const storage = storageWith([local]);
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 503 })));
+  await expect(uploadOnlineHand(storage, account, local)).rejects.toThrow();
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => { requests.push(init?.method ?? "GET"); return Response.json({ hands: [hand("online-OTHER2-1", 3)] }); }));
+  await syncOnlineHands(storage, { playerId: "other-account", displayName: "Other" });
+  expect(requests).toEqual(["GET"]);
+  expect(loadSoloData(storage).completedHands.map(h => h.id)).toEqual(["online-OTHER2-1", "online-ABC234-1"]);
+  expect(loadSoloData(storage).completedHands[1]?.onlineHistory?.ownerPlayerId).toBe(account.playerId);
+});
+
+it("keeps account caches distinct even when both contain the same table hand", async () => {
+  const local = { ...hand("online-ABC234-1"), onlineHistory: { source: "user-imported" as const, competitive: false as const, ownerPlayerId: account.playerId } };
+  const storage = storageWith([local]);
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ hands: [hand("online-ABC234-1")] })));
+  await syncOnlineHands(storage, { playerId: "other-account", displayName: "Other" });
+  expect(loadSoloData(storage).completedHands.map(h => h.onlineHistory?.ownerPlayerId).sort()).toEqual([account.playerId, "other-account"].sort());
 });
