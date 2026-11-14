@@ -12,33 +12,46 @@ vi.mock("@tauri-apps/api/core", () => ({ isTauri: nativeMocks.isTauri }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: nativeMocks.open, save: nativeMocks.save }));
 vi.mock("@tauri-apps/plugin-fs", () => ({ readTextFile: nativeMocks.readTextFile, writeTextFile: nativeMocks.writeTextFile }));
 
-import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
+import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
 
-describe("native PBN file access", () => {
+describe("native hand file access", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     nativeMocks.isTauri.mockReturnValue(true);
   });
 
-  it("reads only the PBN file selected in the native document picker", async () => {
+  it("reads the PBN file selected in the native document picker", async () => {
     nativeMocks.open.mockResolvedValue("/user/boards/board.pbn");
     nativeMocks.readTextFile.mockResolvedValue('[Dealer "N"]');
 
-    await expect(openPbnFile()).resolves.toBe('[Dealer "N"]');
+    await expect(openHandFiles()).resolves.toEqual([{ name: "board.pbn", contents: '[Dealer "N"]' }]);
 
     expect(nativeMocks.open).toHaveBeenCalledWith(expect.objectContaining({
-      multiple: false,
+      multiple: true,
       directory: false,
       fileAccessMode: "scoped",
-      filters: [{ name: "Bridge hand or board set backup", extensions: ["pbn", "lin", "txt", "json"] }]
+      filters: [{ name: "Bridge hand, results, or board set backup", extensions: ["pbn", "lin", "xml", "txt", "json"] }]
     }));
     expect(nativeMocks.readTextFile).toHaveBeenCalledWith("/user/boards/board.pbn");
+  });
+
+  it("reads a selected PBN and USEBIO file pair for one board set", async () => {
+    nativeMocks.open.mockResolvedValue(["/user/boards/hands.pbn", "/user/boards/results.xml"]);
+    nativeMocks.readTextFile.mockImplementation(async (path: string) => path.endsWith(".xml") ? "<USEBIO/>" : '[Dealer "N"]');
+    await expect(openHandFiles()).resolves.toEqual([
+      { name: "hands.pbn", contents: '[Dealer "N"]' },
+      { name: "results.xml", contents: "<USEBIO/>" }
+    ]);
+    expect(nativeMocks.open).toHaveBeenCalledWith(expect.objectContaining({
+      multiple: true,
+      filters: [{ name: "Bridge hand, results, or board set backup", extensions: ["pbn", "lin", "xml", "txt", "json"] }]
+    }));
   });
 
   it("does not access a file when the native picker is cancelled", async () => {
     nativeMocks.open.mockResolvedValue(null);
 
-    await expect(openPbnFile()).resolves.toBeNull();
+    await expect(openHandFiles()).resolves.toBeNull();
 
     expect(nativeMocks.readTextFile).not.toHaveBeenCalled();
   });

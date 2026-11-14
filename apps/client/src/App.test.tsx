@@ -1339,6 +1339,26 @@ describe("bridge table", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("imports a PBN deal with its matching USEBIO traveller file", async () => {
+    const user = userEvent.setup();
+    const pbn = exportPbn({ dealer: "north", vulnerability: "None", actions: [], deal: deal(), tags: [{ name: "Board", value: "7" }] });
+    const xml = "<USEBIO><SESSION><BOARD><BOARD_NUMBER>7</BOARD_NUMBER><TRAVELLER_LINE><NS_PAIR_NUMBER>12</NS_PAIR_NUMBER><EW_PAIR_NUMBER>14</EW_PAIR_NUMBER><CONTRACT>4S</CONTRACT><PLAYED_BY>N</PLAYED_BY><TRICKS>10</TRICKS><SCORE>420</SCORE></TRAVELLER_LINE></BOARD></SESSION></USEBIO>";
+    render(<App />);
+    await user.click(screen.getByText("Import a PBN deal"));
+    await user.click(screen.getByRole("button", { name: "Choose file" }));
+    const pbnFile = new File([pbn], "boards.pbn", { type: "text/plain" });
+    const usebioFile = new File([xml], "results.xml", { type: "application/xml" });
+    Object.defineProperty(pbnFile, "text", { value: () => Promise.resolve(pbn) });
+    Object.defineProperty(usebioFile, "text", { value: () => Promise.resolve(xml) });
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [pbnFile, usebioFile] } });
+
+    expect(await screen.findByText("Board 7 · 1 of 1")).toBeTruthy();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet.records[0].field).toEqual([
+      { nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false }
+    ]));
+    expect(JSON.stringify(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).match(/12|14/)).toBeNull();
+  });
+
   it("imports a real BridgeWebs archive through the browser file picker", async () => {
     const user = userEvent.setup();
     render(<App />);

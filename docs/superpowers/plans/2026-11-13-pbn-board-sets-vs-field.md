@@ -351,7 +351,7 @@ Neuberg adjustment is also implemented for uneven PBN fields. `boardSetFromPbn` 
 
 PBN 2.1's `OptimumScore` is parsed as signed North–South points and shown as double-dummy par. The BridgeWebs fixture covers its exporter-specific `"NS 1N,NS 2D; 90"` form as well as standard `NS`/`EW` score forms. The [PBN 2.1 standard](https://www.sackab.fi/data/PBN/PBN21a_1.pdf) defines this tag as the optimum score with open cards; computing par from `OptimumResultTable` when the tag is absent remains open.
 
-LIN hand-record import is implemented in `packages/pbn/src/lin.ts` and routed through browser and native file pickers. It handles common `md`, `qx`, `sv`, `mb`, and `pc` tokens, plus the `ah` board heading, while leaving unknown presentation tokens alone. LIN has no full field traveller; pairing a PBN deal with USEBIO results, adding solver-computed par, and online board sets remain open roadmap work.
+LIN hand-record import is implemented in `packages/pbn/src/lin.ts` and routed through browser and native file pickers. It handles common `md`, `qx`, `sv`, `mb`, and `pc` tokens, plus the `ah` board heading, while leaving unknown presentation tokens alone. `packages/pbn/src/usebio.ts` reads USEBIO board travellers and the client pairs those scores with PBN deals by board number; player names and pair numbers are not retained. LIN has no full field traveller; solver-computed par, licensed board sets, and online board sets remain open roadmap work.
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.

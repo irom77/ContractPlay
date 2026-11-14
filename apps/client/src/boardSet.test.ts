@@ -1,7 +1,7 @@
 import { deal } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
 import { describe, expect, it } from "vitest";
-import { boardLabel, boardSetFromLin, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
+import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, isBoardSetFile } from "./boardSet.js";
 import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 
 const table = `[ScoreTable "PairId_NS\\2R;PairId_EW\\2R;Names_NS;Contract\\4L;Declarer\\1R;Result\\2R;Score_NS\\6R;Score_EW\\6R"]
@@ -12,6 +12,15 @@ const board = (extra = "", dealer: "north" | "east" = "north") =>
   exportPbn({ dealer, vulnerability: "None", actions: [], deal: deal(), tags: [{ name: "Event", value: "Club Night" }] }) + (extra ? `\n${extra}` : "");
 
 describe("boardSetFromPbn", () => {
+  it("pairs USEBIO traveller rows to PBN deals by board number without retaining pair identifiers", () => {
+    const pbn = board('[Board "7"]');
+    const xml = "<USEBIO><SESSION><BOARD><BOARD_NUMBER>7</BOARD_NUMBER><TRAVELLER_LINE><NS_PAIR_NUMBER>12</NS_PAIR_NUMBER><EW_PAIR_NUMBER>14</EW_PAIR_NUMBER><CONTRACT>4S</CONTRACT><PLAYED_BY>N</PLAYED_BY><TRICKS>10</TRICKS><SCORE>420</SCORE></TRAVELLER_LINE></BOARD></SESSION></USEBIO>";
+    const { set, diagnostics } = boardSetFromPbnAndUsebio(pbn, xml);
+    expect(set?.records[0]?.field).toEqual([{ nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false }]);
+    expect(JSON.stringify(set)).not.toMatch(/12|14/);
+    expect(diagnostics).toEqual([]);
+  });
+
   it("reads every board of a file", () => {
     const { set, skipped } = boardSetFromPbn(`${board()}\n\n${board()}`);
     expect(skipped).toBe(0);

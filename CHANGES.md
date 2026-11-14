@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Import BBO LIN hand records.** The file picker accepts `.lin` files and imports their deal, board number, dealer, vulnerability, auction, and play into the existing hand-record flow. LIN records with invalid deals are reported as skipped; unsupported or illegal recorded actions are omitted from original play. A LIN record contains a table's play, not a full field traveller.
+- **Pair PBN boards with USEBIO travellers.** Select a PBN and USEBIO XML file together to attach each board's scored results by board number. Player names and pair identifiers are discarded; adjusted percentage rows are shown as artificial and excluded from raw-score comparison.
 - **Imported board set library.** Recent hands keeps several imported sets with saved progress, so you can resume, restart, or delete a set without selecting its file again. Export a portable JSON backup and import it on another device. The local library is capped at eight sets and 1.5 MB of serialized set data.
 - **Neuberg matchpoints for incomplete PBN fields.** When boards in an imported set have different numbers of scored results, matchpoints on the shorter travellers are adjusted to the fullest board's result count and labeled Neuberg.
 - **PBN double-dummy par.** Imported PBN `OptimumScore` tags are normalized to a North–South score and shown with the board result. A computed par remains unavailable when the archive does not provide one.

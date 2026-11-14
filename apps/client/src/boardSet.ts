@@ -1,4 +1,4 @@
-import { parseLin, parsePbn, pbnBoardToRecord, serializePbn, tableResult, type PbnBoard } from "@contractplay/pbn";
+import { parseLin, parsePbn, parseUsebioTravellers, pbnBoardToRecord, serializePbn, tableResult, type PbnBoard } from "@contractplay/pbn";
 import type { BoardSet } from "@contractplay/persistence";
 import { cardId, SEATS, type HandRecord, type TravellerRow } from "@contractplay/core";
 
@@ -49,6 +49,35 @@ export function boardSetFromLin(text: string): { set?: BoardSet; skipped: number
   const lin = parseLin(text);
   const converted = boardSetFromPbn(serializePbn({ boards: lin.boards }));
   return { ...converted, skipped: converted.skipped + lin.diagnostics.filter((entry) => entry.severity === "error").length };
+}
+
+/** Pairs PBN deals with board-numbered USEBIO results while keeping pair numbers and names out of the set. */
+export function boardSetFromPbnAndUsebio(pbnText: string, usebioText: string): {
+  set?: BoardSet;
+  skipped: number;
+  boards: readonly PbnBoard[];
+  diagnostics: readonly string[];
+} {
+  const pbn = boardSetFromPbn(pbnText);
+  const usebio = parseUsebioTravellers(usebioText);
+  if (!pbn.set) return { skipped: pbn.skipped, boards: pbn.boards, diagnostics: usebio.diagnostics.map((entry) => entry.message) };
+  const matched = new Set<string>();
+  const records = pbn.set.records.map((record, index) => {
+    const board = record.board ?? String(index + 1);
+    const field = usebio.boards.get(board);
+    if (field) matched.add(board);
+    return { ...record, field: field ?? [] };
+  });
+  const expectedFieldCount = Math.max(0, ...records.map((record) => record.field.reduce((count, row) => count + (row.artificial || row.nsScore === undefined ? 0 : row.multiplicity), 0)));
+  const normalized = expectedFieldCount ? records.map((record) => ({ ...record, expectedFieldCount })) : records;
+  const messages = usebio.diagnostics.map((entry) => entry.message);
+  for (const board of usebio.boards.keys()) if (!matched.has(board)) messages.push("USEBIO results for board " + board + " did not match a PBN board and were ignored");
+  return {
+    set: { ...pbn.set, records: normalized },
+    skipped: pbn.skipped,
+    boards: pbn.boards,
+    diagnostics: messages
+  };
 }
 
 export function createBoardSetId(): string {

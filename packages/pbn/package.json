@@ -4,13 +4,16 @@
   "license": "MIT",
   "type": "module",
   "description": "PBN import, export, and diagnostics for ContractPlay",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@contractplay/core": "workspace:*"
+    "@contractplay/core": "workspace:*",
+    "saxes": "6.0.0"
   },
   "exports": {
     ".": {

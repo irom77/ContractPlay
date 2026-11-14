@@ -117,7 +117,7 @@ pnpm tauri:dev
 pnpm tauri:build
 ```
 
-The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file; LIN hand records can be imported from a file. Completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set (experimental; see [Board sets against the field](#board-sets-against-the-field-experimental)). See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
+The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file; LIN hand records can be imported from a file. Select a PBN file together with its USEBIO XML results file to add the traveller to each matching board. Completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set (experimental; see [Board sets against the field](#board-sets-against-the-field-experimental)). See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
 
 ## Board sets against the field (experimental)
 
@@ -138,7 +138,7 @@ Use files you are entitled to: your own club's games or downloads a site offers 
 
 | Source | What you can get | Field in the PBN? |
 |---|---|---|
-| **ACBL Live for Clubs** ([live.acbl.org](https://live.acbl.org)) | Each club game links a PBN hand record, a USEBIO XML results file, and an ACBLscore game file. | Usually not: the field is in the USEBIO file, which ContractPlay cannot read yet. |
+| **ACBL Live for Clubs** ([live.acbl.org](https://live.acbl.org)) | Each club game links a PBN hand record, a USEBIO XML results file, and an ACBLscore game file. | Yes, when the PBN and USEBIO files are selected together. |
 | **BridgeWebs** club sites | Results with travellers; some clubs offer the PBN deal file. | Usually not. |
 | **RealBridge** (event results pages) | The "full" PBN download: every table's auction and play of each board, with that table's contract and score. | Yes, read from the tables' own results: each board is played once with the other tables as its field. |
 | **Your club's director** (Bridgemate, ACBLscore, other scoring programs) | Hand records exported as `.pbn`; some programs can write a PBN with a `ScoreTable`. | Sometimes: ask for "PBN with score table". |
@@ -146,7 +146,7 @@ Use files you are entitled to: your own club's games or downloads a site offers 
 | **Vugraph Project** (Nikos Sarantakos) | Historic championship matches with full bidding and play, as `.pbn` / `.lin`. | No field, but **View original play** works. The site now redirects elsewhere; reach it through the Wayback Machine. |
 | **Dealing programs** (Bridge Composer, Dealer4, BigDeal) | Files you make yourself. | Only if you add a `ScoreTable`. |
 
-A typical club PBN carries the deals only. It still plays as a board set, but without a field comparison. LIN files can be imported for their deal, auction, and play, but they do not carry a full traveller. Reading USEBIO results is the next format step on the roadmap.
+A typical club PBN carries the deals only. It still plays as a board set, but without a field comparison unless you select it together with the matching USEBIO results file. LIN files can be imported for their deal, auction, and play, but they do not carry a full traveller.
 
 ## Project guidance
 

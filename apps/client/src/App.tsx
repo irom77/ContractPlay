@@ -31,9 +31,9 @@ import {
 import { exportPbn } from "@contractplay/pbn";
 import { deleteSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
-import { boardLabel, boardSetFromLin, boardSetFromPbn, createBoardSetId, isBoardSetFile } from "./boardSet.js";
+import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
-import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
+import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, savedHandName } from "./handNames.js";
 import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
@@ -471,7 +471,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     else setMessage("");
   }
 
-  function importHand(contents = pbnInput) {
+  function importHand(contents = pbnInput, usebioContents?: string) {
     const backup = parseBoardSetBackup(contents);
     if (backup) {
       const stored = rememberBoardSet(backup);
@@ -480,11 +480,18 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       return;
     }
     const isLin = !/^\s*\[Dealer\b/im.test(contents) && /\b(?:pn|qx|md)\|/i.test(contents);
-    const { set, skipped, boards } = isLin ? boardSetFromLin(contents) : boardSetFromPbn(contents);
-    if (set && isBoardSetFile(set)) {
+    const importedSet = usebioContents
+      ? boardSetFromPbnAndUsebio(contents, usebioContents)
+      : isLin ? boardSetFromLin(contents) : boardSetFromPbn(contents);
+    const { set, skipped, boards } = importedSet;
+    if (set && (isBoardSetFile(set) || usebioContents !== undefined)) {
       startBoard(set);
       setPbnInput("");
-      setMessage(skipped ? `Skipped ${skipped} board(s) that could not be read.` : "");
+      const messages = [
+        ...(skipped ? ["Skipped " + skipped + " board(s) that could not be read."] : []),
+        ...("diagnostics" in importedSet ? importedSet.diagnostics as readonly string[] : [])
+      ];
+      setMessage(messages.join(" "));
       return;
     }
     const board = boards[0];
@@ -568,8 +575,15 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       return;
     }
     try {
-      const contents = await openPbnFile();
-      if (contents !== null) importHand(contents);
+      const files = await openHandFiles();
+      if (!files?.length) return;
+      const pbn = files.find((file) => /\.(?:pbn|lin|txt)$/i.test(file.name));
+      const usebio = files.find((file) => /\.xml$/i.test(file.name));
+      const backup = files.find((file) => /\.json$/i.test(file.name));
+      if (usebio && pbn) importHand(pbn.contents, usebio.contents);
+      else if (backup) importHand(backup.contents);
+      else if (pbn) importHand(pbn.contents);
+      else setMessage("Choose a PBN or LIN hand record, or choose a PBN and USEBIO XML pair.");
     } catch (error) {
       setMessage(`Cannot open hand record: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -577,10 +591,16 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
 
   async function importSelectedPbnFile(event: React.ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
-    const file = input.files?.[0];
-    if (!file) return;
+    const files = Array.from(input.files ?? []);
+    if (!files.length) return;
     try {
-      importHand(await file.text());
+      const pbn = files.find((file) => /\.(?:pbn|lin|txt)$/i.test(file.name));
+      const usebio = files.find((file) => /\.xml$/i.test(file.name));
+      const backup = files.find((file) => /\.json$/i.test(file.name));
+      if (usebio && pbn) importHand(await pbn.text(), await usebio.text());
+      else if (backup) importHand(await backup.text());
+      else if (pbn) importHand(await pbn.text());
+      else setMessage("Choose a PBN or LIN hand record, or choose a PBN and USEBIO XML pair.");
     } catch (error) {
       setMessage(`Cannot open hand record: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -747,10 +767,11 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
   const pbnImportForm = <details className="pbn-import">
-    <summary>Import a PBN deal</summary>
+      <summary>Import a PBN deal</summary>
     <form onSubmit={(event) => { event.preventDefault(); importHand(); }}>
-      <label htmlFor="pbn-input">PBN or LIN hand record</label>
-      <input ref={pbnFileInput} aria-label="Hand record or board set backup file" type="file" accept=".pbn,.lin,.txt,.json,text/plain,application/json" onChange={(event) => { void importSelectedPbnFile(event); }} hidden />
+      <label htmlFor="pbn-input">PBN deal</label>
+      <p>Select a PBN and USEBIO XML file together to compare a club traveller with its boards.</p>
+      <input ref={pbnFileInput} aria-label="Hand records and optional USEBIO results" type="file" accept=".pbn,.lin,.xml,.txt,.json,text/plain,application/xml,application/json" multiple onChange={(event) => { void importSelectedPbnFile(event); }} hidden />
       <button className="secondary-button" type="button" onClick={() => { void choosePbnFile(); }}>Choose file</button>
       <textarea id="pbn-input" value={pbnInput} onChange={(event) => setPbnInput(event.target.value)} placeholder={'[Dealer "N"]\n[Vulnerable "None"]\n[Deal "N:..."]'} />
       <button className="secondary-button" type="submit">Import hand</button>

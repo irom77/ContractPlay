@@ -123,6 +123,9 @@ importers:
       '@contractplay/core':
         specifier: workspace:*
         version: link:../core
+      saxes:
+        specifier: 6.0.0
+        version: 6.0.0
 
   packages/persistence:
     dependencies:
