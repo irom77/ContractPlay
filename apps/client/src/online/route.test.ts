@@ -23,6 +23,7 @@ describe("online routes", () => {
 
   it("parses the UI preview route, numbered from 1", () => {
     expect(parseRoute("#/mocks")).toEqual({ screen: "mocks", index: 0 });
+    expect(parseRoute("#/mocks/")).toEqual({ screen: "mocks", index: 0 });
     expect(parseRoute("#/mocks/3")).toEqual({ screen: "mocks", index: 2 });
     expect(parseRoute("#/mocks/0")).toEqual({ screen: "mocks", index: 0 });
     expect(parseRoute("#/mocks/x")).toEqual({ screen: "solo" });
