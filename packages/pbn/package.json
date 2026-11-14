@@ -14,8 +14,8 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/pbn.d.ts",
-      "import": "./dist/pbn.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   }
 }

@@ -1324,6 +1324,21 @@ describe("bridge table", () => {
     expect(screen.queryByRole("button", { name: /^Play / })).toBeNull();
   });
 
+  it("imports a LIN file selected from the browser file picker", async () => {
+    const lin = "qx|o2|md|4SAJ42H92DT74CKQ96,ST98HQ87543DQ92C3,SKQ7HAKT6DA6CAT82|sv|o|mb|1N|mb|p|mb|p|mb|p|";
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByText("Import a PBN deal"));
+    await user.click(screen.getByRole("button", { name: "Choose file" }));
+    expect(document.querySelector<HTMLInputElement>('input[type="file"]')!.accept).toContain(".lin");
+    const file = new File([lin], "board.lin", { type: "text/plain" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(lin) });
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+
+    expect(await screen.findByText("South to play")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("imports a real BridgeWebs archive through the browser file picker", async () => {
     const user = userEvent.setup();
     render(<App />);

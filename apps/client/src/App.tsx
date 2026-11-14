@@ -31,7 +31,7 @@ import {
 import { exportPbn } from "@contractplay/pbn";
 import { deleteSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
-import { boardLabel, boardSetFromPbn, createBoardSetId, isBoardSetFile } from "./boardSet.js";
+import { boardLabel, boardSetFromLin, boardSetFromPbn, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openPbnFile, savePbnFile } from "./nativeFiles.js";
 import { isFullscreen, setFullscreen } from "./nativeWindow.js";
@@ -479,7 +479,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       setMessage(stored ? `Imported ${backup.name} into Recent hands.` : "This board set exceeds the local library limit and could not be stored.");
       return;
     }
-    const { set, skipped, boards } = boardSetFromPbn(contents);
+    const isLin = !/^\s*\[Dealer\b/im.test(contents) && /\b(?:pn|qx|md)\|/i.test(contents);
+    const { set, skipped, boards } = isLin ? boardSetFromLin(contents) : boardSetFromPbn(contents);
     if (set && isBoardSetFile(set)) {
       startBoard(set);
       setPbnInput("");
@@ -489,14 +490,14 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     const board = boards[0];
     const diagnostic = board?.diagnostics.find((entry) => entry.severity === "error");
     if (!board?.deal || !board.dealer || diagnostic) {
-      setMessage(`Cannot import PBN: ${diagnostic?.message ?? "include a valid deal and dealer"}`);
+      setMessage(`Cannot import ${isLin ? "LIN" : "PBN"}: ${diagnostic?.message ?? "include a valid deal and dealer"}`);
       return;
     }
     let imported = createGameState({ deal: board.deal, dealer: board.dealer, vulnerability: board.vulnerability ?? "None" });
     for (const action of board.actions) {
       const result = applyAction(imported, action);
       if (!result.ok) {
-        setMessage(`Cannot import PBN: ${result.error.message}`);
+        setMessage(`Cannot import ${isLin ? "LIN" : "PBN"}: ${result.error.message}`);
         return;
       }
       imported = result.state;
@@ -570,7 +571,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       const contents = await openPbnFile();
       if (contents !== null) importHand(contents);
     } catch (error) {
-      setMessage(`Cannot open PBN file: ${error instanceof Error ? error.message : String(error)}`);
+      setMessage(`Cannot open hand record: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -581,7 +582,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     try {
       importHand(await file.text());
     } catch (error) {
-      setMessage(`Cannot open PBN file: ${error instanceof Error ? error.message : String(error)}`);
+      setMessage(`Cannot open hand record: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       input.value = "";
     }
@@ -748,8 +749,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const pbnImportForm = <details className="pbn-import">
     <summary>Import a PBN deal</summary>
     <form onSubmit={(event) => { event.preventDefault(); importHand(); }}>
-      <label htmlFor="pbn-input">PBN deal</label>
-      <input ref={pbnFileInput} aria-label="PBN or board set backup file" type="file" accept=".pbn,.txt,.json,text/plain,application/json" onChange={(event) => { void importSelectedPbnFile(event); }} hidden />
+      <label htmlFor="pbn-input">PBN or LIN hand record</label>
+      <input ref={pbnFileInput} aria-label="Hand record or board set backup file" type="file" accept=".pbn,.lin,.txt,.json,text/plain,application/json" onChange={(event) => { void importSelectedPbnFile(event); }} hidden />
       <button className="secondary-button" type="button" onClick={() => { void choosePbnFile(); }}>Choose file</button>
       <textarea id="pbn-input" value={pbnInput} onChange={(event) => setPbnInput(event.target.value)} placeholder={'[Dealer "N"]\n[Vulnerable "None"]\n[Deal "N:..."]'} />
       <button className="secondary-button" type="submit">Import hand</button>

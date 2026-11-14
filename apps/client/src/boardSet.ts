@@ -1,4 +1,4 @@
-import { parsePbn, pbnBoardToRecord, tableResult, type PbnBoard } from "@contractplay/pbn";
+import { parseLin, parsePbn, pbnBoardToRecord, serializePbn, tableResult, type PbnBoard } from "@contractplay/pbn";
 import type { BoardSet } from "@contractplay/persistence";
 import { cardId, SEATS, type HandRecord, type TravellerRow } from "@contractplay/core";
 
@@ -42,6 +42,13 @@ export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number
   const expectedFieldCount = Math.max(0, ...records.map((record) => record.field.reduce((count, row) => count + (row.artificial || row.nsScore === undefined ? 0 : row.multiplicity), 0)));
   if (expectedFieldCount > 0) records = records.map((record) => ({ ...record, expectedFieldCount }));
   return records.length ? { set: { id: createBoardSetId(), name: records[0]!.event || "Imported boards", records, position: 0 }, skipped, boards } : { skipped, boards };
+}
+
+/** Converts a BBO LIN file through the shared PBN record parser; LIN diagnostics count as unreadable records. */
+export function boardSetFromLin(text: string): { set?: BoardSet; skipped: number; boards: readonly PbnBoard[] } {
+  const lin = parseLin(text);
+  const converted = boardSetFromPbn(serializePbn({ boards: lin.boards }));
+  return { ...converted, skipped: converted.skipped + lin.diagnostics.filter((entry) => entry.severity === "error").length };
 }
 
 export function createBoardSetId(): string {

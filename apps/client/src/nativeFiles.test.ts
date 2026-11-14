@@ -30,7 +30,7 @@ describe("native PBN file access", () => {
       multiple: false,
       directory: false,
       fileAccessMode: "scoped",
-      filters: [{ name: "Bridge hand or board set backup", extensions: ["pbn", "txt", "json"] }]
+      filters: [{ name: "Bridge hand or board set backup", extensions: ["pbn", "lin", "txt", "json"] }]
     }));
     expect(nativeMocks.readTextFile).toHaveBeenCalledWith("/user/boards/board.pbn");
   });

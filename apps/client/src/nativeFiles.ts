@@ -8,11 +8,11 @@ export function isNativeClient(): boolean {
 
 export async function openPbnFile(): Promise<string | null> {
   const path = await open({
-    title: "Import a bridge hand",
+    title: "Import a hand record",
     multiple: false,
     directory: false,
     fileAccessMode: "scoped",
-    filters: [{ name: "Bridge hand or board set backup", extensions: ["pbn", "txt", "json"] }]
+    filters: [{ name: "Bridge hand or board set backup", extensions: ["pbn", "lin", "txt", "json"] }]
   });
   if (!path) return null;
   return readTextFile(path);

@@ -1,7 +1,7 @@
 import { deal } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
 import { describe, expect, it } from "vitest";
-import { boardLabel, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
+import { boardLabel, boardSetFromLin, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
 import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 
 const table = `[ScoreTable "PairId_NS\\2R;PairId_EW\\2R;Names_NS;Contract\\4L;Declarer\\1R;Result\\2R;Score_NS\\6R;Score_EW\\6R"]
@@ -45,6 +45,17 @@ describe("boardSetFromPbn", () => {
   it("falls back to a default name and reports nothing readable", () => {
     expect(boardSetFromPbn("junk").set).toBeUndefined();
     expect(boardSetFromPbn(exportPbn({ dealer: "north", vulnerability: "None", actions: [], deal: deal() })).set?.name).toBe("Imported boards");
+  });
+});
+
+describe("boardSetFromLin", () => {
+  it("converts a LIN hand and original auction into the shared hand record", () => {
+    const lin = "qx|o2|md|4SAJ42H92DT74CKQ96,ST98HQ87543DQ92C3,SKQ7HAKT6DA6CAT82|sv|o|mb|1N|mb|p|mb|p|mb|p|";
+    const { set, skipped } = boardSetFromLin(lin);
+    expect(skipped).toBe(0);
+    expect(set?.records).toHaveLength(1);
+    expect(set?.records[0]).toMatchObject({ board: "2", dealer: "east", vulnerability: "None" });
+    expect(set?.records[0]?.original).toHaveLength(4);
   });
 });
 

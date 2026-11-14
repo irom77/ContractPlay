@@ -117,7 +117,7 @@ pnpm tauri:dev
 pnpm tauri:build
 ```
 
-The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file, and completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set (experimental; see [Board sets against the field](#board-sets-against-the-field-experimental)). See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
+The browser and native clients store the current hand and up to 25 completed hands locally. PBN deals can be pasted or imported from a file; LIN hand records can be imported from a file. Completed hands can be exported as PBN. A PBN file with several boards or a `ScoreTable` opens as a board set (experimental; see [Board sets against the field](#board-sets-against-the-field-experimental)). See the [platform delivery guide](docs/platform-delivery.md) for iOS/iPadOS simulator builds, deployment, and signing requirements.
 
 ## Board sets against the field (experimental)
 
@@ -146,7 +146,7 @@ Use files you are entitled to: your own club's games or downloads a site offers 
 | **Vugraph Project** (Nikos Sarantakos) | Historic championship matches with full bidding and play, as `.pbn` / `.lin`. | No field, but **View original play** works. The site now redirects elsewhere; reach it through the Wayback Machine. |
 | **Dealing programs** (Bridge Composer, Dealer4, BigDeal) | Files you make yourself. | Only if you add a `ScoreTable`. |
 
-A typical club PBN carries the deals only. It still plays as a board set, but without a field comparison. Reading USEBIO results and BBO's LIN files is the next step on the roadmap.
+A typical club PBN carries the deals only. It still plays as a board set, but without a field comparison. LIN files can be imported for their deal, auction, and play, but they do not carry a full traveller. Reading USEBIO results is the next format step on the roadmap.
 
 ## Project guidance
 
