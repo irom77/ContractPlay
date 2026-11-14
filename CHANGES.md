@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Download a licensed practice set.** Recent hands includes an eight-board PBN set from Bridge Training's “Ruffing in the short hand — Level 1.” It preserves the deals, auctions, contracts, and opening leads, carries per-board source and CC0 tags, and links to the originating collection.
+
 - **Play online duplicate sessions.** Create 2–8 tables with 4–32 shared boards, either generated or imported from a PBN file, scored by matchpoints or cross-IMPs. PBN imports send only validated deals, board numbers, dealers, and vulnerability; field rows and original play are discarded. The session coordinator releases boards in order after each table finishes, accepts safe score retries, and shows the current place and aggregate result. Passed-out boards count as zero; unfinished boards stay out of the ranking. Online tables moved to protocol version 5.
 
 - **Import BBO LIN hand records.** The file picker accepts `.lin` files and imports their deal, board number, dealer, vulnerability, auction, and play into the existing hand-record flow. LIN records with invalid deals are reported as skipped; unsupported or illegal recorded actions are omitted from original play. A LIN record contains a table's play, not a full field traveller.

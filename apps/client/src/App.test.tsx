@@ -359,6 +359,9 @@ describe("bridge table", () => {
     await user.click(within(hands).getByText("Import a PBN deal"));
     expect(within(hands).getByRole("button", { name: "Choose file" })).toBeTruthy();
     expect(within(hands).getByRole("button", { name: "Import hand" })).toBeTruthy();
+    const sampleSet = within(hands).getByRole("link", { name: "8-board CC0 sample set" });
+    expect(sampleSet.getAttribute("href")).toContain("bridge-training-ruffing-short-hand-level-1");
+    expect(sampleSet.getAttribute("download")).toBe("bridge-training-ruffing-short-hand-level-1.pbn");
   });
 
   it("keeps the latest call visible in a long centered auction", async () => {

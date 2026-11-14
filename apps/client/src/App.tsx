@@ -29,6 +29,7 @@ import {
   type Vulnerability
 } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
+import sampleBoardSetUrl from "./fixtures/bridge-training-ruffing-short-hand-level-1.pbn?url&no-inline";
 import { deleteSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, createBoardSetId, isBoardSetFile } from "./boardSet.js";
@@ -776,6 +777,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       <textarea id="pbn-input" value={pbnInput} onChange={(event) => setPbnInput(event.target.value)} placeholder={'[Dealer "N"]\n[Vulnerable "None"]\n[Deal "N:..."]'} />
       <button className="secondary-button" type="submit">Import hand</button>
     </form>
+    <p>Practice with the <a className="secondary-button" href={sampleBoardSetUrl} download="bridge-training-ruffing-short-hand-level-1.pbn">8-board CC0 sample set</a> from <a href="https://www.bridge-training.com/en/themes/short-hand-ruff/">Bridge Training</a>.</p>
   </details>;
   const recentHandsPanel = <section className="recent-panel" aria-label="Recent hands">
     <div className="section-heading"><h2>Recent hands</h2><span className="auction-count">{soloData.completedHands.length}</span></div>

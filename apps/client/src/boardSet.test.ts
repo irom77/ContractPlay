@@ -3,6 +3,7 @@ import { exportPbn } from "@contractplay/pbn";
 import { describe, expect, it } from "vitest";
 import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, isBoardSetFile } from "./boardSet.js";
 import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
+import licensedPracticePbn from "./fixtures/bridge-training-ruffing-short-hand-level-1.pbn?raw";
 
 const table = `[ScoreTable "PairId_NS\\2R;PairId_EW\\2R;Names_NS;Contract\\4L;Declarer\\1R;Result\\2R;Score_NS\\6R;Score_EW\\6R"]
  1  5 "Smith - Jones" 4S   N 10    420      -
@@ -35,6 +36,16 @@ describe("boardSetFromPbn", () => {
     expect(skipped).toBe(0);
     expect(set?.records).toHaveLength(32);
     expect(set?.records[0]).toMatchObject({ board: "1", event: "Regis_2016_12_13", dealer: "north", vulnerability: "None", doubleDummyPar: 90 });
+  });
+
+  it("imports the bundled CC0 practice set with its recorded auctions and leads", () => {
+    const { set, skipped, boards } = boardSetFromPbn(licensedPracticePbn);
+    expect(skipped).toBe(0);
+    expect(set?.records).toHaveLength(8);
+    expect(set?.records.map((record) => record.board)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8"]);
+    expect(set?.records.every((record) => (record.original?.length ?? 0) >= 7)).toBe(true);
+    expect(boards.flatMap((board) => board.diagnostics)).toEqual([]);
+    expect(licensedPracticePbn.match(/\[License "CC0 1\.0 Universal"\]/g)).toHaveLength(8);
   });
 
   it("skips boards without a deal", () => {
