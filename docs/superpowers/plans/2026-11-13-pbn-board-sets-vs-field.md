@@ -345,7 +345,7 @@ PBN `Scoring` modifier `Butler-2` is now supported in `packages/core/src/field.t
 
 Implemented in `packages/persistence` and `apps/client/src/App.tsx`: Recent hands stores up to eight imported sets within a 1.5 MB serialized-data cap, tracks progress, and offers resume, restart, delete, and portable JSON backup export/import. Browser downloads and Tauri's scoped file dialogs both support JSON backups. The remaining hand-record extensions are tracked in `TODO.md`.
 
-The public BridgeWebs test-system archive `https://www.bridgewebs.com/test/regis.pbn` is kept as `apps/client/src/fixtures/bridgewebs-regis.pbn`; the board-set parser and browser file-import path are covered against all 32 boards. Manual verification in a real browser and an ACBL Live for Clubs archive remain open because this environment has no browser runner.
+The public BridgeWebs test-system archive `https://www.bridgewebs.com/test/regis.pbn` is kept as `apps/client/src/fixtures/bridgewebs-regis.pbn`; the board-set parser and Chromium file-import path are covered against all 32 boards. Chromium also imported and played a representative PBN `ScoreTable` fixture through the field comparison. The ACBL Live for Clubs archive check was skipped per user direction after the results endpoint returned a Cloudflare challenge and HTTP 403.
 
 Neuberg adjustment is also implemented for uneven PBN fields. `boardSetFromPbn` takes the fullest board's count of scored traveller results as the expected count, stores it on each `HandRecord`, and the core applies the EBU formula to matchpoints only when that board has fewer results. The result panel labels adjusted comparisons. A missing-score test covers the multiplier and top calculation.
 
@@ -363,7 +363,7 @@ When a hand record has no PBN `OptimumScore`, the client will compute double-dum
 
 ### Online duplicate sessions follow-up (2026-11-13)
 
-Generated-board online duplicate sessions are implemented in `apps/server/src/session-object.ts`, `packages/table/src/session.ts`, and the lobby/table client flow. The session Durable Object holds private deals and serialized results; tables fetch only their currently released board; status views contain aggregate standings and no deal or play. Online sessions also accept user-supplied PBN deals after strict validation. The ACBL Live public archive check is still open because the site returned a Cloudflare challenge (HTTP 403) in the actual Chromium browser. See [the session implementation plan](2026-11-13-online-duplicate-session.md).
+Generated-board online duplicate sessions are implemented in `apps/server/src/session-object.ts`, `packages/table/src/session.ts`, and the lobby/table client flow. The session Durable Object holds private deals and serialized results; tables fetch only their currently released board; status views contain aggregate standings and no deal or play. Online sessions also accept user-supplied PBN deals after strict validation. The ACBL Live public archive check was skipped per user direction after the endpoint returned a Cloudflare challenge (HTTP 403). See [the session implementation plan](2026-11-13-online-duplicate-session.md).
 
 ### Licensed sample board set follow-up
 
