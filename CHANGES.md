@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Play online duplicate sessions.** Create 2–8 tables with 4–32 shared random boards, scored by matchpoints or cross-IMPs. The session coordinator releases boards in order after each table finishes, accepts safe score retries, and shows the current place and aggregate result. Passed-out boards count as zero; unfinished boards stay out of the ranking.
+
 - **Import BBO LIN hand records.** The file picker accepts `.lin` files and imports their deal, board number, dealer, vulnerability, auction, and play into the existing hand-record flow. LIN records with invalid deals are reported as skipped; unsupported or illegal recorded actions are omitted from original play. A LIN record contains a table's play, not a full field traveller.
 - **Pair PBN boards with USEBIO travellers.** Select a PBN and USEBIO XML file together to attach each board's scored results by board number. Player names and pair identifiers are discarded; adjusted percentage rows are shown as artificial and excluded from raw-score comparison.
 - **Imported board set library.** Recent hands keeps several imported sets with saved progress, so you can resume, restart, or delete a set without selecting its file again. Export a portable JSON backup and import it on another device. The local library is capped at eight sets and 1.5 MB of serialized set data.

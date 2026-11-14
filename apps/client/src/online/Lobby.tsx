@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { StorageLike } from "@contractplay/persistence";
 import type { SeatInfo, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
-import { createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
+import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
 
 const REFRESH_MS = 5000;
@@ -12,6 +12,7 @@ const scoringNames: Record<TableScoring, string> = { rubber: "Rubber bridge", du
 export type LobbyApi = {
   listTables(baseUrl: string): Promise<TableSummary[]>;
   createTable: typeof defaultCreateTable;
+  createSession: typeof defaultCreateSession;
 };
 
 export type LobbyProps = {
@@ -24,7 +25,7 @@ export type LobbyProps = {
   api?: LobbyApi;
 };
 
-const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable };
+const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession };
 
 function createErrorText(error: string): string {
   if (error === "too-many-tables") return "There are too many open tables right now. Try again later.";
@@ -82,6 +83,9 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
   const [style, setStyle] = useState<TableStyle>("SAYC");
   const [scoring, setScoring] = useState<TableScoring>("rubber");
   const [listed, setListed] = useState(true);
+  const [sessionTables, setSessionTables] = useState(2);
+  const [sessionBoards, setSessionBoards] = useState(8);
+  const [sessionScoring, setSessionScoring] = useState<"matchpoints" | "imps">("matchpoints");
   const [creating, setCreating] = useState(false);
   const inFlight = useRef(false);
   const creatingNow = useRef(false);
@@ -130,6 +134,27 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
     else { setListError(false); setCreateError(createErrorText(result.error)); }
   }
 
+  async function createDuplicateSession() {
+    const name = `${identity.name}'s duplicate`.slice(0, 40);
+    if (creatingNow.current) return;
+    creatingNow.current = true;
+    setCreating(true);
+    setCreateError(undefined);
+    let result: Awaited<ReturnType<typeof defaultCreateSession>>;
+    try { result = await api.createSession(baseUrl, { name, style, tableCount: sessionTables, boardCount: sessionBoards, scoring: sessionScoring, listed: true }); }
+    catch { result = { error: "failed" }; }
+    creatingNow.current = false;
+    if (!mounted.current) return;
+    setCreating(false);
+    if (!("error" in result) && result.tableIds.length > 0) {
+      void refresh();
+      onOpenTable(result.tableIds[0]!);
+    } else {
+      setListError(false);
+      setCreateError(createErrorText("error" in result ? result.error : "failed"));
+    }
+  }
+
   // Whichever failed most recently wins: each failure clears the other.
   const alert = createError ?? (listError ? "Can't reach the tables right now." : undefined);
 
@@ -174,6 +199,15 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
           <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
           <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
           <button className="primary-button" type="submit" disabled={creating || effectiveName.trim() === ""}>New table</button>
+        </form>
+        <form className="lobby-panel" aria-label="New duplicate session" onSubmit={(event) => { event.preventDefault(); void createDuplicateSession(); }}>
+          <h2>New duplicate session</h2>
+          <label>Tables<select aria-label="Session tables" value={sessionTables} onChange={(event) => setSessionTables(Number(event.target.value))}>{[2, 3, 4, 6, 8].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
+          <label>Boards<select aria-label="Session boards" value={sessionBoards} onChange={(event) => setSessionBoards(Number(event.target.value))}>{[4, 8, 12, 16, 24, 32].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
+          <label>Scoring method<select aria-label="Session scoring" value={sessionScoring} onChange={(event) => setSessionScoring(event.target.value as "matchpoints" | "imps")}><option value="matchpoints">Matchpoints</option><option value="imps">Cross-IMPs</option></select></label>
+          <label>Session bidding style<select aria-label="Session bidding style" value={style} onChange={(event) => setStyle(event.target.value as TableStyle)}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+          <p className="quiet-copy">Session tables appear in the open lobby so players can join different tables.</p>
+          <button className="primary-button" type="submit" disabled={creating}>Create session</button>
         </form>
         {alert ? <p className="error-message" role="alert">{alert}</p> : null}
       </section>

@@ -1,4 +1,4 @@
-import type { GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
+import type { Deal, GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
 import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
 
@@ -14,6 +14,10 @@ export type TableState = Readonly<{
   id: string; name: string; style: TableStyle; listed: boolean;
   /** Missing on tables stored before rubber scoring, which keep their running totals. */
   scoring?: TableScoring;
+  /** Durable duplicate-session coordinator id; only generated-session table views carry this. */
+  sessionId?: string;
+  /** The current released board, copied from the coordinator immediately before dealing. */
+  sessionBoard?: Readonly<{ index: number; number: number; deal: Deal; dealer: Seat; vulnerability: GameState["vulnerability"] }>;
   /** A rubber table's rubber, from its first deal. A won rubber stays until the next deal starts a new one. */
   rubber?: Rubber;
   host?: PlayerId; seats: Readonly<Record<Seat, SeatState>>;

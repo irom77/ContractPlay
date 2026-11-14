@@ -116,6 +116,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/N–S win game 2[\s\S]*\+700 rubber bonus/);
     for (const name of ["Deal a new rubber", "Seating", "Back to lobby", "Leave the table", "Close"]) expect(within(card).getByRole("button", { name })).toBeTruthy();
   },
+  "duplicate-session": () => {
+    expect(document.querySelector(".session-progress")?.textContent).toBe("Board 3 complete · waiting for other tables · Place 1 of 4 · 66.7% matchpoints");
+  },
   "solo-setup": () => {
     expect(screen.getByRole("region", { name: "New deal" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start a new hand" })).toBeTruthy();

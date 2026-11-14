@@ -5,3 +5,5 @@ export { botToAct, botWake, chooseBotAction, rubberHandId } from "./hand.js";
 export { nextWake } from "./presence.js";
 export { reduce } from "./reduce.js";
 export { summaryOf, viewFor } from "./view.js";
+export { createDuplicateSession, recordDuplicateResult, sessionRank, sessionStanding } from "./session.js";
+export type { DuplicateSession, DuplicateSessionBoard, DuplicateSessionStanding } from "./session.js";

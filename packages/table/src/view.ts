@@ -41,7 +41,7 @@ function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined
 }
 
 /** The only function that builds game data for a client. */
-export function viewFor(state: TableState, player: PlayerId | undefined): TableView {
+export function viewFor(state: TableState, player: PlayerId | undefined, session?: NonNullable<TableView["session"]>): TableView {
   const yourSeat = seatOf(state, player);
   const hostSeat = seatOf(state, state.host);
   const game = yourSeat ? publicGame(state, yourSeat) : undefined;
@@ -53,10 +53,11 @@ export function viewFor(state: TableState, player: PlayerId | undefined): TableV
     ...(state.rubber ? { rubber: state.rubber } : {}),
     ...(hostSeat ? { host: hostSeat } : {}),
     ...(yourSeat ? { yourSeat } : {}),
-    canDeal: canDeal(state, player),
+    canDeal: canDeal(state, player) && (!state.sessionId || (session !== undefined && !session.complete && !session.waitingForTables && session.board === state.handNumber + 1)),
     ...(game ? { game } : {}),
     ...(pending ? { claim: { seat: pending.seat, tricks: pending.tricks, waitingOn, madeAt: pending.madeAt } } : {}),
     ...(state.claimRejected ? { claimRejected: { ...state.claimRejected } } : {}),
+    ...(session ? { session } : {}),
     ...(yourSeat && state.game && betweenHands(state) ? { revealed: state.game.initialDeal } : {})
   };
 }

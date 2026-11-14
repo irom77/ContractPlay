@@ -25,8 +25,9 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
   const onOpenTable = vi.fn();
   const onSolo = vi.fn();
   const onRecentHands = vi.fn();
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable }} />);
-  return { storage, listTables, createTable, onOpenTable, onSolo, onRecentHands };
+  const createSession = vi.fn(async () => ({ sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] }));
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} />);
+  return { storage, listTables, createTable, createSession, onOpenTable, onSolo, onRecentHands };
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -77,6 +78,18 @@ describe("Lobby", () => {
     await user.click(screen.getByLabelText("Show in lobby"));
     await user.click(screen.getByRole("button", { name: "New table" }));
     expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Evening", style: "2/1", scoring: "rubber", listed: false });
+    await waitFor(() => expect(onOpenTable).toHaveBeenCalledWith("NEW123"));
+  });
+
+  it("creates a multi-table duplicate session and opens its first table", async () => {
+    const user = userEvent.setup();
+    const { createSession, onOpenTable } = setup({ list: () => Promise.resolve([]) });
+    await screen.findByRole("heading", { name: "New duplicate session" });
+    await user.selectOptions(screen.getByLabelText("Session tables"), "4");
+    await user.selectOptions(screen.getByLabelText("Session boards"), "12");
+    await user.selectOptions(screen.getByLabelText("Session scoring"), "imps");
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    expect(createSession).toHaveBeenCalledWith("https://x.test", { name: "Bob's duplicate", style: "SAYC", tableCount: 4, boardCount: 12, scoring: "imps", listed: true });
     await waitFor(() => expect(onOpenTable).toHaveBeenCalledWith("NEW123"));
   });
 
@@ -141,7 +154,7 @@ describe("Lobby", () => {
     const list = vi.fn(() => new Promise<TableSummary[]>((r) => { resolve = r; }));
     const storage = memoryStorage();
     saveIdentity(storage, "Bob");
-    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn() }} />);
+    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn(), createSession: vi.fn() }} />);
     expect(list).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
     expect(list).toHaveBeenCalledTimes(1);

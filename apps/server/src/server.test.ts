@@ -208,6 +208,46 @@ describe("lobby", () => {
     expect((await listTables()).find((t) => t.id === id)).toMatchObject({ scoring: "duplicate" });
   });
 
+  it("creates duplicate session tables with one private shared board set", async () => {
+    const response = await SELF.fetch("https://x/api/sessions", {
+      method: "POST", headers: { "content-type": "application/json", "CF-Connecting-IP": freshIp() },
+      body: JSON.stringify({ name: "Club session", style: "SAYC", tableCount: 2, boardCount: 2, scoring: "matchpoints", listed: true })
+    });
+    expect(response.status).toBe(201);
+    const result = await response.json<{ sessionId: string; tableIds: string[] }>();
+    expect(result.tableIds).toHaveLength(2);
+    const tables = await Promise.all(result.tableIds.map(storedState));
+    expect(tables.map((table) => table?.sessionId)).toEqual([result.sessionId, result.sessionId]);
+    expect(tables.map((table) => table?.scoring)).toEqual(["duplicate", "duplicate"]);
+    expect((await listTables()).filter((table) => result.tableIds.includes(table.id)).map((table) => table.scoring)).toEqual(["duplicate", "duplicate"]);
+    const coordinator = env.SESSIONS.get(env.SESSIONS.idFromName(result.sessionId));
+    const boards = await Promise.all(result.tableIds.map((id) => coordinator.boardFor(id, 0)));
+    expect(boards[0]).toEqual(boards[1]);
+    expect(await coordinator.boardFor(result.tableIds[0]!, 1)).toBeUndefined();
+    const status = await coordinator.status(result.tableIds[0]!);
+    expect(status).toMatchObject({ board: 1, boardCount: 2, completedBoards: 0, scoring: "matchpoints" });
+    expect(status).not.toHaveProperty("deal");
+    expect(JSON.stringify(result)).not.toContain("north");
+    expect(await coordinator.report(result.tableIds[0]!, 0, 420)).toBe(true);
+    expect(await coordinator.boardFor(result.tableIds[0]!, 1)).toBeUndefined();
+    expect(await coordinator.report(result.tableIds[1]!, 0, -50)).toBe(true);
+    expect(await coordinator.report(result.tableIds[1]!, 0, -50)).toBe(true);
+    expect(await coordinator.report(result.tableIds[1]!, 0, 50)).toBe(false);
+    expect(await coordinator.boardFor(result.tableIds[0]!, 1)).toEqual(await coordinator.boardFor(result.tableIds[1]!, 1));
+    expect(await coordinator.status(result.tableIds[0]!)).toMatchObject({ board: 2, completedBoards: 1, rank: 1, tableCount: 2, matchpoints: { points: 2, top: 2, percentage: 100 } });
+  });
+
+  it("rejects malformed duplicate session sizes", async () => {
+    for (const input of [
+      { name: "Bad", style: "SAYC", tableCount: 1, boardCount: 1, scoring: "matchpoints", listed: true },
+      { name: "Bad", style: "SAYC", tableCount: 2, boardCount: 33, scoring: "matchpoints", listed: true },
+      { name: "Bad", style: "SAYC", tableCount: 2, boardCount: 1, scoring: "rubber", listed: true }
+    ]) {
+      const response = await SELF.fetch("https://x/api/sessions", { method: "POST", body: JSON.stringify(input) });
+      expect(response.status).toBe(400);
+    }
+  });
+
   it("refuses a bad name, style, or scoring", async () => {
     expect((await createTable({ name: "  ", style: "SAYC", listed: true })).status).toBe(400);
     expect((await createTable({ name: "x".repeat(41), style: "SAYC", listed: true })).status).toBe(400);

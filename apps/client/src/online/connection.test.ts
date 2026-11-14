@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TableView } from "@contractplay/protocol";
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
-import { connectTable, createTable, listTables, serviceUrl, type ConnectionStatus } from "./connection.js";
+import { connectTable, createSession, createTable, listTables, serviceUrl, type ConnectionStatus } from "./connection.js";
 
 class FakeSocket {
   static readonly OPEN = 1;
@@ -232,6 +232,15 @@ describe("HTTP helpers", () => {
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ name: "T", style: "SAYC", scoring: "rubber", listed: true });
+  });
+
+  it("creates a duplicate session", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ sessionId: "SESSION1", tableIds: ["ABC234", "DEF567"] }), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const input = { name: "Club", style: "SAYC" as const, tableCount: 2, boardCount: 8, scoring: "matchpoints" as const, listed: true };
+    await expect(createSession("https://x.test", input)).resolves.toEqual({ sessionId: "SESSION1", tableIds: ["ABC234", "DEF567"] });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://x.test/api/sessions");
+    expect(JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)).toEqual(input);
   });
 
   it("returns the error code on 429 and a generic error otherwise", async () => {

@@ -29,7 +29,9 @@ export function dealHand(state: TableState, player: PlayerId, at: number, random
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (!canDeal(state, player)) return refuse(state, "not-ready");
   const handNumber = state.handNumber + 1;
-  const deal = dealCards(shuffle(createDeck(), random));
+  const sessionBoard = state.sessionBoard?.index === handNumber - 1 ? state.sessionBoard : undefined;
+  if (state.sessionId && !sessionBoard) return refuse(state, "not-ready");
+  const deal = sessionBoard?.deal ?? dealCards(shuffle(createDeck(), random));
   if (scoringOf(state) === "rubber") {
     // Rubber deals rotate the dealer from North and take vulnerability from games won; a won rubber starts a new one.
     const next = nextRubberDeal(state.rubber ?? emptyRubber(), "north");
@@ -39,8 +41,8 @@ export function dealHand(state: TableState, player: PlayerId, at: number, random
   }
   const game = createGameState({
     deal,
-    dealer: SEATS[(handNumber - 1) % 4]!,
-    vulnerability: VULNERABILITY[(handNumber - 1) % 16]!
+    dealer: sessionBoard?.dealer ?? SEATS[(handNumber - 1) % 4]!,
+    vulnerability: sessionBoard?.vulnerability ?? VULNERABILITY[(handNumber - 1) % 16]!
   });
   return accept(state, { handNumber, game, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }

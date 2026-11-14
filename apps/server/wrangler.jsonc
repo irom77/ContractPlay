@@ -10,10 +10,12 @@
   "durable_objects": {
     "bindings": [
       { "name": "TABLES", "class_name": "TableObject" },
-      { "name": "LOBBY", "class_name": "LobbyObject" }
+      { "name": "LOBBY", "class_name": "LobbyObject" },
+      { "name": "SESSIONS", "class_name": "SessionObject" }
     ]
   },
   "migrations": [
-    { "tag": "v1", "new_sqlite_classes": ["TableObject", "LobbyObject"] }
+    { "tag": "v1", "new_sqlite_classes": ["TableObject", "LobbyObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["SessionObject"] }
   ]
 }

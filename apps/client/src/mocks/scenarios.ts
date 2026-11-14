@@ -235,6 +235,17 @@ const onlineScreens: readonly PreviewScreen[] = [
       const state = playUntil(bid(dealt(table("Friday club", people, others("north")), earlier), 8), (game) => game.phase === "complete");
       return view(state, "north", people);
     }
+  },
+  {
+    id: "duplicate-session", title: "Online: duplicate session progress", detail: "The table has finished board 2 and waits for the other tables; the session shows its current place and matchpoint percentage.",
+    build: () => {
+      const people: People = { north: "Alex" };
+      const state = bid(dealt(table("Club duplicate", people, others("north"))), 2);
+      const data = view(state, "north", people);
+      if (data.kind !== "table") throw new Error("Expected a table preview.");
+      return { ...data, view: { ...data.view, session: { board: 3, boardCount: 8, scoring: "matchpoints", completedBoards: 2,
+        complete: false, waitingForTables: true, rank: 1, tableCount: 4, matchpoints: { points: 4, top: 6, percentage: 66.6666667 }, crossImps: 12 } } };
+    }
   }
 ];
 

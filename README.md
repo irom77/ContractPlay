@@ -5,24 +5,25 @@
 > | # | Screen | # | Screen |
 > |---|---|---|---|
 > | 1 | Lobby | 15 | Rubber won |
-> | 2 | Seating | 16 | Solo: new deal |
-> | 3 | Auction: your call | 17 | Solo: your call against bots |
-> | 4 | Auction with hints | 18 | Solo: declaring against bots |
-> | 5 | Declaring 4♠ with dummy | 19 | Solo: auto play |
-> | 6 | Dummy playing for a bot declarer | 20 | Solo: claiming |
-> | 7 | Defending, dummy on your left | 21 | Solo: game menu |
-> | 8 | Defending, dummy on your right | 22 | Solo: settings |
-> | 9 | Card queued | 23 | Solo: recent hands |
-> | 10 | Game menu | 24 | Solo: hand result with scorecard |
-> | 11 | Auto play | 25 | Solo: rubber won |
-> | 12 | Claim waiting on you | 26 | Solo: reviewing a saved hand |
-> | 13 | Hand result | 27 | Solo: result against the field |
-> | 14 | Scores | 28 | Solo: viewing the original play |
+> | 2 | Seating | 16 | Online: duplicate session progress |
+> | 3 | Auction: your call | 17 | Solo: new deal |
+> | 4 | Auction with hints | 18 | Solo: your call against bots |
+> | 5 | Declaring 4♠ with dummy | 19 | Solo: declaring against bots |
+> | 6 | Dummy playing for a bot declarer | 20 | Solo: auto play |
+> | 7 | Defending, dummy on your left | 21 | Solo: claiming |
+> | 8 | Defending, dummy on your right | 22 | Solo: game menu |
+> | 9 | Card queued | 23 | Solo: settings |
+> | 10 | Game menu | 24 | Solo: recent hands |
+> | 11 | Auto play | 25 | Solo: hand result with scorecard |
+> | 12 | Claim waiting on you | 26 | Solo: rubber won |
+> | 13 | Hand result | 27 | Solo: reviewing a saved hand |
+> | 14 | Scores | 28 | Solo: result against the field |
+> |  |  | 29 | Solo: viewing the original play |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/28` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/29` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
-> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components; the solo screens (16–28) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components; the solo screens (17–29) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
 
 <p align="center">
@@ -79,6 +80,10 @@ Hints are off by default. Suggestions are the Expert bot's choice in the selecte
 Online tables let four people, with bots filling any empty seats, play one table together. They are live at https://contractplay.niuk.workers.dev. To try them locally, run `pnpm server:dev` and open http://localhost:8787.
 
 - **Lobby.** The lobby lists open tables. A table can be unlisted and then is reachable only by its link, `<address>/#/table/<id>`. There are no accounts: you choose a display name (1-20 characters), and the browser keeps a device secret in local storage that the service stores only as a hash. Clearing browser data or switching device loses your seat. **Recent hands** in the lobby and the online game menu opens the hand history: finished online hands are saved in this browser alongside solo hands (the 25 most recent), for any hand whose page was open on the table when it ended, and can be reviewed, exported to PBN, or deleted there.
+
+### Online duplicate sessions
+
+From the lobby, create a session with 2–8 tables and 4–32 generated boards, scored by matchpoints or cross-IMPs. Session tables appear in the lobby so players can join different tables. Each table plays the same board; the next board unlocks after every table finishes, and finalized boards update the session place shown at the table. PBN board-set imports into online sessions remain planned.
 - **Seats.** Each of the four seats is empty, a person, or a bot at a skill level you choose. A hand needs all four seats filled and at least one person. The first person to sit is the host and can remove a person between hands; any seated person can free an away player's seat between hands. A newcomer can only take an empty seat.
 - **Play.** The service shuffles with a cryptographically secure generator and enforces every action with the same rules as the solo app. Each player receives only their own cards, dummy after the opening lead, and every hand when the hand ends; when Declarer is a bot, a present human partner in dummy controls both declaring-side hands. Someone not seated sees seats and score only. **Claims:** on their turn, whoever controls the hand to act (the declarer for both declaring hands, a defender for their own) can claim "all remaining" or a number of the remaining tricks. Every human opponent must Accept; one Reject cancels it. A robot opponent accepts only when an exact search proves the claim, and rejects if the search cannot finish. The claimer can withdraw. While a claim is pending, play stops and the claimer's hand is shown to the opponents only (not to partner). After a rejection or withdrawal that side cannot claim again until the trick ends, and answers carry the claim's id, so a stale answer is ignored. The accepted claim ends the hand, and the result reads for example "Claimed by South (declarer): 3 of the remaining 4 tricks". Online tables use protocol version 4. Bots act on the service after about a second. **Scoring:** a new table scores rubber bridge unless its creator chooses running totals. At a rubber table the dealer rotates from North, vulnerability follows games won, each played hand goes on the rubber scorecard (passed-out and cancelled hands score nothing), and the deal after a won rubber starts a new one. **Scorecard:** at the end of every hand, solo and online, the result shows a paper-style bridge pad. The two partnerships sit either side of a vertical divider, headed "We" and "They" against bots or by the players' names online. Bonuses, overtricks, and penalties go above the line, written upwards; trick points go below it, game by game. Each won game closes with a dotted line and an arrow towards the side that won it, and a **Total** row sits under a double rule. Underneath, the last hand's points are explained line by line (contract points, overtricks, the insult, slam bonus, undertricks, honors, the game won, and the 700 or 500 rubber bonus). When a side wins the rubber, the card heads with the result and final score and offers **Deal a new rubber**, **Seating**, **Back to lobby**, and **Leave the table** online, or **Play another rubber** and **Online tables** solo; **Close** puts it away to see the cards. **Scores** in the game menu opens it at any time, and the seating screen shows it between hands. A running-totals table (and any table made before rubber scoring) keeps board-style dealer and vulnerability rotation and credits each hand's points to the side that scored them.
 - **Hand result.** When a hand ends, all 52 cards stay on the table face-up at their seats, each hand with its high-card points, and the contract, outcome, score, table totals, and **Deal** sit in the middle. **Seating** (also in the game menu) switches to the seat controls for changes before the next deal; **Show the hands** switches back. Solo hands end the same way, around the solo score panel.

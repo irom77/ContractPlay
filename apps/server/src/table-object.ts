@@ -78,6 +78,15 @@ export class TableObject extends DurableObject<Env> {
     return summaryOf(state);
   }
 
+  /** Used only while the lobby is assembling a new multi-table duplicate session. */
+  async bindSession(sessionId: string): Promise<TableSummary | undefined> {
+    const state = await this.load();
+    if (!state || state.sessionId || state.handNumber !== 0) return undefined;
+    const bound = { ...state, scoring: "duplicate" as const, sessionId };
+    await this.save(bound);
+    return summaryOf(bound);
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname === "/_admin/delete") {
       if (request.method !== "DELETE") return new Response("method not allowed", { status: 405 });
@@ -112,9 +121,13 @@ export class TableObject extends DurableObject<Env> {
     const state = await this.load();
     if (!state) return this.gone(ws);
     const parsed = parseClientMessage(message);
-    if (!parsed || parsed.type === "hello") return send(ws, { type: "refused", reason: "bad-message", view: viewFor(state, me.player) });
+    if (!parsed || parsed.type === "hello") return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, me.player) });
+    if (parsed.type === "refresh") {
+      await this.reportFinishedSessionHand(state);
+      return send(ws, { type: "view", view: await this.view(state, me.player) });
+    }
     const out = await this.dispatch({ type: "message", player: me.player, message: parsed, at: Date.now() });
-    if (out.refused) send(ws, { type: "refused", reason: out.refused, view: viewFor(out.state, me.player) });
+    if (out.refused) send(ws, { type: "refused", reason: out.refused, view: await this.view(out.state, me.player) });
   }
 
   async webSocketClose(ws: WebSocket): Promise<void> {
@@ -167,7 +180,7 @@ export class TableObject extends DurableObject<Env> {
     const state = await this.load();
     if (!state) return this.gone(ws);
     const parsed = parseClientMessage(message);
-    if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: viewFor(state, undefined) });
+    if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
     if (this.openSockets().filter((other) => other !== ws && identityOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
       ws.close(1013, "too many connections");
       return;
@@ -244,16 +257,24 @@ export class TableObject extends DurableObject<Env> {
   /** Applies an event; on a change stores it, then sends every identified connection its own view. */
   private async dispatch(event: TableEvent): Promise<Outcome> {
     const state = (await this.load())!;
-    const out = reduce(state, event, secureRandom);
+    let beforeReduce = state;
+    if (state.sessionId && event.type === "message" && event.message.type === "deal") {
+      const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, state.handNumber);
+      if (!board) return { state, refused: "not-ready" };
+      beforeReduce = { ...state, sessionBoard: { ...board, index: state.handNumber } };
+    }
+    const out = reduce(beforeReduce, event, secureRandom);
     if (out.expired) {
       await this.expire(state);
       return out;
     }
     if (out.state === state) return out;
     await this.save(out.state);
+    await this.reportFinishedSessionHand(out.state);
+    const sessionStatus = await this.sessionStatus(out.state);
     for (const ws of this.ctx.getWebSockets()) {
       const me = identityOf(ws);
-      if (me) send(ws, { type: "view", view: viewFor(out.state, me.player) });
+      if (me) send(ws, { type: "view", view: viewFor(out.state, me.player, sessionStatus) });
     }
     const summary = summaryOf(out.state);
     if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state))) {
@@ -265,6 +286,23 @@ export class TableObject extends DurableObject<Env> {
       }
     }
     return out;
+  }
+
+  private async sessionStatus(state: TableState) {
+    if (!state.sessionId) return undefined;
+    try { return await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).status(state.id); }
+    catch { return undefined; }
+  }
+
+  private async reportFinishedSessionHand(state: TableState): Promise<void> {
+    if (!state.sessionId || !state.handNumber || !state.game || (state.game.phase !== "complete" && state.game.phase !== "passed-out")) return;
+    const nsScore = state.game.phase === "complete" ? state.game.score?.score ?? 0 : 0;
+    try { await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).report(state.id, state.handNumber - 1, nsScore); }
+    catch { console.warn("table: session result report failed; a later refresh will retry"); }
+  }
+
+  private async view(state: TableState, player: PlayerId | undefined) {
+    return viewFor(state, player, await this.sessionStatus(state));
   }
 
   /** Removes a table at an admin's request, including its lobby entry, alarm, storage, and sockets. */

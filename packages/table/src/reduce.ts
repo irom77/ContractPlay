@@ -23,6 +23,7 @@ export function reduce(state: TableState, event: TableEvent, random: () => numbe
     case "setBot": return setBot(state, player, message.seat, message.skill);
     case "clearSeat": return clearSeat(state, player, message.seat);
     case "deal": return dealHand(state, player, at, random);
+    case "refresh": return { state };
     case "act": return act(state, player, message, at);
     case "handToBot": return handToBot(state, player, message.seat, at);
     case "resume": return resume(state, player);

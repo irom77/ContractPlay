@@ -359,3 +359,8 @@ When a hand record has no PBN `OptimumScore`, the client will compute double-dum
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.
+
+
+### Online duplicate sessions follow-up (2026-11-13)
+
+Generated-board online duplicate sessions are implemented in `apps/server/src/session-object.ts`, `packages/table/src/session.ts`, and the lobby/table client flow. The session Durable Object holds private deals and serialized results; tables fetch only their currently released board; status views contain aggregate standings and no deal or play. The first version does not import PBN board sets online; that remains a separate roadmap item. The ACBL Live public archive check is still open because the site returned a Cloudflare challenge (HTTP 403) in the actual Chromium browser. See [the session implementation plan](2026-11-13-online-duplicate-session.md).

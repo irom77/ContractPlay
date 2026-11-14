@@ -47,6 +47,9 @@ export function connectTable(input: {
   const createSocket = input.createSocket ?? ((target: string) => new WebSocket(target));
   let socket: WebSocket | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  const refreshTimer = setInterval(() => {
+    if (!stopped && socket?.readyState === SOCKET_OPEN) socket.send(JSON.stringify({ type: "refresh" } satisfies ClientMessage));
+  }, 5000);
   let attempt = 0;
   let stopped = false;
 
@@ -54,6 +57,7 @@ export function connectTable(input: {
     stopped = true;
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
+    clearInterval(refreshTimer);
     if (status) input.onStatus(status);
   };
 
@@ -120,4 +124,17 @@ export async function createTable(baseUrl: string, input: { name: string; style:
   } catch {
     return { error: "network" };
   }
+}
+
+export async function createSession(baseUrl: string, input: { name: string; style: TableStyle; tableCount: number; boardCount: number; scoring: "matchpoints" | "imps"; listed: boolean }): Promise<{ sessionId: string; tableIds: string[] } | { error: string }> {
+  try {
+    const response = await fetch(`${baseUrl}/api/sessions`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input)
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok && isRecord(body) && typeof body.sessionId === "string" && Array.isArray(body.tableIds)
+      && body.tableIds.every((id) => typeof id === "string")) return { sessionId: body.sessionId, tableIds: body.tableIds };
+    if (response.status === 429 && isRecord(body) && typeof body.error === "string") return { error: body.error };
+    return { error: response.status === 400 ? "bad-request" : "failed" };
+  } catch { return { error: "network" }; }
 }

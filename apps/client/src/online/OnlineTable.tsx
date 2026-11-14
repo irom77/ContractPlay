@@ -46,6 +46,15 @@ function refusalText(reason: RefusalReason): string | undefined {
   return "That isn't possible right now.";
 }
 
+function sessionLabel(session: NonNullable<TableViewData["session"]>): string {
+  const progress = session.complete ? "Session complete"
+    : session.waitingForTables ? `Board ${session.board} complete · waiting for other tables`
+      : `Board ${session.board} of ${session.boardCount}`;
+  if (session.completedBoards === 0) return progress;
+  const metric = session.scoring === "matchpoints" ? `${session.matchpoints.percentage.toFixed(1)}% matchpoints` : `${session.crossImps} cross-IMPs`;
+  return `${progress} · Place ${session.rank} of ${session.tableCount} · ${metric}`;
+}
+
 const isLive = (game: PublicGame | undefined): boolean => game?.phase === "auction" || game?.phase === "play";
 
 /** Calls and cards so far in the hand; it goes down only when someone takes an action back. */
@@ -523,6 +532,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             matchScore={score}
             tools={<GameMenu items={menuItems} defaultOpen={menuOpen} />}
             overlay={<>
+              {view.session ? <p className="session-progress" role="status">{sessionLabel(view.session)}</p> : null}
               {claimPanel}
               {live && !claimPanel ? <div className="hint-controls">
                 {hintsOn && actingSeat && game.phase === "auction" ? <strong className="hand-points" aria-label={`${highCardPoints(game.hands[game.currentActor])} high-card points`}>{highCardPoints(game.hands[game.currentActor])} HCP</strong> : null}
@@ -585,6 +595,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             overlay={<>
               {resultClosed ? null : <section className={`score-panel result-panel ${rubberSummary ? "scorecard-panel" : ""}`} aria-label="Hand result">
                 <HandResultSummary game={game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />
+                {view.session ? <p className="session-result-progress" role="status">{sessionLabel(view.session)}</p> : null}
                 {rubberSummary ? scorecard(resultActions) : <>
                   <p className="result-totals">Table score: {totals}</p>
                   <div className="result-actions">{resultActions}</div>

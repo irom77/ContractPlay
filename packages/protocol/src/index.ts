@@ -1,7 +1,7 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -39,11 +39,15 @@ export type TableView = TableSummary & {
   claim?: { seat: Seat; tricks: number; waitingOn: Seat[]; madeAt: number };
   /** The last claim, rejected by `by`; shown until the next card or call. */
   claimRejected?: { seat: Seat; tricks: number; by: Seat };
+  /** Progress and this table's standing in a duplicate session. Contains no board or other table's result data. */
+  session?: { board: number; boardCount: number; scoring: "matchpoints" | "imps"; completedBoards: number;
+    complete: boolean; waitingForTables: boolean; rank: number; tableCount: number;
+    matchpoints: { points: number; top: number; percentage: number }; crossImps: number };
 };
 
 export type ClientMessage =
   | { type: "hello"; version: number; secret: string; name: string }
-  | { type: "sit"; seat: Seat } | { type: "leave" }
+  | { type: "sit"; seat: Seat } | { type: "leave" } | { type: "refresh" }
   | { type: "setBot"; seat: Seat; skill: SkillLevel }
   | { type: "clearSeat"; seat: Seat }
   | { type: "deal" }
@@ -122,7 +126,7 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
       return seat && skill ? { type: "setBot", seat, skill } : undefined;
     }
-    case "leave": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": case "withdrawClaim": return { type: data.type };
+    case "leave": case "refresh": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": case "withdrawClaim": return { type: data.type };
     case "claim": {
       const tricks = count(data.tricks);
       return tricks !== undefined && tricks <= 13 ? { type: "claim", tricks } : undefined;

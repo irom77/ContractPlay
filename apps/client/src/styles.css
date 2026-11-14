@@ -68,6 +68,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .table-tools-row { display: flex; align-items: center; gap: var(--u); }
 .history-controls { bottom: var(--u); left: calc(2 * var(--u)); }
 .hint-controls { right: calc(2 * var(--u)); bottom: var(--u); flex-direction: column; align-items: flex-end; }
+.session-progress { position: absolute; z-index: 7; top: calc(2 * var(--u)); left: calc(2 * var(--u)); max-width: calc(34 * var(--u)); margin: 0; border-radius: 6px; padding: calc(.7 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .88); color: var(--ink); font-size: var(--text-s); line-height: 1.25; }
+.session-result-progress { margin: 0 0 calc(1.5 * var(--u)); color: var(--gold); font-size: var(--text-s); text-align: center; }
 .hint-controls p { margin: 0; max-width: max(200px, calc(34 * var(--u))); border-radius: 8px; padding: calc(.8 * var(--u)) calc(1.2 * var(--u)); background: rgba(8, 28, 24, .82); color: var(--ink); font-size: var(--text-m); line-height: 1.35; text-align: right; }
 .hint-controls p strong { display: block; color: var(--gold); font-family: var(--suit-font); font-size: var(--text-m); }
 .hand-points { border-radius: 999px; padding: calc(.5 * var(--u)) calc(1.3 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-m); font-weight: 800; }

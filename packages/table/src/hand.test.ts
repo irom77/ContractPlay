@@ -1,4 +1,4 @@
-import { validatePlay } from "@contractplay/core";
+import { createDeck, deal, validatePlay } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import { botToAct, botWake } from "./hand.js";
@@ -21,6 +21,16 @@ function expectTotals(done: TableState): void {
 }
 
 describe("dealing", () => {
+  it("deals the released session board with its recorded dealer and vulnerability", () => {
+    const t = fourHumans("duplicate");
+    const sharedDeal = deal(createDeck());
+    const sessionTable: TableState = { ...t, sessionId: "session", sessionBoard: { index: 0, number: 1, deal: sharedDeal, dealer: "east", vulnerability: "EW" } };
+    const started = sendOk(sessionTable, "p0", { type: "deal" });
+    expect(started.game?.initialDeal).toEqual(sharedDeal);
+    expect(started.game).toMatchObject({ dealer: "east", vulnerability: "EW" });
+    expect(send({ ...t, sessionId: "session" }, "p0", { type: "deal" }).refused).toBe("not-ready");
+  });
+
   it("refuses with an empty seat or four bots", () => {
     const t = tableWithBots();
     const empty = sendOk(t, "alice", { type: "clearSeat", seat: "west" });

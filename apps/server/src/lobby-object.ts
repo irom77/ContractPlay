@@ -1,4 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
+import { createDeck, deal, shuffle } from "@contractplay/core";
+import type { Vulnerability } from "@contractplay/core";
+import { MAX_TABLE_NAME } from "@contractplay/protocol";
 import type { TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 
 /** Listed and unlisted tables are capped separately, so neither kind can starve the other. */
@@ -17,6 +20,8 @@ const RATE = "rate:";
 const SALT = "salt";
 /** Most keys one storage.delete call accepts. */
 const DELETE_BATCH = 128;
+
+function secureRandom(): number { return crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32; }
 
 /** A lobby entry; `summary` is missing while the table is being created (the id is reserved). */
 type Entry = { listed: boolean; summary?: TableSummary };
@@ -86,6 +91,49 @@ export class LobbyObject extends DurableObject<Env> {
       return { id };
     }
     throw new Error("could not allocate a table id");
+  }
+
+  /** Creates a fixed set of duplicate tables and a shared generated board set. */
+  async createSession(input: { name: string; style: TableStyle; tableCount: number; boardCount: number; scoring: "matchpoints" | "imps"; listed: boolean }, address: string): Promise<{ sessionId: string; tableIds: string[] } | { error: string }> {
+    if (!Number.isInteger(input.tableCount) || input.tableCount < 2 || input.tableCount > 8
+      || !Number.isInteger(input.boardCount) || input.boardCount < 1 || input.boardCount > 32) return { error: "bad-request" };
+    const sessionId = randomTableId(UNLISTED_ID_LENGTH);
+    const tableIds: string[] = [];
+    const prefix = input.name.trim().slice(0, Math.max(1, MAX_TABLE_NAME - 16));
+    for (let i = 0; i < input.tableCount; i++) {
+      const created = await this.createTable({ name: `${prefix} · ${i + 1}`, style: input.style, scoring: "duplicate", listed: input.listed }, address);
+      if ("error" in created) {
+        await this.rollbackTables(tableIds);
+        return created;
+      }
+      tableIds.push(created.id);
+    }
+    const vulnerability: readonly Vulnerability[] = ["None", "NS", "EW", "Both", "NS", "EW", "Both", "None", "EW", "Both", "None", "NS", "Both", "None", "NS", "EW"];
+    const boards = Array.from({ length: input.boardCount }, (_, index) => ({
+      number: index + 1,
+      deal: deal(shuffle(createDeck(), secureRandom)),
+      dealer: (["north", "east", "south", "west"] as const)[index % 4]!,
+      vulnerability: vulnerability[index % vulnerability.length]!
+    }));
+    const sessionStub = this.env.SESSIONS.get(this.env.SESSIONS.idFromName(sessionId));
+    try {
+      if (!(await sessionStub.create({ id: sessionId, tables: tableIds, boards, scoring: input.scoring }))) throw new Error("session id collision");
+      const bound = await Promise.all(tableIds.map((id) => this.env.TABLES.get(this.env.TABLES.idFromName(id)).bindSession(sessionId)));
+      if (bound.some((summary) => summary === undefined)) throw new Error("could not bind all tables to the session");
+      for (const summary of bound) if (summary) await this.update(summary);
+      return { sessionId, tableIds };
+    } catch (error) {
+      await sessionStub.deleteForRollback();
+      await this.rollbackTables(tableIds);
+      throw error;
+    }
+  }
+
+  private async rollbackTables(ids: readonly string[]): Promise<void> {
+    for (const id of ids) {
+      await this.remove(id);
+      await this.env.TABLES.get(this.env.TABLES.idFromName(id)).fetch("https://table/_admin/delete", { method: "DELETE" }).catch(() => undefined);
+    }
   }
 
   /** Lowercase hex SHA-256 of the salt followed by the address. */

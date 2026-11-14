@@ -6,6 +6,7 @@ const valid: ClientMessage[] = [
   { type: "hello", version: PROTOCOL_VERSION, secret, name: "Ann" },
   { type: "sit", seat: "north" },
   { type: "leave" },
+  { type: "refresh" },
   { type: "setBot", seat: "east", skill: "expert" },
   { type: "clearSeat", seat: "west" },
   { type: "deal" },

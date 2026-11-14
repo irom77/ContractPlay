@@ -5,6 +5,7 @@ import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lo
 // The entry module may only export handlers and Durable Object classes.
 export { LobbyObject } from "./lobby-object.js";
 export { TableObject } from "./table-object.js";
+export { SessionObject } from "./session-object.js";
 
 const TABLE_ID = new RegExp(`^([${ID_ALPHABET}]{${LISTED_ID_LENGTH}}|[${ID_ALPHABET}]{${UNLISTED_ID_LENGTH}})$`);
 const STYLES: readonly unknown[] = ["SAYC", "2/1"] satisfies TableStyle[];
@@ -49,6 +50,26 @@ async function createTable(request: Request, env: Env): Promise<Response> {
   return "error" in result ? Response.json(result, { status: 429 }) : Response.json(result, { status: 201 });
 }
 
+async function createSession(request: Request, env: Env): Promise<Response> {
+  const text = await readLimited(request, MAX_MESSAGE_BYTES);
+  if (text === undefined) return Response.json({ error: "bad-request" }, { status: 400 });
+  let body: unknown;
+  try { body = JSON.parse(text); } catch { return Response.json({ error: "bad-request" }, { status: 400 }); }
+  if (typeof body !== "object" || body === null) return Response.json({ error: "bad-request" }, { status: 400 });
+  const data = body as Record<string, unknown>;
+  const name = cleanName(data.name, MAX_TABLE_NAME);
+  const tableCount = typeof data.tableCount === "number" ? data.tableCount : NaN;
+  const boardCount = typeof data.boardCount === "number" ? data.boardCount : NaN;
+  if (name === undefined || !STYLES.includes(data.style) || typeof data.listed !== "boolean"
+    || !Number.isInteger(tableCount) || !Number.isInteger(boardCount)
+    || tableCount < 2 || tableCount > 8 || boardCount < 1 || boardCount > 32
+    || (data.scoring !== "matchpoints" && data.scoring !== "imps")) return Response.json({ error: "bad-request" }, { status: 400 });
+  const result = await lobbyOf(env).createSession({ name, style: data.style as TableStyle, listed: data.listed,
+    tableCount, boardCount, scoring: data.scoring }, request.headers.get("CF-Connecting-IP") ?? "unknown");
+  if ("error" in result) return Response.json(result, { status: result.error === "bad-request" ? 400 : 429 });
+  return Response.json(result, { status: 201 });
+}
+
 /** A socket for an id that cannot exist: answers `gone` and closes. */
 function goneSocket(): Response {
   const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
@@ -89,6 +110,10 @@ export default {
     if (path === "/api/tables") {
       if (request.method === "GET") return Response.json(await lobbyOf(env).list());
       if (request.method === "POST") return createTable(request, env);
+      return Response.json({ error: "method not allowed" }, { status: 405 });
+    }
+    if (path === "/api/sessions") {
+      if (request.method === "POST") return createSession(request, env);
       return Response.json({ error: "method not allowed" }, { status: 405 });
     }
     const socket = /^\/api\/tables\/([^/]+)\/ws$/.exec(path);
