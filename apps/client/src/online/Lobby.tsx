@@ -8,6 +8,8 @@ import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
 import { currentAccount, requestMagicLink, signOut, type AccountSession } from "./auth.js";
 
+import { syncOnlineHands } from "./handHistory.js";
+
 const REFRESH_MS = 5000;
 /** How the lobby names a table's scoring; lobby entries from before rubber tables have none and keep running totals. */
 const scoringNames: Record<TableScoring, string> = { rubber: "Rubber bridge", duplicate: "Running totals" };
@@ -55,13 +57,18 @@ export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, ap
   const [account, setAccount] = useState<AccountSession | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [signingIn, setSigningIn] = useState(false);
+  const [historyError, setHistoryError] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void currentAccount().then((session) => { if (active) setAccount(session); }).catch(() => {});
+    void currentAccount().then((session) => {
+      if (!active) return;
+      setAccount(session);
+      if (session) void syncOnlineHands(storage, session).catch(() => { if (active) setHistoryError(true); });
+    }).catch(() => {});
     return () => { active = false; };
-  }, []);
+  }, [storage]);
 
   if (signingIn) return <EmailGate identity={identity} onBack={() => setSigningIn(false)} />;
   if ((!identity && !account) || editingName) {
@@ -71,6 +78,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, ap
   }
 
   return <>
+    {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
     <LobbyTables identity={{ name: account?.displayName ?? identity!.name }} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
       onChangeName={() => setEditingName(true)} account={account} onSignIn={() => setSigningIn(true)} onSignOut={() => {

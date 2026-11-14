@@ -123,10 +123,10 @@ export class AuthStore {
     await this.db.prepare("UPDATE sessions SET revoked_at = ? WHERE session_hash = ?").bind(now, sessionHash).run();
   }
 
-  async upsertHands(accountId: string, hands: readonly StoredHand[]): Promise<void> {
+  async upsertHands(accountId: string, hands: readonly StoredHand[], replace = true): Promise<void> {
     if (hands.length === 0) return;
     await this.db.batch([
-      ...hands.map((hand) => this.db.prepare("INSERT INTO online_hands (account_id, hand_id, completed_at, data_json) VALUES (?, ?, ?, ?) ON CONFLICT(account_id, hand_id) DO UPDATE SET completed_at = excluded.completed_at, data_json = excluded.data_json")
+      ...hands.map((hand) => this.db.prepare(`INSERT INTO online_hands (account_id, hand_id, completed_at, data_json) VALUES (?, ?, ?, ?) ON CONFLICT(account_id, hand_id) ${replace ? "DO UPDATE SET completed_at = excluded.completed_at, data_json = excluded.data_json" : "DO NOTHING"}`)
         .bind(accountId, hand.id, hand.completedAt, JSON.stringify(hand.data))),
       this.db.prepare("DELETE FROM online_hands WHERE account_id = ? AND hand_id NOT IN (SELECT hand_id FROM online_hands WHERE account_id = ? ORDER BY completed_at DESC, hand_id DESC LIMIT 25)")
         .bind(accountId, accountId)

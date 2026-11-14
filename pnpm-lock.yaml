@@ -93,6 +93,9 @@ importers:
       '@contractplay/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@contractplay/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
       '@contractplay/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

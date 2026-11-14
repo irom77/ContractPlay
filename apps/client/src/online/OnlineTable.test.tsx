@@ -98,7 +98,7 @@ function frameNow(): Frame {
   };
 }
 
-function setup(options: { named?: boolean; storage?: StorageLike } = {}) {
+function setup(options: { named?: boolean; storage?: StorageLike; account?: { playerId: string; displayName: string } } = {}) {
   const storage = options.storage ?? memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const service = fakeService();
@@ -106,7 +106,7 @@ function setup(options: { named?: boolean; storage?: StorageLike } = {}) {
   const onRecentHands = vi.fn();
   const frames: Frame[] = [];
   const utils = render(<Profiler id="table" onRender={() => frames.push(frameNow())}>
-    <OnlineTable baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={onLeave} onRecentHands={onRecentHands} connect={service.connect} />
+    <OnlineTable account={options.account ?? null} baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={onLeave} onRecentHands={onRecentHands} connect={service.connect} />
   </Profiler>);
   if (options.named !== false) service.status("open");
   return { ...service, storage, onLeave, onRecentHands, frames, unmount: utils.unmount };
@@ -1019,4 +1019,39 @@ describe("OnlineTable connection", () => {
       expect(within(menu()).queryByRole("button", { name: "Cancel this hand", hidden: true })).toBeNull();
     });
   });
+});
+
+it("restores an account on a fresh device and connects without a guest identity", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/auth/me"
+    ? Response.json({ playerId: "account-player", displayName: "Account" }) : Response.json({ hands: [] })));
+  const service = fakeService();
+  const storage = memoryStorage();
+  try {
+    render(<OnlineTable baseUrl="https://x.test" tableId="ABC234" storage={storage} onLeave={vi.fn()} onRecentHands={vi.fn()} connect={service.connect} />);
+    await waitFor(() => expect(service.connectMock).toHaveBeenCalled());
+    expect(service.connectMock.mock.calls[0]?.[0].identity).toEqual({ playerId: "account-player", displayName: "Account" });
+    expect(storage.getItem("contractplay.online.identity")).toBeNull();
+    service.status("identity-conflict");
+    expect(screen.getByRole("region", { name: "Account seat conflict" }).textContent).toMatch(/multiple seats/i);
+    expect(screen.getByRole("region", { name: "Account seat conflict" }).textContent).toMatch(/host/i);
+    expect(screen.getByRole("button", { name: "Back to lobby" })).toBeTruthy();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it("uploads a completed account hand and uses its canonical archive response", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      expect(url).toBe("/api/account/online-hands/online-ABC234-7");
+      const hand = JSON.parse(init.body as string).hand;
+      return Response.json({ hands: [{ ...hand, name: "Account archive" }] });
+    }
+    return Response.json({ hands: [] });
+  }));
+  try {
+    const game = playCards(oneNoTrump(), 52);
+    const test = setup({ account: { playerId: "account-player", displayName: "Owner" } });
+    test.push(tableView({ handNumber: 7, game: publicGame(game, ["north"]), revealed: game.initialDeal, yourSeat: "north", seats: seatedNorth }));
+    await waitFor(() => expect(loadSoloData(test.storage).completedHands[0]?.name).toBe("Account archive"));
+    expect(loadSoloData(test.storage).completedHands[0]?.onlineHistory?.ownerPlayerId).toBe("account-player");
+  } finally { vi.unstubAllGlobals(); }
 });

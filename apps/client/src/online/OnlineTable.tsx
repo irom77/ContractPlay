@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cardId, emptyRubber, forcedCard, summarizeRubber, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
-import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
+import { loadSoloData, saveSoloData, type SavedHand, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createHandName, savedHandName } from "../handNames.js";
@@ -14,6 +14,8 @@ import { handsOnCard, playerSideNames, Scorecard } from "../table/Scorecard.js";
 import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
+import { currentAccount, type AccountSession } from "./auth.js";
+import { syncOnlineHands, uploadOnlineHand } from "./handHistory.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
 import { HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.js";
@@ -33,6 +35,8 @@ export type OnlineTableProps = {
   onRecentHands(): void; connect?: typeof defaultConnect;
   /** Opens the game menu on arrival (the UI previews show it this way). */
   menuOpen?: boolean;
+  /** A session supplied by a parent, or null for an explicit guest/preview. Omit to restore the session. */
+  account?: AccountSession | null;
   /** Opens the Rubber score dialog on arrival (the UI previews show it this way). */
   rubberOpen?: boolean;
   /** Starts with this card queued (the UI previews show a queued card this way). */
@@ -112,16 +116,21 @@ function canTakeBack(game: PublicGame, seats: TableViewData["seats"], yourSeat: 
 }
 
 /** Adds the finished hand to the device's hand history unless a hand with its id is already there. */
-function saveToHistory(storage: StorageLike, view: TableViewData): void {
+function saveToHistory(storage: StorageLike, view: TableViewData, account?: AccountSession): SavedHand | undefined {
   try {
     const data = loadSoloData(storage);
     const id = `online-${view.id}-${view.handNumber}`;
-    if (data.completedHands.some((hand) => hand.id === id)) return;
+    const existing = data.completedHands.find((hand) => hand.id === id);
+    if (existing) return existing;
     const hand = savedHandFrom(view, id, new Date().toISOString());
     if (!hand) return;
     // Named after the viewer's dealt cards (South's for someone not seated).
     const name = createHandName(hand.game.initialDeal[view.yourSeat ?? "south"], new Set(data.completedHands.map(savedHandName)));
-    saveSoloData(storage, { ...data, completedHands: [{ ...hand, name }, ...data.completedHands].slice(0, HISTORY_LIMIT) });
+    const saved: SavedHand = { ...hand, name, ...(account ? { onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } } : {}) };
+    const solo = data.completedHands.filter(hand => !hand.id.startsWith("online-"));
+    const online = data.completedHands.filter(hand => hand.id.startsWith("online-"));
+    saveSoloData(storage, { ...data, completedHands: [saved, ...online].slice(0, HISTORY_LIMIT).concat(solo) });
+    return saved;
   } catch {
     // Storage is full or unavailable: the hand is simply not kept.
   }
@@ -165,11 +174,22 @@ function publicPlayContext(game: PublicGame): PlayContext {
 
 export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
-  if (!identity) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
-  return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={identity} />;
+  const [account, setAccount] = useState<AccountSession | null | undefined>(props.account);
+  useEffect(() => {
+    let active = true;
+    if (props.account !== undefined) { setAccount(props.account); return; }
+    void currentAccount().then(session => { if (active) setAccount(session); }).catch(() => { if (active) setAccount(null); });
+    return () => { active = false; };
+  }, [props.account]);
+  useEffect(() => {
+    if (account) void syncOnlineHands(storage, account).catch(() => {});
+  }, [storage, account]);
+  if (!identity && !account) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
+  if (account === undefined) return <main className="app-shell"><p role="status">Restoring your session…</p></main>;
+  return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={account ?? identity!} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity | AccountSession }) {
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -266,8 +286,14 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     const key = game && isLive(game) ? `${view.handNumber}:${deciderOf(game, view.seats)}:${game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length}` : undefined;
     setTurn((known) => key === undefined ? undefined : known?.key === key ? known : { key, since: Date.now() });
 
-    if (view.revealed && game?.phase === "complete") saveToHistory(storage, view);
-  }, [view, storage]);
+    if (view.revealed && game?.phase === "complete") {
+      const account = "playerId" in identity ? identity : undefined;
+      const saved = saveToHistory(storage, view, account);
+      if (saved && account) void uploadOnlineHand(storage, account, saved).catch(() => {
+        setNotice({ text: "Online history could not sync. This hand is saved locally; reopen Recent hands to retry." });
+      });
+    }
+  }, [view, storage, identity]);
 
   useEffect(() => {
     if (!turn) return;
@@ -377,6 +403,11 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     {notice ? <p className="error-message" role="alert">{notice.text}</p> : null}
   </>;
 
+  if (status === "identity-conflict") {
+    return <main className="app-shell"><section className="empty-table lobby" aria-label="Account seat conflict">
+      <div className="lobby-panel"><p>This account is linked to multiple seats at this table. Ask the host to free the extra seat between hands, then reopen the table.</p>{backButton}</div>
+    </section></main>;
+  }
   if (status === "gone") {
     return <main className="app-shell"><section className="empty-table lobby" aria-label="Table closed">
       <div className="lobby-panel"><p>This table no longer exists.</p>{backButton}</div>
@@ -468,7 +499,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       ...(canClaim && !pickingClaim ? [{ id: "claim", label: "Claim", disabled: inputDisabled,
         title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(view.revision) }] : []),
       ...rubberItem,
-      { id: "hands", label: "Recent hands", onSelect: onRecentHands, title: "Review finished hands saved on this device; you keep your seat" },
+      { id: "hands", label: "Recent hands", onSelect: onRecentHands, title: "Review recent finished hands; you keep your seat" },
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",

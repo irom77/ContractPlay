@@ -11,6 +11,7 @@ function setup(named = false, account = false) {
   if (named) saveIdentity(storage, "Guest");
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/auth/me") return account ? Response.json({ playerId: "p1", displayName: "Account" }) : new Response(null, { status: 401 });
+    if (url.startsWith("/api/account/online-hands")) return Response.json({ hands: [] });
     if (url === "/api/auth/sign-out") { account = false; return new Response(null, { status: 204 }); }
     if (url === "/api/auth/magic-link") return Response.json({ ok: true });
     throw new Error(`Unexpected request ${url} ${init?.method}`);
@@ -53,4 +54,10 @@ it("restores the account after callback and signs out to the saved guest", async
   await user.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() => expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Guest's table"));
   expect(fetcher.mock.calls.find(([url]) => url === "/api/auth/sign-out")?.[1]?.credentials).toBe("same-origin");
+});
+
+it("loads and imports online history after restoring the linked account", async () => {
+  const { fetcher } = setup(true, true);
+  await screen.findByText("Signed in as Account");
+  await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url === "/api/account/online-hands")).toBe(true));
 });

@@ -11,6 +11,7 @@
   "dependencies": {
     "@contractplay/bots": "workspace:*",
     "@contractplay/core": "workspace:*",
+    "@contractplay/persistence": "workspace:*",
     "@contractplay/protocol": "workspace:*",
     "@contractplay/table": "workspace:*"
   },

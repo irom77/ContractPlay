@@ -93,3 +93,23 @@ describe("Root", () => {
     expect(soloVisible()).toBe(true);
   });
 });
+
+it("loads account history when Recent hands opens directly in solo play", async () => {
+  const { applyAction, createGameState, deal, legalCards } = await import("@contractplay/core");
+  const { loadSoloData } = await import("@contractplay/persistence");
+  let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+  for (const [seat, bid] of [["north", "1clubs"], ["east", "pass"], ["south", "pass"], ["west", "pass"]] as const) {
+    const result = applyAction(game, { type: "bid", seat, bid }); if (!result.ok) throw new Error(result.error.message); game = result.state;
+  }
+  while (game.phase === "play") {
+    const result = applyAction(game, { type: "play", seat: game.currentActor, card: legalCards(game.hands[game.currentActor], game.currentTrick[0]?.card.suit)[0]! });
+    if (!result.ok) throw new Error(result.error.message); game = result.state;
+  }
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => url === "/api/auth/me"
+    ? Response.json({ playerId: "account-player", displayName: "Owner" })
+    : Response.json({ hands: [{ id: "online-ABC234-1", name: "Another device", savedAt: "2026-11-14T00:00:00.000Z", game }] })));
+  const { default: App } = await import("./App.js");
+  render(<App initialDialog="hands" />);
+  expect(await screen.findByText("Another device")).toBeTruthy();
+  expect(loadSoloData(window.localStorage).completedHands[0]?.id).toBe("online-ABC234-1");
+});

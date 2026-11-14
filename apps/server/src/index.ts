@@ -5,6 +5,7 @@ import type { Card, Deal, Seat, Vulnerability } from "@contractplay/core";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 import { authenticatedAccount, authRequestAllowed, authRoute } from "./auth.js";
+import { handHistoryRoute } from "./hand-history.js";
 import { VERIFIED_ACCOUNT_HEADER } from "./table-object.js";
 import type { VerifiedAccount } from "./table-object.js";
 
@@ -147,6 +148,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path === "/api/account/online-hands" || path.startsWith("/api/account/online-hands/")) return handHistoryRoute(request, env);
     if (path.startsWith("/api/auth/")) return authRoute(request, env);
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
     if (path === "/admin" && (request.method === "GET" || request.method === "HEAD")) {

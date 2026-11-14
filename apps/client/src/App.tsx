@@ -47,6 +47,8 @@ import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
+import { currentAccount } from "./online/auth.js";
+import { syncOnlineHands } from "./online/handHistory.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
@@ -150,6 +152,16 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     return game ? { game, returnCursor: 0 } : undefined;
   });
   const [dialog, setDialog] = useState<MenuDialog | undefined>(preview?.dialog ?? initialDialog);
+  useEffect(() => {
+    if (frozen || dialog !== "hands" || serviceUrl() === undefined) return;
+    let active = true;
+    void currentAccount().then(async account => {
+      if (!active || !account) return;
+      await syncOnlineHands(persistence.storage, account);
+      if (active) setSoloData(loadSoloData(persistence.storage));
+    }).catch(() => { if (active) setMessage("Online history could not sync. Your local hands are still available; reopen Recent hands to retry."); });
+    return () => { active = false; };
+  }, [dialog, frozen, persistence]);
   // The hand the user has handed over: bots make every remaining call and play for it.
   const [botsFinishHandId, setBotsFinishHandId] = useState<string | undefined>(preview?.autoPlay ? currentHandId : undefined);
   // A card the user picked before their turn, played for them when it comes.

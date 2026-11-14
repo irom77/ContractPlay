@@ -11,6 +11,8 @@ export type SavedHand = Readonly<{
   playerSeat?: Seat;
   game: GameState;
   savedAt: string;
+  /** Browser uploads are archives only; ownerPlayerId is a local cache partition, never server authority. */
+  onlineHistory?: Readonly<{ source: "user-imported"; competitive: false; ownerPlayerId?: string }>;
   pbnMetadata?: PbnMetadata;
   /** The imported board this hand was played on, when it came from a board set. */
   record?: HandRecord;
@@ -166,7 +168,7 @@ function isGame(value: unknown): value is GameState {
   return true;
 }
 
-function isSavedHand(value: unknown): value is SavedHand {
+export function isSavedHand(value: unknown): value is SavedHand {
   return isRecord(value) && typeof value.id === "string" && typeof value.savedAt === "string" && (value.name === undefined || typeof value.name === "string") && isGame(value.game) && value.game.phase === "complete" &&
     (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata)) && (value.playerSeat === undefined || isSeat(value.playerSeat));
 }
