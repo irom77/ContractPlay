@@ -7,11 +7,15 @@ declare global {
     interface Env {
       ASSETS: Fetcher;
       DB: D1Database;
+      /** Exact app origin; HTTPS required outside explicitly enabled localhost development. */
       AUTH_PUBLIC_ORIGIN?: string;
       AUTH_ALLOW_INSECURE_LOCALHOST?: string;
+      /** Approved sender on the configured provider's verified/onboarded domain. */
       AUTH_EMAIL_FROM?: string;
+      /** Cloudflare Email Service binding; takes precedence over the Resend adapter. */
       EMAIL?: SendEmail;
       AUTH_EMAIL_PROVIDER?: "resend";
+      /** Worker secret (or ignored local .dev.vars); never store in Wrangler vars. */
       RESEND_API_KEY?: string;
       TABLES: DurableObjectNamespace<TableObject>;
       LOBBY: DurableObjectNamespace<LobbyObject>;

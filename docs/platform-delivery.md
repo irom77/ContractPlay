@@ -53,7 +53,47 @@ Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the
 
 Pushes to `main` trigger the Cloudflare workflow. It installs dependencies, verifies and builds the web app, then deploys the Worker. The repository's GitHub Actions secrets provide the Cloudflare credentials; keep them out of source control. For a manual deployment, run `pnpm run deploy` from the repository root (plain `pnpm deploy` is a different, built-in pnpm command).
 
-Use `wrangler deploy --dry-run` in `apps/server` (after `pnpm build`) to check that the configuration bundles without deploying.
+Before pushing a release to `main`, run `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm web:verify`. The deploy workflow does not apply D1 migrations or configure mail: complete the prerequisites below before deploying the sign-in feature. `/admin` and its API remain open without authentication; authorization is separate required work before public production use.
+
+Use `pnpm --filter @contractplay/server exec wrangler deploy --dry-run` (after `pnpm build`) to check that the configuration bundles without deploying.
+
+### Email sign-in prerequisites
+
+The feature is implemented, but production D1 provisioning, sender configuration, and live email delivery have not been verified by the implementation checks. All commands below run from the repository root and use `apps/server/wrangler.jsonc` through the server workspace.
+
+1. **Create and bind D1.** Authenticate Wrangler to the intended Cloudflare account, then create the database:
+
+   ```sh
+   pnpm --filter @contractplay/server exec wrangler d1 create contractplay-auth
+   ```
+
+   Copy the actual returned `database_id` into the existing `d1_databases` entry in `apps/server/wrangler.jsonc`. Keep `binding: "DB"`, `database_name: "contractplay-auth"`, and `migrations_dir: "migrations"`; do not add a second binding or invent an ID. The checked-in entry intentionally has no production ID. If the database already exists, get its ID with `pnpm --filter @contractplay/server exec wrangler d1 info contractplay-auth` instead of creating another. See [D1 commands](https://developers.cloudflare.com/d1/wrangler-commands/).
+
+2. **Apply migrations explicitly.** Local migrations prepare the development database; remote migrations prepare the bound production database. `--remote` changes production data, so confirm the selected account and real binding first. Wrangler tracks applied files; deploy alone does not apply them.
+
+   ```sh
+   pnpm --filter @contractplay/server exec wrangler d1 migrations apply contractplay-auth --local
+   pnpm --filter @contractplay/server exec wrangler d1 migrations apply contractplay-auth --remote
+   ```
+
+3. **Set the app origin.** `vars.AUTH_PUBLIC_ORIGIN` is currently `https://contractplay.niuk.workers.dev`. It must match the browser app's exact HTTPS origin, with no path, query, or fragment. Change it when enabling a custom domain; old-host sessions do not transfer across origins. Keep `AUTH_ALLOW_INSECURE_LOCALHOST` unset in production.
+
+4. **Choose one mail provider and an approved sender.** Set `vars.AUTH_EMAIL_FROM` to a sender your provider permits. No sender is supplied by the repository, and a `workers.dev` app hostname is not a sending domain.
+
+   - **Cloudflare Email Service:** arbitrary-recipient mail requires **Workers Paid** and an **onboarded sending domain using Cloudflare DNS**. Complete the provider's sender/DNS verification, then add `"send_email": [{ "name": "EMAIL" }]` at the top level of Wrangler configuration. This binding needs no mail API secret. Verified-destination testing on Free does not establish public-recipient readiness. See [plans](https://developers.cloudflare.com/email-service/platform/pricing/), [domain onboarding](https://developers.cloudflare.com/email-service/get-started/send-emails/), and [binding API](https://developers.cloudflare.com/email-service/api/send-emails/workers-api/).
+   - **Resend fallback:** omit the `EMAIL` binding, verify an owned sending domain with Resend, set `vars.AUTH_EMAIL_PROVIDER` to `"resend"`, and set `vars.AUTH_EMAIL_FROM` to an approved address. Store the API key interactively as a Worker secret:
+
+     ```sh
+     pnpm --filter @contractplay/server exec wrangler secret put RESEND_API_KEY
+     ```
+
+     The adapter sends `{ from, to, subject, text }` to Resend's fixed HTTPS `/emails` endpoint using the secret. `EMAIL` takes precedence whenever present; a Cloudflare send failure does not automatically retry through Resend. See [domain verification](https://resend.com/docs/dashboard/domains/introduction) and [send API](https://resend.com/docs/api-reference/emails/send-email).
+
+Keep provider keys and Cloudflare credentials out of tracked files and Wrangler `vars`. Magic-link/session values are generated at runtime; there is no additional signing-key secret to configure. The app deliberately returns the same check-email response for known/unknown addresses, throttled requests, and delivery failures, so that message alone is not a delivery check.
+
+For local full-stack sign-in, apply local migrations, then put `AUTH_PUBLIC_ORIGIN=http://localhost:8787` and `AUTH_ALLOW_INSECURE_LOCALHOST=true` in ignored `apps/server/.dev.vars`. Set the approved sender and, if using Resend, provider/key there too; never commit that file. Run `pnpm server:dev` and use `http://localhost:8787` consistently. The static Vite server alone does not serve the auth APIs. Configured Resend development requests send real mail; opening their link must use the same local app origin.
+
+After configuration and a checked deployment, verify real email receipt, one-time link use, reload/session restoration, linked guest seat recovery from a second browser, archive sync, and sign-out. Open emailed links in the browser you intend to sign in. Account archives retain 25 online hands; uploads are personal, noncompetitive records. Deleting a hand currently clears only local cache and sync restores its server copy. Solo hands, settings, board sets, and unfinished solo play do not sync. Do not mark live setup complete until these checks pass.
 
 ### Deploying from GitHub Actions
 
