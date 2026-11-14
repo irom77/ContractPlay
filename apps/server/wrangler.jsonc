@@ -18,10 +18,9 @@
     "binding": "ASSETS",
     "run_worker_first": ["/api/*", "/admin"]
   },
-  // Preserve this DB binding. Create contractplay-auth and add the real returned database_id
-  // to this entry before remote migrations/deploy; no production ID is checked in yet.
+  // Production auth database created in Cloudflare; keep this binding aligned with that DB.
   "d1_databases": [
-    { "binding": "DB", "database_name": "contractplay-auth", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "contractplay-auth", "database_id": "fb6cbdfd-a347-4771-a29a-582f52ff96f2", "migrations_dir": "migrations" }
   ],
   "durable_objects": {
     "bindings": [

@@ -59,7 +59,7 @@ Use `pnpm --filter @contractplay/server exec wrangler deploy --dry-run` (after `
 
 ### Email sign-in prerequisites
 
-The feature is implemented, but production D1 provisioning, sender configuration, and live email delivery have not been verified by the implementation checks. All commands below run from the repository root and use `apps/server/wrangler.jsonc` through the server workspace.
+The production D1 database is provisioned and its migrations are applied. Sender configuration and live email delivery still need verification. All commands below run from the repository root and use `apps/server/wrangler.jsonc` through the server workspace.
 
 1. **Create and bind D1.** Authenticate Wrangler to the intended Cloudflare account, then create the database:
 
@@ -67,7 +67,7 @@ The feature is implemented, but production D1 provisioning, sender configuration
    pnpm --filter @contractplay/server exec wrangler d1 create contractplay-auth
    ```
 
-   Copy the actual returned `database_id` into the existing `d1_databases` entry in `apps/server/wrangler.jsonc`. Keep `binding: "DB"`, `database_name: "contractplay-auth"`, and `migrations_dir: "migrations"`; do not add a second binding or invent an ID. The checked-in entry intentionally has no production ID. If the database already exists, get its ID with `pnpm --filter @contractplay/server exec wrangler d1 info contractplay-auth` instead of creating another. See [D1 commands](https://developers.cloudflare.com/d1/wrangler-commands/).
+   Copy the actual returned `database_id` into the existing `d1_databases` entry in `apps/server/wrangler.jsonc`. Keep `binding: "DB"`, `database_name: "contractplay-auth"`, and `migrations_dir: "migrations"`; do not add a second binding or invent an ID. The production database is now bound in the checked-in config. If the database already exists, get its ID with `pnpm --filter @contractplay/server exec wrangler d1 info contractplay-auth` instead of creating another. See [D1 commands](https://developers.cloudflare.com/d1/wrangler-commands/).
 
 2. **Apply migrations explicitly.** Local migrations prepare the development database; remote migrations prepare the bound production database. `--remote` changes production data, so confirm the selected account and real binding first. Wrangler tracks applied files; deploy alone does not apply them.
 
