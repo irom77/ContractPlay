@@ -344,6 +344,8 @@ PBN `Scoring` modifier `Butler-2` is now supported in `packages/core/src/field.t
 ### Board set library follow-up (2026-11-13)
 
 Implemented in `packages/persistence` and `apps/client/src/App.tsx`: Recent hands stores up to eight imported sets within a 1.5 MB serialized-data cap, tracks progress, and offers resume, restart, delete, and portable JSON backup export/import. Browser downloads and Tauri's scoped file dialogs both support JSON backups. The remaining hand-record extensions are tracked in `TODO.md`.
+
+The public BridgeWebs test-system archive `https://www.bridgewebs.com/test/regis.pbn` is kept as `apps/client/src/fixtures/bridgewebs-regis.pbn`; the board-set parser and browser file-import path are covered against all 32 boards. Manual verification in a real browser and an ACBL Live for Clubs archive remain open because this environment has no browser runner.
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.

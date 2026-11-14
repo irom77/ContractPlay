@@ -2,6 +2,7 @@ import { deal } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
 import { describe, expect, it } from "vitest";
 import { boardLabel, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
+import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 
 const table = `[ScoreTable "PairId_NS\\2R;PairId_EW\\2R;Names_NS;Contract\\4L;Declarer\\1R;Result\\2R;Score_NS\\6R;Score_EW\\6R"]
  1  5 "Smith - Jones" 4S   N 10    420      -
@@ -17,6 +18,14 @@ describe("boardSetFromPbn", () => {
     expect(set?.records).toHaveLength(2);
     expect(set?.position).toBe(0);
     expect(set?.name).toBe("Club Night");
+  });
+
+  it("imports the 32-board BridgeWebs test-system PBN archive", () => {
+    // Public sample from https://www.bridgewebs.com/test/regis.pbn
+    const { set, skipped } = boardSetFromPbn(bridgewebsPbn);
+    expect(skipped).toBe(0);
+    expect(set?.records).toHaveLength(32);
+    expect(set?.records[0]).toMatchObject({ board: "1", event: "Regis_2016_12_13", dealer: "north", vulnerability: "None" });
   });
 
   it("skips boards without a deal", () => {

@@ -7,6 +7,7 @@ import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSoloData, saveSoloData, type SavedHand, type SoloData } from "@contractplay/persistence";
 import { handName } from "./handNames.js";
+import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 import App from "./App.js";
 import { suitSymbols } from "./table/labels.js";
 
@@ -1321,6 +1322,21 @@ describe("bridge table", () => {
     expect(await screen.findByText("North to bid")).toBeTruthy();
     expect(screen.getByRole("region", { name: "North's hand" }).querySelectorAll(".playing-card")).toHaveLength(13);
     expect(screen.queryByRole("button", { name: /^Play / })).toBeNull();
+  });
+
+  it("imports a real BridgeWebs archive through the browser file picker", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByText("Import a PBN deal"));
+    await user.click(screen.getByRole("button", { name: "Choose file" }));
+    const file = new File([bridgewebsPbn], "regis.pbn", { type: "text/plain" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(bridgewebsPbn) });
+    fireEvent.change(document.querySelector<HTMLInputElement>('input[type="file"]')!, { target: { files: [file] } });
+
+    expect(await screen.findByText("North to bid")).toBeTruthy();
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet.records).toHaveLength(32));
+    expect(screen.getByText("Board 1 · 1 of 32")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("imports a PBN board set, plays it board by board, and keeps its place across a reload", async () => {
