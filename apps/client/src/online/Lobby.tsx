@@ -6,6 +6,7 @@ import { boardSetFromPbn } from "../boardSet.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
+import { currentAccount, requestMagicLink, signOut, type AccountSession } from "./auth.js";
 
 const REFRESH_MS = 5000;
 /** How the lobby names a table's scoring; lobby entries from before rubber tables have none and keep running totals. */
@@ -51,20 +52,60 @@ function seatLabel(seat: SeatInfo): string {
 
 export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, api = defaultApi }: LobbyProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
+  const [account, setAccount] = useState<AccountSession | null>(null);
   const [editingName, setEditingName] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signOutError, setSignOutError] = useState(false);
 
-  if (!identity || editingName) {
+  useEffect(() => {
+    let active = true;
+    void currentAccount().then((session) => { if (active) setAccount(session); }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  if (signingIn) return <EmailGate identity={identity} onBack={() => setSigningIn(false)} />;
+  if ((!identity && !account) || editingName) {
     return <NameGate storage={storage} initialName={editingName ? identity?.name ?? "" : ""}
-      onSaved={(saved) => { setIdentity(saved); setEditingName(false); }} secondary={{ label: "Solo play", onClick: onSolo }} />;
+      onSaved={(saved) => { setIdentity(saved); setEditingName(false); }} secondary={{ label: "Solo play", onClick: onSolo }}
+      onSignIn={() => setSigningIn(true)} />;
   }
 
-  return <LobbyTables identity={identity} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
-    onChangeName={() => setEditingName(true)} />;
+  return <>
+    {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
+    <LobbyTables identity={{ name: account?.displayName ?? identity!.name }} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
+      onChangeName={() => setEditingName(true)} account={account} onSignIn={() => setSigningIn(true)} onSignOut={() => {
+        void signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
+      }} />
+  </>;
+}
+
+function EmailGate({ identity, onBack }: { identity: Identity | undefined; onBack(): void }) {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState(false);
+  async function submit() {
+    setPending(true); setError(false);
+    try { await requestMagicLink(email.trim(), identity?.secret, identity?.name); setSent(true); }
+    catch { setError(true); }
+    finally { setPending(false); }
+  }
+  return <main className="app-shell"><section className="empty-table lobby" aria-label="Email sign-in">
+    <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span></div>
+    <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+      {sent ? <p role="status">Check your email for a sign-in link.</p> : <>
+        <label>Email<input type="email" aria-label="Email" value={email} required autoFocus onChange={(event) => setEmail(event.target.value)} /></label>
+        <button className="primary-button" type="submit" disabled={pending || !email.trim()}>Send sign-in link</button>
+        {error ? <p className="error-message" role="alert">Couldn't request a link. Try again.</p> : null}
+      </>}
+      <button className="secondary-button" type="button" onClick={onBack}>Back</button>
+    </form>
+  </section></main>;
 }
 
 /** The online name form: saves the display name (keeping the device secret) and hands back the identity. */
-export function NameGate({ storage, initialName = "", onSaved, secondary }: {
-  storage: StorageLike; initialName?: string; onSaved(identity: Identity): void; secondary: { label: string; onClick(): void };
+export function NameGate({ storage, initialName = "", onSaved, secondary, onSignIn }: {
+  storage: StorageLike; initialName?: string; onSaved(identity: Identity): void; secondary: { label: string; onClick(): void }; onSignIn?(): void;
 }) {
   const [nameDraft, setNameDraft] = useState(initialName);
   const submit = () => {
@@ -78,6 +119,7 @@ export function NameGate({ storage, initialName = "", onSaved, secondary }: {
         <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); submit(); }}>
           <label>Your name<input aria-label="Your name" value={nameDraft} maxLength={20} autoFocus onChange={(event) => setNameDraft(event.target.value)} /></label>
           <button className="primary-button" type="submit" disabled={nameDraft.trim() === ""}>Continue</button>
+          {onSignIn ? <button className="secondary-button" type="button" onClick={onSignIn}>Sign in or register</button> : null}
           <button className="secondary-button" type="button" onClick={secondary.onClick}>{secondary.label}</button>
         </form>
       </section>
@@ -85,8 +127,9 @@ export function NameGate({ storage, initialName = "", onSaved, secondary }: {
   );
 }
 
-function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, onChangeName }: {
-  identity: Identity; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void; onChangeName(): void;
+function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, onChangeName, account, onSignIn, onSignOut }: {
+  identity: { name: string }; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void; onChangeName(): void;
+  account: AccountSession | null; onSignIn(): void; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
   const [listError, setListError] = useState(false);
@@ -202,7 +245,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
-            <button className="secondary-button" type="button" onClick={onChangeName}>Change name</button>
+            {account ? <><span>Signed in as {account.displayName}</span><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button></> : <><button className="secondary-button" type="button" onClick={onChangeName}>Change name</button><button className="secondary-button" type="button" onClick={onSignIn}>Sign in or register</button></>}
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
             <button className="secondary-button" type="button" onClick={onSolo}>Solo play</button>
           </span>
