@@ -3,10 +3,12 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
   "vars": {
-    "AUTH_PUBLIC_ORIGIN": "https://contractplay.niuk.workers.dev"
+    "AUTH_PUBLIC_ORIGIN": "https://contractplay.niuk.workers.dev",
+    "AUTH_EMAIL_PROVIDER": "resend",
+    "AUTH_EMAIL_FROM": "ContractPlay <signin@auth.romaniuk.us>"
   },
   // Deployment setup: docs/platform-delivery.md#email-sign-in-prerequisites
-  // Mail remains disabled until AUTH_EMAIL_FROM is set to an approved sender.
+  // Resend sender domain auth.romaniuk.us is verified; RESEND_API_KEY is a Worker secret.
   // Cloudflare arbitrary-recipient delivery needs Workers Paid + an onboarded sending domain:
   // add send_email: [{ name: "EMAIL" }]. No provider API secret is needed for this binding.
   // Otherwise omit EMAIL, set AUTH_EMAIL_PROVIDER=resend, and store RESEND_API_KEY as a Worker secret.
