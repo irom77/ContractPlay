@@ -10,8 +10,9 @@ const settings = { ...env, AUTH_PUBLIC_ORIGIN: origin };
 const store = new AuthStore(env.DB);
 let cookie: string;
 let accountId: string;
+let playerId: string;
 const call = (path = "", method = "GET", body?: unknown, headers = {}) => worker.fetch(new Request(`${origin}/api/account/online-hands${path}`, {
-  method, headers: { Origin: origin, Cookie: cookie, "Content-Type": "application/json", ...headers },
+  method, headers: { Origin: origin, Cookie: cookie, "Content-Type": "application/json", "X-Expected-Player-ID": playerId, ...headers },
   ...(body === undefined ? {} : { body: JSON.stringify(body) })
 }), settings);
 function hand(id = "online-ABC234-1", at = 1) {
@@ -28,10 +29,24 @@ beforeEach(async () => {
   const credential = "a".repeat(43);
   const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential))), b => b.toString(16).padStart(2, "0")).join("");
   const account = await store.getOrCreateAccount("owner@example.com", "Owner", Date.now()); accountId = account.id;
+  playerId = account.primaryPlayerId;
   await env.DB.prepare("INSERT INTO sessions (session_hash, account_id, expires_at) VALUES (?, ?, ?)").bind(digest, account.id, Date.now() + 60_000).run();
   cookie = `__Host-contractplay_session=${credential}`;
 });
 describe("account online hand history", () => {
+  it("rejects a stale tab's expected player before disclosing or changing the current account archive", async () => {
+    const stale = await store.getOrCreateAccount("stale@example.com", "Stale", Date.now());
+    expect((await call("/online-ABC234-1", "PUT", { hand: hand() })).status).toBe(200);
+    for (const expected of [stale.primaryPlayerId, ""]) {
+      for (const [path, method, body] of [["", "GET", undefined], ["/import", "POST", { hands: [hand("online-NEW234-2")] }], ["/online-NEW234-2", "PUT", { hand: hand("online-NEW234-2") }]] as const) {
+        const response = await call(path, method, body, { "X-Expected-Player-ID": expected });
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({ error: "account-changed" });
+      }
+    }
+    expect((await store.listHands(accountId)).map(record => record.id)).toEqual(["online-ABC234-1"]);
+    expect(await store.listHands(stale.id)).toEqual([]);
+  });
   it("requires a live session on all routes and prevents cross-origin writes", async () => {
     for (const [path, method, body] of [["", "GET", undefined], ["/import", "POST", { hands: [hand()] }], ["/online-ABC234-1", "PUT", { hand: hand() }]] as const) {
       expect((await call(path, method, body, { Cookie: "" })).status).toBe(401);

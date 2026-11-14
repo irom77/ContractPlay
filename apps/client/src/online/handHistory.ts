@@ -8,9 +8,10 @@ const newest = (hands: readonly SavedHand[]) => [...hands].sort((a, b) => Date.p
 const queues = new WeakMap<StorageLike, Promise<void>>();
 const owners = new WeakMap<StorageLike, string>();
 
-async function request(suffix = "", method = "GET", body?: unknown): Promise<SavedHand[]> {
+async function request(account: AccountSession, suffix = "", method = "GET", body?: unknown): Promise<SavedHand[]> {
   const response = await fetch(path + suffix, { method, credentials: "same-origin",
-    ...(body === undefined ? {} : { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) });
+    headers: { "X-Expected-Player-ID": account.playerId, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   if (!response.ok) throw new Error("Online hand history is unavailable");
   const result: unknown = await response.json();
   if (!result || typeof result !== "object" || !("hands" in result) || !Array.isArray(result.hands)
@@ -40,12 +41,12 @@ function queued(storage: StorageLike, account: AccountSession, work: () => Promi
 /** Called after linking/restoring an account and whenever Recent hands opens. Solo data never leaves the device. */
 export function syncOnlineHands(storage: StorageLike, account: AccountSession): Promise<void> {
   return queued(storage, account, async () => {
-    let remote = await request();
+    let remote = await request(account);
     if (owners.get(storage) !== account.playerId) return;
     const ids = new Set(remote.map(hand => hand.id));
     const local = newest(loadSoloData(storage).completedHands.filter(hand => isOnline(hand) && belongsTo(hand, account))).slice(0, 25);
     const missing = local.filter(hand => !ids.has(hand.id));
-    if (missing.length) remote = await request("/import", "POST", { hands: missing });
+    if (missing.length) remote = await request(account, "/import", "POST", { hands: missing });
     merge(storage, account, remote);
   });
 }
@@ -54,6 +55,6 @@ export function syncOnlineHands(storage: StorageLike, account: AccountSession): 
 export function uploadOnlineHand(storage: StorageLike, account: AccountSession, hand: SavedHand): Promise<void> {
   return queued(storage, account, async () => {
     if (!isOnline(hand)) return;
-    merge(storage, account, await request(`/${encodeURIComponent(hand.id)}`, "PUT", { hand }));
+    merge(storage, account, await request(account, `/${encodeURIComponent(hand.id)}`, "PUT", { hand }));
   });
 }

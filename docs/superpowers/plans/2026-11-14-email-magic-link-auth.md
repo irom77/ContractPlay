@@ -135,6 +135,7 @@
 
 **Interfaces:**
 - `GET /api/account/online-hands`, `POST /api/account/online-hands/import`, and `PUT /api/account/online-hands/:handId` derive account ownership exclusively from the session.
+- Every history request carries the captured account's `X-Expected-Player-ID`; the Worker rejects a missing or mismatched value with `409 account-changed` before reading or writing archives. This detects cookies changed by another tab and never authorizes an account.
 - Client history sync merges canonical remote hands with the local 25 most recent online hands by stable hand ID; imported records are marked as user-imported and are never submitted as competitive results.
 
 - [x] **Step 1: Write failing server tests** for unauthenticated rejection, caller-supplied account ID ignored, schema/serialized-size limits, duplicate hand ID idempotency, imported archive marking, and 25-record retention.

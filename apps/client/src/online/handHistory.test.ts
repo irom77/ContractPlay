@@ -23,6 +23,7 @@ it("imports only guest online history on account link and leaves solo hands/sett
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     expect(url).toBe("/api/account/online-hands" + (init?.method === "POST" ? "/import" : ""));
     expect(init?.credentials).toBe("same-origin");
+    expect(new Headers(init?.headers).get("X-Expected-Player-ID")).toBe(account.playerId);
     if (init?.method === "POST") { const body = JSON.parse(init.body as string); expect(body.hands.map((h: { id: string }) => h.id)).toEqual(["online-ABC234-1"]); remote.push(...body.hands); }
     return Response.json({ hands: remote });
   }));
@@ -64,6 +65,7 @@ it("merges the canonical response after a completed hand upload", async () => {
   const storage = storageWith([hand("online-ABC234-1")]);
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     expect(url).toBe("/api/account/online-hands/online-ABC234-1"); expect(init?.method).toBe("PUT");
+    expect(new Headers(init?.headers).get("X-Expected-Player-ID")).toBe(account.playerId);
     return Response.json({ hands: [{ ...hand("online-ABC234-1"), name: "Saved remotely" }] });
   }));
   await uploadOnlineHand(storage, account, hand("online-ABC234-1"));

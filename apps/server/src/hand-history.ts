@@ -45,6 +45,9 @@ export async function handHistoryRoute(request: Request, env: Env): Promise<Resp
   try {
     const account = await authenticatedAccount(request, env);
     if (!account) return json({ error: "unauthenticated" }, 401);
+    // A different tab may have replaced the cookie after this tab captured its account.
+    // This is only a stale-client guard; the session still owns every archive operation.
+    if (request.headers.get("X-Expected-Player-ID") !== account.primaryPlayerId) return json({ error: "account-changed" }, 409);
     const store = new AuthStore(env.DB);
     const path = new URL(request.url).pathname.slice("/api/account/online-hands".length);
     if (request.method === "GET" && path === "") return json({ hands: (await store.listHands(account.id)).map(hand => hand.data) });
