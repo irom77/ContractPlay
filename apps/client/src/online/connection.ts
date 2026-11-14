@@ -3,8 +3,9 @@ import type { ClientMessage, RefusalReason, ServerMessage, TableScoring, TableSt
 import type { Deal, Seat, Vulnerability } from "@contractplay/core";
 import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
+import type { AccountSession } from "./auth.js";
 
-export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone";
+export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone" | "identity-conflict";
 export type TableConnection = { send(message: Exclude<ClientMessage, { type: "hello" }>): void; close(): void };
 export type SessionBoardInput = Readonly<{ number: number; deal: Deal; dealer: Seat; vulnerability: Vulnerability }>;
 
@@ -36,12 +37,13 @@ function parseServerMessage(data: unknown): ServerMessage | undefined {
     case "refused": return typeof frame.reason === "string" && isView(frame.view) ? { type: "refused", reason: frame.reason as RefusalReason, view: frame.view } : undefined;
     case "reload": return { type: "reload" };
     case "gone": return { type: "gone" };
+    case "identity-conflict": return { type: "identity-conflict" };
     default: return undefined;
   }
 }
 
 export function connectTable(input: {
-  baseUrl: string; tableId: string; identity: Identity;
+  baseUrl: string; tableId: string; identity: Identity | AccountSession;
   onView(view: TableView): void; onRefused(reason: RefusalReason): void; onStatus(status: ConnectionStatus): void;
   createSocket?: (url: string) => WebSocket;
 }): TableConnection {
@@ -71,7 +73,11 @@ export function connectTable(input: {
     current.onopen = () => {
       if (stopped || socket !== current) return;
       attempt = 0;
-      current.send(JSON.stringify({ type: "hello", version: PROTOCOL_VERSION, secret: input.identity.secret, name: input.identity.name } satisfies ClientMessage));
+      // Browser WebSockets carry same-origin cookies automatically; account IDs never authenticate a socket.
+      const hello: ClientMessage = "secret" in input.identity
+        ? { type: "hello", version: PROTOCOL_VERSION, secret: input.identity.secret, name: input.identity.name }
+        : { type: "hello", version: PROTOCOL_VERSION, name: input.identity.displayName };
+      current.send(JSON.stringify(hello));
       input.onStatus("open");
     };
     current.onmessage = (event) => {

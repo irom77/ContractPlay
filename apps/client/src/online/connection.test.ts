@@ -25,13 +25,13 @@ class FakeSocket {
 const view = (revision: number) => ({ id: "ABC234", name: "T", revision }) as unknown as TableView;
 const identity = { secret: "s".repeat(43), name: "Ann" };
 
-function setup() {
+function setup(account = false) {
   const sockets: FakeSocket[] = [];
   const views: TableView[] = [];
   const refusals: string[] = [];
   const statuses: ConnectionStatus[] = [];
   const connection = connectTable({
-    baseUrl: "https://example.com", tableId: "ABC234", identity,
+    baseUrl: "https://example.com", tableId: "ABC234", identity: account ? { playerId: "untrusted-client-id", displayName: "Signed in" } : identity,
     onView: (v) => views.push(v), onRefused: (r) => refusals.push(r), onStatus: (s) => statuses.push(s),
     createSocket: (url) => { const s = new FakeSocket(url); sockets.push(s); return s as unknown as WebSocket; }
   });
@@ -49,6 +49,29 @@ describe("connectTable", () => {
     sockets[0]?.open();
     expect(JSON.parse(sockets[0]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, secret: identity.secret, name: "Ann" });
     expect(statuses).toEqual(["connecting", "open"]);
+  });
+
+  it("uses the cookie-bearing socket URL and omits guest secrets and account IDs for accounts", () => {
+    const { sockets } = setup(true);
+    expect(sockets[0]?.url).toBe("wss://example.com/api/tables/ABC234/ws");
+    sockets[0]?.open();
+    expect(JSON.parse(sockets[0]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in" });
+    sockets[0]?.drop();
+    vi.advanceTimersByTime(1000);
+    sockets[1]?.open();
+    expect(JSON.parse(sockets[1]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in" });
+  });
+
+  it("stops permanently on an identity conflict", () => {
+    const { sockets, statuses, views } = setup(true);
+    sockets[0]?.open();
+    sockets[0]?.receive({ type: "identity-conflict" });
+    expect(statuses.at(-1)).toBe("identity-conflict");
+    expect(sockets[0]?.closed).toBe(true);
+    sockets[0]?.drop();
+    vi.advanceTimersByTime(60_000);
+    expect(sockets).toHaveLength(1);
+    expect(views).toEqual([]);
   });
 
   it("uses ws for http base URLs", () => {

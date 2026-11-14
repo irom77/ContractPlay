@@ -4,7 +4,9 @@ import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, Seat, Vulnerability } from "@contractplay/core";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
-import { authRoute } from "./auth.js";
+import { authenticatedAccount, authRequestAllowed, authRoute } from "./auth.js";
+import { VERIFIED_ACCOUNT_HEADER } from "./table-object.js";
+import type { VerifiedAccount } from "./table-object.js";
 
 // The entry module may only export handlers and Durable Object classes.
 export { LobbyObject } from "./lobby-object.js";
@@ -121,12 +123,24 @@ function goneSocket(): Response {
   return new Response(null, { status: 101, webSocket: client });
 }
 
-function connectTable(request: Request, env: Env, id: string): Response | Promise<Response> {
+async function connectTable(request: Request, env: Env, id: string): Promise<Response> {
   if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
   // ids are matched case-insensitively: a link typed in lower case still finds the table
   id = id.toUpperCase();
   if (!TABLE_ID.test(id)) return goneSocket();
-  return env.TABLES.get(env.TABLES.idFromName(id)).fetch(request);
+  if (request.headers.has("Cookie") && env.AUTH_PUBLIC_ORIGIN && !authRequestAllowed(request, env)) return new Response("forbidden", { status: 403 });
+  const headers = new Headers(request.headers);
+  // This header is internal authority, never a caller assertion. Query parameters are never consulted.
+  headers.delete(VERIFIED_ACCOUNT_HEADER);
+  try {
+    const account = await authenticatedAccount(request, env);
+    if (account) headers.set(VERIFIED_ACCOUNT_HEADER, JSON.stringify({ id: account.id,
+      primaryPlayerId: account.primaryPlayerId, displayName: account.displayName } satisfies VerifiedAccount));
+  } catch {
+    return Response.json({ error: "unavailable" }, { status: 503 });
+  }
+  headers.delete("Cookie");
+  return env.TABLES.get(env.TABLES.idFromName(id)).fetch(new Request(request, { headers }));
 }
 
 export default {

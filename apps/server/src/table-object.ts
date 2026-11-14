@@ -4,6 +4,12 @@ import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@con
 import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, createTable, nextWake, reduce, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
+import { AuthStore } from "./auth-store.js";
+import type { Account } from "./auth-store.js";
+
+/** Only read on the internal TABLES binding; the Worker always removes public values. */
+export const VERIFIED_ACCOUNT_HEADER = "X-ContractPlay-Account";
+export type VerifiedAccount = Pick<Account, "id" | "primaryPlayerId" | "displayName">;
 
 const STATE_KEY = "state";
 /** Most open sockets one table accepts that have completed `hello`. */
@@ -27,7 +33,7 @@ const RECONCILE_MS = 3_600_000;
  * never reaches the table state, a client, the lobby, or a log), when the socket was accepted, and,
  * once `hello` completed, the player and name.
  */
-type Attachment = { ip: string; acceptedAt: number; player?: PlayerId; name?: string };
+type Attachment = { ip: string; acceptedAt: number; account?: VerifiedAccount; player?: PlayerId; name?: string };
 type Identity = { player: PlayerId; name: string };
 
 /** A float in [0, 1) from the platform's cryptographic source; deals must not be predictable. */
@@ -105,7 +111,9 @@ export class TableObject extends DurableObject<Env> {
     const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
     this.ctx.acceptWebSocket(server);
     const acceptedAt = Date.now();
-    server.serializeAttachment({ ip, acceptedAt } satisfies Attachment);
+    const verified = request.headers.get(VERIFIED_ACCOUNT_HEADER);
+    const account = verified ? JSON.parse(verified) as VerifiedAccount : undefined;
+    server.serializeAttachment({ ip, acceptedAt, ...(account ? { account } : {}) } satisfies Attachment);
     // only ever bring the alarm earlier for the new hello deadline, so a connection never delays a due wake
     const deadline = acceptedAt + HELLO_TIMEOUT_MS;
     const current = await this.ctx.storage.getAlarm();
@@ -180,14 +188,33 @@ export class TableObject extends DurableObject<Env> {
     const state = await this.load();
     if (!state) return this.gone(ws);
     const parsed = parseClientMessage(message);
-    if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
+    if (parsed?.type !== "hello" || (!attachmentOf(ws)?.account && parsed.secret === undefined)) return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
     if (this.openSockets().filter((other) => other !== ws && identityOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
       ws.close(1013, "too many connections");
       return;
     }
-    const player = await playerIdOf(parsed.secret);
-    ws.serializeAttachment({ ...attachmentOf(ws)!, player, name: parsed.name } satisfies Attachment);
-    await this.dispatch({ type: "connect", player, name: parsed.name, at: Date.now() });
+    const account = attachmentOf(ws)?.account;
+    let player: PlayerId;
+    let name = parsed.name;
+    if (account) {
+      const linked = new Set(await new AuthStore(this.env.DB).playerIdsForAccount(account.id));
+      linked.add(account.primaryPlayerId);
+      // Re-read live state after the D1 lookup; only this table decides which linked IDs are seated.
+      const current = await this.load();
+      if (!current) return this.gone(ws);
+      const seated = Object.values(current.seats).flatMap((seat) => seat.kind === "human" && linked.has(seat.player) ? [seat.player] : []);
+      if (seated.length > 1) {
+        send(ws, { type: "identity-conflict" });
+        ws.close(1008, "identity conflict");
+        return;
+      }
+      player = seated[0] ?? account.primaryPlayerId;
+      name = account.displayName;
+    } else {
+      player = await playerIdOf(parsed.secret!);
+    }
+    ws.serializeAttachment({ ...attachmentOf(ws)!, player, name } satisfies Attachment);
+    await this.dispatch({ type: "connect", player, name, at: Date.now() });
   }
 
   private gone(ws: WebSocket): void {

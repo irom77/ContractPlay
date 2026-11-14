@@ -4,6 +4,7 @@ import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, cleanName, parseClientMessage, typ
 const secret = "a".repeat(32);
 const valid: ClientMessage[] = [
   { type: "hello", version: PROTOCOL_VERSION, secret, name: "Ann" },
+  { type: "hello", version: PROTOCOL_VERSION, name: "Ann" },
   { type: "sit", seat: "north" },
   { type: "leave" },
   { type: "refresh" },
