@@ -22,19 +22,19 @@ function setup(named = false, account = false) {
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it("offers guest continuation and email sign-in at the name gate", async () => {
+it("shows only email sign-in while a visitor is unauthenticated", async () => {
   setup();
-  const user = userEvent.setup();
-  expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
-  await user.click(screen.getByRole("button", { name: "Sign in or register" }));
+  expect(await screen.findByLabelText("Email sign-in")).toBeTruthy();
   expect(screen.getByLabelText("Email")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
 });
 
 it("links an existing guest without changing its stored identity", async () => {
   const { storage, data, fetcher } = setup(true);
   const before = loadIdentity(storage);
   const user = userEvent.setup();
-  await user.click(await screen.findByRole("button", { name: "Sign in or register" }));
+  await screen.findByLabelText("Email sign-in");
   await user.type(screen.getByLabelText("Email"), "guest@example.com");
   await user.click(screen.getByRole("button", { name: "Send sign-in link" }));
   expect(await screen.findByText(/check your email/i)).toBeTruthy();
@@ -46,13 +46,14 @@ it("links an existing guest without changing its stored identity", async () => {
   expect(location.href).not.toContain("guest@example.com");
 });
 
-it("restores the account after callback and signs out to the saved guest", async () => {
+it("restores the account after callback and returns to the sign-in gate on sign-out", async () => {
   const { fetcher } = setup(true, true);
   const user = userEvent.setup();
   expect(await screen.findByText("Signed in as Account")).toBeTruthy();
   expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Account's table");
   await user.click(screen.getByRole("button", { name: "Sign out" }));
-  await waitFor(() => expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Guest's table"));
+  expect(await screen.findByLabelText("Email sign-in")).toBeTruthy();
+  expect(screen.queryByLabelText("Table name")).toBeNull();
   expect(fetcher.mock.calls.find(([url]) => url === "/api/auth/sign-out")?.[1]?.credentials).toBe("same-origin");
 });
 

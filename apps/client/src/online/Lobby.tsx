@@ -38,6 +38,7 @@ export type LobbyProps = {
   /** Opens the device's recent hands, solo and online alike. */
   onRecentHands(): void;
   api?: LobbyApi;
+  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; syncHistory?: typeof syncOnlineHands };
 };
 
 const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession };
@@ -52,43 +53,40 @@ function seatLabel(seat: SeatInfo): string {
   return seat.kind === "human" ? seat.name : seat.kind === "bot" ? "Bot" : "Open";
 }
 
-export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, api = defaultApi }: LobbyProps) {
-  const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
+const defaultAuth = { currentAccount, requestMagicLink, signOut, syncHistory: syncOnlineHands };
+
+export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, api = defaultApi, auth = defaultAuth }: LobbyProps) {
+  const [identity] = useState<Identity | undefined>(() => loadIdentity(storage));
   const [account, setAccount] = useState<AccountSession | null>(null);
-  const [editingName, setEditingName] = useState(false);
-  const [signingIn, setSigningIn] = useState(false);
+  const [accountResolved, setAccountResolved] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void currentAccount().then((session) => {
+    void auth.currentAccount().then((session) => {
       if (!active) return;
       setAccount(session);
-      if (session) void syncOnlineHands(storage, session).catch(() => { if (active) setHistoryError(true); });
-    }).catch(() => {});
+      setAccountResolved(true);
+      if (session && auth.syncHistory) void auth.syncHistory(storage, session).catch(() => { if (active) setHistoryError(true); });
+    }).catch(() => { if (active) setAccountResolved(true); });
     return () => { active = false; };
-  }, [storage]);
+  }, [storage, auth]);
 
-  if (signingIn) return <EmailGate identity={identity} onBack={() => setSigningIn(false)} />;
-  if ((!identity && !account) || editingName) {
-    return <NameGate storage={storage} initialName={editingName ? identity?.name ?? "" : ""}
-      onSaved={(saved) => { setIdentity(saved); setEditingName(false); }} secondary={{ label: "Solo play", onClick: onSolo }}
-      onSignIn={() => setSigningIn(true)} />;
-  }
-
+  if (!accountResolved) return <main className="app-shell"><section className="empty-table lobby" aria-label="Loading account"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span></section></main>;
+  if (!account) return <EmailGate identity={identity} requestLink={auth.requestMagicLink} />;
   return <>
     {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
-    <LobbyTables identity={{ name: account?.displayName ?? identity!.name }} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
-      onChangeName={() => setEditingName(true)} account={account} onSignIn={() => setSigningIn(true)} onSignOut={() => {
-        void signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
+    <LobbyTables identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
+      account={account} onSignOut={() => {
+        void auth.signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
       }} />
   </>;
 }
 
 export function EmailGate({ identity, onBack, initialEmail = "", initialSent = false, requestLink = requestMagicLink }: {
-  identity: Identity | undefined; onBack(): void; initialEmail?: string; initialSent?: boolean;
+  identity: Identity | undefined; onBack?(): void; initialEmail?: string; initialSent?: boolean;
   requestLink?: typeof requestMagicLink;
 }) {
   const [email, setEmail] = useState(initialEmail);
@@ -109,7 +107,7 @@ export function EmailGate({ identity, onBack, initialEmail = "", initialSent = f
         <button className="primary-button" type="submit" disabled={pending || !email.trim()}>Send sign-in link</button>
         {error ? <p className="error-message" role="alert">Couldn't request a link. Try again.</p> : null}
       </>}
-      <button className="secondary-button" type="button" onClick={onBack}>Back</button>
+      {onBack ? <button className="secondary-button" type="button" onClick={onBack}>Back</button> : null}
     </form>
   </section></main>;
 }
@@ -138,9 +136,9 @@ export function NameGate({ storage, initialName = "", onSaved, secondary, onSign
   );
 }
 
-function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, onChangeName, account, onSignIn, onSignOut }: {
-  identity: { name: string }; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void; onChangeName(): void;
-  account: AccountSession | null; onSignIn(): void; onSignOut(): void;
+function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, account, onSignOut }: {
+  identity: { name: string }; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void;
+  account: AccountSession; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
   const [listError, setListError] = useState(false);
@@ -256,7 +254,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
-            {account ? <><span>Signed in as {account.displayName}</span><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button></> : <><button className="secondary-button" type="button" onClick={onChangeName}>Change name</button><button className="secondary-button" type="button" onClick={onSignIn}>Sign in or register</button></>}
+            <span>Signed in as {account.displayName}</span><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
             <button className="secondary-button" type="button" onClick={onSolo}>Solo play</button>
           </span>

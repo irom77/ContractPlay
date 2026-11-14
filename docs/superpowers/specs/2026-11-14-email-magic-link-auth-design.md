@@ -41,6 +41,12 @@ Let online players register or sign in with an email address so their online sea
 
 ## Proposed behavior
 
+### Lobby access policy update (2026-11-14)
+
+- An online lobby visitor must have a restored email account session before table listings, creation controls, recent online hands, or lobby shortcuts are shown. While session lookup is pending, show only the ContractPlay brand; on a missing/failed session, show the email link form without a route back to the lobby.
+- This gate applies to lobby browsing. Existing guest identity support remains for direct table links, and solo play remains account-free.
+- Do not request the public table list until authentication succeeds. After sign-out, return to the email gate.
+
 ### Guest upgrade and sign-in
 
 - The online name gate offers guest continuation and email sign-in/register.

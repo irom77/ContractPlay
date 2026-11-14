@@ -14,7 +14,12 @@ beforeEach(() => {
   service.url = "https://x.test";
   window.localStorage.clear();
   history.replaceState(null, "", "/");
-  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("[]"))));
+  vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+    const url = input.toString();
+    if (url === "/api/auth/me") return Promise.resolve(Response.json({ playerId: "root-player", displayName: "Bob" }));
+    if (url.startsWith("/api/account/online-hands")) return Promise.resolve(Response.json({ hands: [] }));
+    return Promise.resolve(new Response("[]"));
+  }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); history.replaceState(null, "", "/"); });
 
@@ -29,7 +34,7 @@ describe("Root", () => {
   it("renders the lobby for #/online and returns to solo from it", async () => {
     location.hash = "#/online";
     render(<Root />);
-    expect(await screen.findByLabelText("Your name")).toBeTruthy();
+    expect(await screen.findByText("Open tables")).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "Solo play" }));
     expect(soloVisible()).toBe(true);
     expect(location.hash).toBe("");
@@ -57,7 +62,7 @@ describe("Root", () => {
   it("follows hashchange", async () => {
     render(<Root />);
     await act(async () => { location.hash = "#/online"; });
-    expect(await screen.findByLabelText("Your name")).toBeTruthy();
+    expect(await screen.findByText("Open tables")).toBeTruthy();
   });
 
   it("renders the solo app for an unknown hash", () => {
@@ -67,6 +72,7 @@ describe("Root", () => {
   });
 
   it("renders the online table for a table route, asking for a name first, and leaves to the lobby", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 401 }))));
     location.hash = "#/table/ABC234";
     render(<Root />);
     expect(screen.getByLabelText("Your name")).toBeTruthy();

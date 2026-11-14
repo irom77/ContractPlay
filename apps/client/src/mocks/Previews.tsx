@@ -6,8 +6,12 @@ import type { TableView } from "@contractplay/protocol";
 import type { connectTable } from "../online/connection.js";
 import { saveIdentity } from "../online/identity.js";
 import { EmailGate, Lobby } from "../online/Lobby.js";
+import type { AccountSession } from "../online/auth.js";
 import { OnlineTable } from "../online/OnlineTable.js";
 import { previewScreens, type PreviewData } from "./scenarios.js";
+
+const previewAccount: AccountSession = { playerId: "preview-player", displayName: "Alex" };
+const previewAuth = { currentAccount: async () => previewAccount, requestMagicLink: async () => {}, signOut: async () => {}, syncHistory: async () => {} };
 
 /** Keeps each preview's name, hints setting, and saved hands away from the real device storage. */
 function memoryStorage(entries: Record<string, string> = {}): StorageLike {
@@ -37,7 +41,7 @@ function SoloPreviewScreen({ data }: { data: Extract<PreviewData, { kind: "solo"
 function PreviewScreen({ data }: { data: PreviewData }) {
   if (data.kind === "solo") return <SoloPreviewScreen data={data} />;
   if (data.kind === "auth") return <EmailGate identity={undefined} initialEmail="alex@example.com" initialSent={data.sent}
-    requestLink={async () => {}} onBack={() => {}} />;
+    requestLink={async () => {}} />;
   return <OnlineScreen data={data} />;
 }
 
@@ -51,7 +55,7 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
   const lobbyApi = useMemo(() => data.kind === "lobby"
     ? { listTables: () => Promise.resolve(data.tables), createTable: () => Promise.resolve({ error: "preview" }), createSession: () => Promise.resolve({ error: "preview" }) }
     : undefined, [data]);
-  if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} onOpenTable={() => {}} onSolo={() => {}} onRecentHands={() => {}} />;
+  if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={previewAuth} onOpenTable={() => {}} onSolo={() => {}} onRecentHands={() => {}} />;
   return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} />;
 }
 

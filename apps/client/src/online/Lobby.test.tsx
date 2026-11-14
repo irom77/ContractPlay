@@ -7,7 +7,7 @@ import { createDeck, deal } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadIdentity, saveIdentity } from "./identity.js";
-import { Lobby, type LobbyApi } from "./Lobby.js";
+import { Lobby, type LobbyApi, type LobbyProps } from "./Lobby.js";
 import { boardSetFromPbn } from "../boardSet.js";
 
 function memoryStorage(): StorageLike {
@@ -20,7 +20,9 @@ const summaries: TableSummary[] = [
   { id: "DEF456", name: "Learners", style: "2/1", scoring: "duplicate", handInProgress: false, seats: { north: { kind: "empty" }, east: { kind: "empty" }, south: { kind: "empty" }, west: { kind: "empty" } } }
 ];
 
-function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean } = {}) {
+const signedIn = { currentAccount: async () => ({ playerId: "account-1", displayName: "Bob" }), requestMagicLink: async () => {}, signOut: async () => {} };
+
+function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"] } = {}) {
   const storage = memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const listTables = vi.fn(options.list ?? (() => Promise.resolve(summaries)));
@@ -33,22 +35,22 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
     void input;
     return { sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] };
   });
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} />);
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} auth={options.auth ?? signedIn} />);
   return { storage, listTables, createTable, createSession, onOpenTable, onSolo, onRecentHands };
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("Lobby", () => {
-  it("asks for a name first and stores the identity on Continue", async () => {
-    const user = userEvent.setup();
-    const { storage, listTables } = setup({ named: false });
+  it("requires sign-in before showing tables or lobby actions", async () => {
+    const { storage, listTables } = setup({ named: false, auth: { ...signedIn, currentAccount: async () => null } });
+    expect(await screen.findByLabelText("Email sign-in")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send sign-in link" })).toBeTruthy();
+    expect(screen.queryByText("Open tables")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Solo play" })).toBeNull();
     expect(screen.queryByRole("button", { name: "New table" })).toBeNull();
+    expect(loadIdentity(storage)).toBeUndefined();
     expect(listTables).not.toHaveBeenCalled();
-    await user.type(screen.getByLabelText("Your name"), "Carol");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(loadIdentity(storage)?.name).toBe("Carol");
-    expect(await screen.findByText("Friday club")).toBeTruthy();
   });
 
   it("lists tables with seat labels and play state", async () => {
@@ -106,7 +108,7 @@ describe("Lobby", () => {
     const pbn = exportPbn({ dealer: "east", vulnerability: "Both", actions: [], deal: deal(createDeck()), tags: [
       { name: "Board", value: "7" }, { name: "Event", value: "Club Pairs" }, { name: "Names", value: "Smith - Jones" }
     ] }) + `\n[ScoreTable "Names_NS;Contract;Declarer;Result;Score_NS"]\n"Smith - Jones" 4S N 10 420`;
-    await user.upload(screen.getByLabelText("PBN board set"), new File([pbn], "club.pbn", { type: "text/plain" }));
+    await user.upload(await screen.findByLabelText("PBN board set"), new File([pbn], "club.pbn", { type: "text/plain" }));
     expect(await screen.findByText(/Loaded 1 board from club.pbn/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Create session" }));
     await waitFor(() => expect(createSession).toHaveBeenCalled());
@@ -161,15 +163,10 @@ describe("Lobby", () => {
     expect(onRecentHands).toHaveBeenCalled();
   });
 
-  it("lets the player change their name", async () => {
-    const user = userEvent.setup();
-    const { storage } = setup();
-    await user.click(await screen.findByRole("button", { name: "Change name" }));
-    const field = screen.getByLabelText("Your name");
-    await user.clear(field);
-    await user.type(field, "Dana");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(loadIdentity(storage)?.name).toBe("Dana");
+  it("shows the authenticated display name in the lobby", async () => {
+    setup();
+    expect(await screen.findByText("Signed in as Bob")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change name" })).toBeNull();
   });
 
   it("refreshes every five seconds without stacking requests and stops on unmount", async () => {
@@ -178,7 +175,8 @@ describe("Lobby", () => {
     const list = vi.fn(() => new Promise<TableSummary[]>((r) => { resolve = r; }));
     const storage = memoryStorage();
     saveIdentity(storage, "Bob");
-    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn(), createSession: vi.fn() }} />);
+    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn(), createSession: vi.fn() }} auth={signedIn} />);
+    await act(async () => {});
     expect(list).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
     expect(list).toHaveBeenCalledTimes(1);
@@ -190,14 +188,12 @@ describe("Lobby", () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it("disables Continue for an empty or whitespace-only name", async () => {
+  it("requires an email address before requesting a link", async () => {
     const user = userEvent.setup();
-    setup({ named: false });
-    const button = screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement;
+    setup({ named: false, auth: { ...signedIn, currentAccount: async () => null } });
+    const button = await screen.findByRole("button", { name: "Send sign-in link" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    await user.type(screen.getByLabelText("Your name"), "   ");
-    expect(button.disabled).toBe(true);
-    await user.type(screen.getByLabelText("Your name"), "x");
+    await user.type(screen.getByLabelText("Email"), "alex@example.com");
     expect(button.disabled).toBe(false);
   });
 
