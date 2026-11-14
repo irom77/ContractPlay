@@ -351,7 +351,11 @@ Neuberg adjustment is also implemented for uneven PBN fields. `boardSetFromPbn` 
 
 PBN 2.1's `OptimumScore` is parsed as signed North–South points and shown as double-dummy par. The BridgeWebs fixture covers its exporter-specific `"NS 1N,NS 2D; 90"` form as well as standard `NS`/`EW` score forms. The [PBN 2.1 standard](https://www.sackab.fi/data/PBN/PBN21a_1.pdf) defines this tag as the optimum score with open cards; computing par from `OptimumResultTable` when the tag is absent remains open.
 
-LIN hand-record import is implemented in `packages/pbn/src/lin.ts` and routed through browser and native file pickers. It handles common `md`, `qx`, `sv`, `mb`, and `pc` tokens, plus the `ah` board heading, while leaving unknown presentation tokens alone. `packages/pbn/src/usebio.ts` reads USEBIO board travellers and the client pairs those scores with PBN deals by board number; player names and pair numbers are not retained. LIN has no full field traveller; solver-computed par, licensed board sets, and online board sets remain open roadmap work.
+LIN hand-record import is implemented in `packages/pbn/src/lin.ts` and routed through browser and native file pickers. It handles common `md`, `qx`, `sv`, `mb`, and `pc` tokens, plus the `ah` board heading, while leaving unknown presentation tokens alone. `packages/pbn/src/usebio.ts` reads USEBIO board travellers and the client pairs those scores with PBN deals by board number; player names and pair numbers are not retained. LIN has no full field traveller; licensed board sets and online board sets remain open roadmap work.
+
+### Computed par follow-up
+
+When a hand record has no PBN `OptimumScore`, the client will compute double-dummy par after the result screen opens. The bridge-dds WebAssembly module runs in a dedicated Web Worker. The worker builds the full double-dummy table, then calculates dealer par using the board's dealer and vulnerability. A worker boundary keeps the platform-neutral core and the server independent of the solver; unsupported browser/runtime failures leave the par line unavailable and do not block hand review.
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.

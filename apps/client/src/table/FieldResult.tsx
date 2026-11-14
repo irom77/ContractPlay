@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { compareWithField, fieldMethod, type FieldComparison, type HandRecord, type TravellerRow } from "@contractplay/core";
+import { calculateDoubleDummyPar, serializeDdsDeal } from "../doubleDummy.js";
 
 export type FieldResultProps = Readonly<{
   record: HandRecord;
@@ -42,10 +43,31 @@ function lines(field: readonly TravellerRow[], nsScore: number): Line[] {
 /** How a board-set result compares with the field that played the board elsewhere. Pair names are never shown. */
 export function FieldResult({ record, nsScore, side, label, showPoints = true, actions }: FieldResultProps) {
   const comparison = compareWithField(record.field, nsScore, side, fieldMethod(record.scoring), record.expectedFieldCount);
+  const parKey = record.dealer + "|" + record.vulnerability + "|" + serializeDdsDeal(record.deal);
+  const [calculated, setCalculated] = useState<Readonly<{ key: string; status: "loading" | "ready" | "unavailable"; score?: number }>>();
+  useEffect(() => {
+    if (record.doubleDummyPar !== undefined) {
+      setCalculated({ key: parKey, status: "ready", score: record.doubleDummyPar });
+      return;
+    }
+    let current = true;
+    setCalculated({ key: parKey, status: "loading" });
+    void calculateDoubleDummyPar(record).then((score) => {
+      if (current) setCalculated({ key: parKey, status: "ready", score });
+    }).catch(() => {
+      if (current) setCalculated({ key: parKey, status: "unavailable" });
+    });
+    return () => { current = false; };
+  }, [parKey, record.doubleDummyPar, record]);
+  const parScore = record.doubleDummyPar ?? (calculated?.key === parKey ? calculated.score : undefined);
+  const parLoading = record.doubleDummyPar === undefined && (calculated?.key !== parKey || calculated.status === "loading");
+  const parUnavailable = record.doubleDummyPar === undefined && calculated?.key === parKey && calculated.status === "unavailable";
   return <section className="field-result" aria-label="Result against the field">
     <h3>Against the field</h3>
     {label ? <p className="field-label">{label}</p> : null}
-    {record.doubleDummyPar !== undefined ? <p className="field-par">Double-dummy par: NS {signed(record.doubleDummyPar)}</p> : null}
+    {parScore !== undefined ? <p className="field-par">Double-dummy par: NS {signed(parScore)}</p>
+      : parLoading ? <p className="field-par" aria-live="polite">Calculating double-dummy par…</p>
+        : parUnavailable ? <p className="field-par">Double-dummy par unavailable.</p> : null}
     {comparison ? <>
       <p className="field-headline">{headline(comparison, side)}</p>
       <table className="field-table">

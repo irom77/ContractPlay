@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { createDeck, deal, type HandRecord, type TravellerRow } from "@contractplay/core";
 import { FieldResult } from "./FieldResult.js";
 
+const doubleDummy = vi.hoisted(() => ({ calculate: vi.fn() }));
+vi.mock("../doubleDummy.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../doubleDummy.js")>(),
+  calculateDoubleDummyPar: doubleDummy.calculate
+}));
+
 afterEach(cleanup);
+beforeEach(() => {
+  doubleDummy.calculate.mockReset();
+  doubleDummy.calculate.mockResolvedValue(90);
+});
 
 const row = (nsScore?: number, extra: Partial<TravellerRow> = {}): TravellerRow => ({ ...(nsScore === undefined ? {} : { nsScore }), multiplicity: 1, artificial: false, ...extra });
 const field: TravellerRow[] = [
@@ -28,6 +38,27 @@ const panel = () => within(screen.getByRole("region", { name: "Result against th
 const tableRows = () => [...panel().getAllByRole("row")].slice(1);
 
 describe("FieldResult", () => {
+  it("computes and displays par when the file has no OptimumScore", async () => {
+    doubleDummy.calculate.mockResolvedValueOnce(90);
+    render(<FieldResult record={record("MP", [])} nsScore={420} side="NS" />);
+    expect(panel().getByText("Calculating double-dummy par…")).toBeTruthy();
+    await waitFor(() => expect(panel().getByText("Double-dummy par: NS +90")).toBeTruthy());
+    expect(doubleDummy.calculate).toHaveBeenCalledWith(expect.objectContaining({ dealer: "north", vulnerability: "None" }));
+  });
+
+  it("does not compute a par already supplied by PBN", () => {
+    render(<FieldResult record={{ ...record("MP", []), doubleDummyPar: -420 }} nsScore={420} side="NS" />);
+    expect(panel().getByText("Double-dummy par: NS -420")).toBeTruthy();
+    expect(doubleDummy.calculate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the result usable when the solver cannot calculate par", async () => {
+    doubleDummy.calculate.mockRejectedValueOnce(new Error("solver unavailable"));
+    render(<FieldResult record={record("MP", [])} nsScore={420} side="NS" />);
+    await waitFor(() => expect(panel().getByText("Double-dummy par unavailable.")).toBeTruthy());
+    expect(panel().getByText("No field results for this board.")).toBeTruthy();
+  });
+
   it("states the points when the field has no scores, but not for a passed-out hand", () => {
     const { rerender } = render(<FieldResult record={record("MP", [])} nsScore={-420} side="NS" />);
     expect(panel().getByText("No field results for this board.")).toBeTruthy();

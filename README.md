@@ -127,7 +127,7 @@ Play boards that were really played at a club or tournament, then see how your r
 
 - **Import.** In solo play, open **Import a PBN deal** (on the start screen, or ☰ → **Recent hands**) and choose a `.pbn` file. A file with several boards, or with a `ScoreTable` (the field's results), opens as a *board set*; a single board without results imports as one deal, as before. Boards that cannot be read are skipped with a message saying how many.
 - **Play.** Each board is dealt fresh, with its dealer and vulnerability; the top-left status card shows where you are, for example "Board 7 · 1 of 24". **Next board**, **Finish board set**, and **Leave the board set** are in the game menu. Board-set hands stay out of the rubber.
-- **Compare.** When a board ends, **Against the field** scores your result by the file's `Scoring` tag (matchpoints by default, Butler IMPs for `IMP` or `Butler`, cross-IMPs for `Cross`) and shows the field's results with your row highlighted. A board without field results shows your own score only.
+- **Compare.** When a board ends, **Against the field** scores your result by the file's `Scoring` tag (matchpoints by default, Butler IMPs for `IMP` or `Butler`, cross-IMPs for `Cross`) and shows the field's results with your row highlighted. It shows the archive's `OptimumScore` when provided, otherwise it computes double-dummy par in a background Web Worker. A board without field results shows your own score and par.
 - **Original play.** If the file records the auction and play, **View original play** steps through them with Previous and Next; **Back to your result** returns to the comparison.
 - **Privacy.** Files stay in this browser. Player names in a `ScoreTable` are never stored or shown; only the deals, contracts, and scores are kept.
 - **Saved progress.** The active board set and your place in it survive a reload in the same browser; finished boards go to Recent hands with their field. Leaving or finishing the set, or importing another file, drops it (a library of sets is on the roadmap).
@@ -157,3 +157,5 @@ A typical club PBN carries the deals only. It still plays as a board set, but wi
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The browser's double-dummy par worker bundles `bridge-dds` 1.4.0, licensed under Apache 2.0; see [its license](docs/licenses/bridge-dds-1.4.0.txt).
