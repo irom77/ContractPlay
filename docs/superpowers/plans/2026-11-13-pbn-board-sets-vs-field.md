@@ -336,6 +336,10 @@ Behaviour in `App.tsx`:
 - **Import split.** Only a file with several boards or a traveller becomes a board set. A single board without a traveller still resumes at its recorded actions, as it does today.
 - **Comparison method.** The method comes from the file's `Scoring` tag: IMP or Butler gives Butler, Cross gives cross-IMPs, and anything else gives matchpoints.
 - **Butler datum.** It is the plain average rounded to 10. There is no Butler-2 or Neuberg in this release.
+
+### Post-MVP follow-up
+
+PBN `Scoring` modifier `Butler-2` is now supported in `packages/core/src/field.ts`: its datum excludes one lowest and one highest real field score (respecting row multiplicity), then rounds to the nearest 10. The remaining format and scoring extensions stay listed in `TODO.md`.
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.

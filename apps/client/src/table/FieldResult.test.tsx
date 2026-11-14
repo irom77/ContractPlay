@@ -51,6 +51,11 @@ describe("FieldResult", () => {
     expect(panel().getByText("+19 IMPs across the field · 3.8 per comparison")).toBeTruthy();
   });
 
+  it("shows the Butler-2 datum after dropping the high and low results", () => {
+    render(<FieldResult record={record("IMP;Butler-2")} nsScore={420} side="NS" />);
+    expect(panel().getByText("+4 IMPs against a Butler-2 datum of NS +280")).toBeTruthy();
+  });
+
   it("shows the datum from East-West's side when the player sits East-West", () => {
     render(<FieldResult record={record("IMP")} nsScore={-50} side="EW" />);
     expect(panel().getByText(/against a datum of EW -240$/)).toBeTruthy();

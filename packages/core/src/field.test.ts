@@ -49,6 +49,11 @@ describe("field scoring", () => {
     expect(result.butler).toEqual({ datum: 240, imps: 5 }); // average 244 -> 240; 180 -> 5 IMPs
     expect(result.cross).toEqual({ total: 19, perComparison: 3.8 });
   });
+  it("drops the highest and lowest score for a Butler-2 datum", () => {
+    const comparison = compareWithField(field, 420, "NS", "butler-2");
+    expect(comparison!.butler.datum).toBe(280);
+    expect(comparison!.butler.imps).toBe(4);
+  });
   it("scores from East-West's side when the player sat East-West", () => {
     const result = compareWithField(field, -50, "EW", "matchpoints")!; // EW +50: beats four tables, ties one
     expect(result.matchpoints).toEqual({ points: 9, top: 10, percentage: 90 });
@@ -58,8 +63,8 @@ describe("field scoring", () => {
     expect(compareWithField([row(undefined), row(420, { artificial: true })], 420, "NS", "matchpoints")).toBeUndefined();
   });
   it("reads the method from the PBN Scoring tag", () => {
-    expect([undefined, "MP", "MatchPoints", "IMP", "IMP;Butler", "IMP;Cross", "Cross1"].map(fieldMethod))
-      .toEqual(["matchpoints", "matchpoints", "matchpoints", "butler", "butler", "cross", "cross"]);
+    expect([undefined, "MP", "MatchPoints", "IMP", "IMP;Butler", "IMP;Butler-2", "IMP;Cross", "Cross1"].map(fieldMethod))
+      .toEqual(["matchpoints", "matchpoints", "matchpoints", "butler", "butler", "butler-2", "cross", "cross"]);
   });
 });
 

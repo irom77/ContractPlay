@@ -19,7 +19,7 @@ const signed = (value: number): string => (value > 0 ? `+${value}` : `${value}`)
 const imps = (value: number): string => `${signed(value)} ${Math.abs(value) === 1 ? "IMP" : "IMPs"}`;
 
 function headline(comparison: FieldComparison, side: "NS" | "EW"): string {
-  if (comparison.method === "butler") return `${imps(comparison.butler.imps)} against a datum of ${side} ${signed(comparison.butler.datum)}`;
+  if (comparison.method === "butler" || comparison.method === "butler-2") return `${imps(comparison.butler.imps)} against a ${comparison.method === "butler-2" ? "Butler-2 " : ""}datum of ${side} ${signed(comparison.butler.datum)}`;
   if (comparison.method === "cross") return `${imps(comparison.cross.total)} across the field · ${comparison.cross.perComparison.toFixed(1)} per comparison`;
   const { percentage, points, top } = comparison.matchpoints;
   return `${percentage.toFixed(1)}% · ${points} of ${top} matchpoints`;

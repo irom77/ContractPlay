@@ -28,7 +28,7 @@ export type HandRecord = Readonly<{
   field: readonly TravellerRow[];
 }>;
 
-export type FieldMethod = "matchpoints" | "butler" | "cross";
+export type FieldMethod = "matchpoints" | "butler" | "butler-2" | "cross";
 
 /** A player's result against the field, always from the player's own side. */
 export type FieldComparison = Readonly<{
@@ -62,6 +62,7 @@ export function fieldScores(rows: readonly TravellerRow[]): number[] {
 export function fieldMethod(scoring: string | undefined): FieldMethod {
   const tokens = (scoring ?? "").toLowerCase().split(/[;,\s]+/).filter(Boolean);
   if (tokens.some((token) => token.startsWith("cross"))) return "cross";
+  if (tokens.includes("butler-2")) return "butler-2";
   return tokens.some((token) => token === "imp" || token === "butler") ? "butler" : "matchpoints";
 }
 
@@ -84,7 +85,14 @@ export function compareWithField(
   const mine = sign * nsScore;
   const points = counted.reduce((sum, { score, weight }) => sum + weight * (score < mine ? 2 : score === mine ? 1 : 0), 0);
   const top = 2 * count;
-  const datum = roundToTen(counted.reduce((sum, { score, weight }) => sum + score * weight, 0) / count);
+  let datumTotal = counted.reduce((sum, { score, weight }) => sum + score * weight, 0);
+  let datumCount = count;
+  if (method === "butler-2" && count > 2) {
+    const { lowest, highest } = counted.reduce(({ lowest: low, highest: high }, { score }) => ({ lowest: Math.min(low, score), highest: Math.max(high, score) }), { lowest: Infinity, highest: -Infinity });
+    datumTotal -= lowest + highest;
+    datumCount -= 2;
+  }
+  const datum = roundToTen(datumTotal / datumCount);
   const total = counted.reduce((sum, { score, weight }) => sum + weight * impsFor(mine - score), 0);
   return {
     method,
