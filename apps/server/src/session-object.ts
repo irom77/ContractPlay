@@ -42,7 +42,7 @@ export class SessionObject extends DurableObject<Env> {
 
   /** Does not return boards, deals, auctions, or play. */
   async status(tableId: string): Promise<{
-    board: number; boardCount: number; scoring: "matchpoints" | "imps"; completedBoards: number;
+    board: number; position: number; boardCount: number; scoring: "matchpoints" | "imps"; completedBoards: number;
     complete: boolean; waitingForTables: boolean; rank: number; tableCount: number;
     matchpoints: { points: number; top: number; percentage: number }; crossImps: number;
   } | undefined> {
@@ -51,7 +51,8 @@ export class SessionObject extends DurableObject<Env> {
     const standing = sessionStanding(state, tableId);
     const rank = sessionRank(state, tableId);
     return standing && rank ? {
-      board: Math.min(state.currentBoard, state.boards.length - 1) + 1,
+      board: state.boards[Math.min(state.currentBoard, state.boards.length - 1)]!.number,
+      position: Math.min(state.currentBoard, state.boards.length - 1) + 1,
       boardCount: state.boards.length,
       scoring: state.scoring,
       completedBoards: standing.completedBoards,

@@ -40,7 +40,7 @@ export type TableView = TableSummary & {
   /** The last claim, rejected by `by`; shown until the next card or call. */
   claimRejected?: { seat: Seat; tricks: number; by: Seat };
   /** Progress and this table's standing in a duplicate session. Contains no board or other table's result data. */
-  session?: { board: number; boardCount: number; scoring: "matchpoints" | "imps"; completedBoards: number;
+  session?: { board: number; position: number; boardCount: number; scoring: "matchpoints" | "imps"; completedBoards: number;
     complete: boolean; waitingForTables: boolean; rank: number; tableCount: number;
     matchpoints: { points: number; top: number; percentage: number }; crossImps: number };
 };

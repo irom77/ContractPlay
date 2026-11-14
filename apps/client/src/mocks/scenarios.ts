@@ -243,7 +243,7 @@ const onlineScreens: readonly PreviewScreen[] = [
       const state = bid(dealt(table("Club duplicate", people, others("north"))), 2);
       const data = view(state, "north", people);
       if (data.kind !== "table") throw new Error("Expected a table preview.");
-      return { ...data, view: { ...data.view, session: { board: 3, boardCount: 8, scoring: "matchpoints", completedBoards: 2,
+      return { ...data, view: { ...data.view, session: { board: 3, position: 3, boardCount: 8, scoring: "matchpoints", completedBoards: 2,
         complete: false, waitingForTables: true, rank: 1, tableCount: 4, matchpoints: { points: 4, top: 6, percentage: 66.6666667 }, crossImps: 12 } } };
     }
   }

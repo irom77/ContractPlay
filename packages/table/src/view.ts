@@ -53,7 +53,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined, session
     ...(state.rubber ? { rubber: state.rubber } : {}),
     ...(hostSeat ? { host: hostSeat } : {}),
     ...(yourSeat ? { yourSeat } : {}),
-    canDeal: canDeal(state, player) && (!state.sessionId || (session !== undefined && !session.complete && !session.waitingForTables && session.board === state.handNumber + 1)),
+    canDeal: canDeal(state, player) && (!state.sessionId || (session !== undefined && !session.complete && !session.waitingForTables && session.completedBoards === state.handNumber)),
     ...(game ? { game } : {}),
     ...(pending ? { claim: { seat: pending.seat, tricks: pending.tricks, waitingOn, madeAt: pending.madeAt } } : {}),
     ...(state.claimRejected ? { claimRejected: { ...state.claimRejected } } : {}),

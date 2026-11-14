@@ -12,7 +12,7 @@ An in-process coordinator shared by table objects would not survive worker evict
 
 ## Constraints and initial defaults
 
-- The first release uses generated random boards; importing a PBN board set into an online session is deferred until generated sessions work end to end.
+- Sessions may use generated boards or up to 32 boards from a user-supplied PBN file. The server accepts only validated board numbers, deals, dealers, and vulnerability; field rows, names, and original play are omitted.
 - A session has a fixed table count, board count, and scoring mode chosen at creation. Boards advance in order only when every participating table completes or explicitly forfeits that board.
 - A table can start a board only after it is ready and the session has released that board.
 - Session rankings are provisional until all tables have reported the board. No hand record, deal, auction, or play is returned by the coordinator while the table is in progress.
@@ -27,6 +27,7 @@ An in-process coordinator shared by table objects would not survive worker evict
 3. [x] Add session creation/join flow in the lobby, creating and binding the fixed set of tables; test coordinator persistence and concurrent/idempotent reports.
 4. [x] Let session tables deal the coordinator-provided deal, report completed boards, and project spoiler-safe status/rankings. Verify board locking, idempotent report retries, passed-out scoring in the model, and no board leak through session status.
 5. [x] Add the client flow to create/join a session, select a table, show board progress and session ranking, and document the preview states. Run workspace checks and `pnpm web:verify` before pushing.
+6. [x] Add user-supplied PBN board import, strict 52-card validation, a 32-board and 128 KB request cap, and tests that prove field and original-play data are not sent or stored.
 
 ## Review focus
 
@@ -39,4 +40,4 @@ An in-process coordinator shared by table objects would not survive worker evict
 
 ## Out of scope
 
-Licensed board-set distribution, online PBN imports, player identity beyond existing table identity, tournament movement between tables, and federation-level masterpoints.
+Licensed board-set distribution, player identity beyond existing table identity, tournament movement between tables, and federation-level masterpoints.

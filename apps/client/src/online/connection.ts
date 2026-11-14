@@ -1,10 +1,12 @@
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import type { ClientMessage, RefusalReason, ServerMessage, TableScoring, TableStyle, TableSummary, TableView } from "@contractplay/protocol";
+import type { Deal, Seat, Vulnerability } from "@contractplay/core";
 import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
 
 export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone";
 export type TableConnection = { send(message: Exclude<ClientMessage, { type: "hello" }>): void; close(): void };
+export type SessionBoardInput = Readonly<{ number: number; deal: Deal; dealer: Seat; vulnerability: Vulnerability }>;
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000];
 const SOCKET_OPEN = 1;
@@ -126,7 +128,7 @@ export async function createTable(baseUrl: string, input: { name: string; style:
   }
 }
 
-export async function createSession(baseUrl: string, input: { name: string; style: TableStyle; tableCount: number; boardCount: number; scoring: "matchpoints" | "imps"; listed: boolean }): Promise<{ sessionId: string; tableIds: string[] } | { error: string }> {
+export async function createSession(baseUrl: string, input: { name: string; style: TableStyle; tableCount: number; boardCount: number; scoring: "matchpoints" | "imps"; listed: boolean; boards?: readonly SessionBoardInput[] }): Promise<{ sessionId: string; tableIds: string[] } | { error: string }> {
   try {
     const response = await fetch(`${baseUrl}/api/sessions`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input)

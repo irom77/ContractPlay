@@ -3,9 +3,12 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import type { StorageLike } from "@contractplay/persistence";
 import type { TableSummary } from "@contractplay/protocol";
+import { createDeck, deal } from "@contractplay/core";
+import { exportPbn } from "@contractplay/pbn";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadIdentity, saveIdentity } from "./identity.js";
-import { Lobby } from "./Lobby.js";
+import { Lobby, type LobbyApi } from "./Lobby.js";
+import { boardSetFromPbn } from "../boardSet.js";
 
 function memoryStorage(): StorageLike {
   const data = new Map<string, string>();
@@ -25,7 +28,11 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
   const onOpenTable = vi.fn();
   const onSolo = vi.fn();
   const onRecentHands = vi.fn();
-  const createSession = vi.fn(async () => ({ sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] }));
+  const createSession = vi.fn(async (baseUrl: string, input: Parameters<LobbyApi["createSession"]>[1]) => {
+    void baseUrl;
+    void input;
+    return { sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] };
+  });
   render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} />);
   return { storage, listTables, createTable, createSession, onOpenTable, onSolo, onRecentHands };
 }
@@ -91,6 +98,23 @@ describe("Lobby", () => {
     await user.click(screen.getByRole("button", { name: "Create session" }));
     expect(createSession).toHaveBeenCalledWith("https://x.test", { name: "Bob's duplicate", style: "SAYC", tableCount: 4, boardCount: 12, scoring: "imps", listed: true });
     await waitFor(() => expect(onOpenTable).toHaveBeenCalledWith("NEW123"));
+  });
+
+  it("imports only deals and board metadata from a PBN set into an online session", async () => {
+    const user = userEvent.setup();
+    const { createSession } = setup({ list: () => Promise.resolve([]) });
+    const pbn = exportPbn({ dealer: "east", vulnerability: "Both", actions: [], deal: deal(createDeck()), tags: [
+      { name: "Board", value: "7" }, { name: "Event", value: "Club Pairs" }, { name: "Names", value: "Smith - Jones" }
+    ] }) + `\n[ScoreTable "Names_NS;Contract;Declarer;Result;Score_NS"]\n"Smith - Jones" 4S N 10 420`;
+    await user.upload(screen.getByLabelText("PBN board set"), new File([pbn], "club.pbn", { type: "text/plain" }));
+    expect(await screen.findByText(/Loaded 1 board from club.pbn/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    await waitFor(() => expect(createSession).toHaveBeenCalled());
+    const input = createSession.mock.calls[0]![1];
+    const expectedDeal = boardSetFromPbn(pbn).set!.records[0]!.deal;
+    expect(input.boards).toEqual([{ number: 7, deal: expectedDeal, dealer: "east", vulnerability: "Both" }]);
+    expect(JSON.stringify(input)).not.toContain("Smith");
+    expect(input.boardCount).toBe(1);
   });
 
   it("offers rubber scoring by default and running totals as a choice", async () => {

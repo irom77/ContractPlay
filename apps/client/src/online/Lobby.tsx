@@ -2,12 +2,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { StorageLike } from "@contractplay/persistence";
 import type { SeatInfo, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
+import { boardSetFromPbn } from "../boardSet.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
+import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
 
 const REFRESH_MS = 5000;
 /** How the lobby names a table's scoring; lobby entries from before rubber tables have none and keep running totals. */
 const scoringNames: Record<TableScoring, string> = { rubber: "Rubber bridge", duplicate: "Running totals" };
+
+function fileText(file: File): Promise<string> {
+  if (typeof file.text === "function") return file.text();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("File read failed"));
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("File is not text"));
+    reader.readAsText(file);
+  });
+}
 
 export type LobbyApi = {
   listTables(baseUrl: string): Promise<TableSummary[]>;
@@ -86,6 +98,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
   const [sessionTables, setSessionTables] = useState(2);
   const [sessionBoards, setSessionBoards] = useState(8);
   const [sessionScoring, setSessionScoring] = useState<"matchpoints" | "imps">("matchpoints");
+  const [importedBoards, setImportedBoards] = useState<{ fileName: string; boards: SessionBoardInput[]; skipped: number }>();
   const [creating, setCreating] = useState(false);
   const inFlight = useRef(false);
   const creatingNow = useRef(false);
@@ -141,7 +154,8 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
     setCreating(true);
     setCreateError(undefined);
     let result: Awaited<ReturnType<typeof defaultCreateSession>>;
-    try { result = await api.createSession(baseUrl, { name, style, tableCount: sessionTables, boardCount: sessionBoards, scoring: sessionScoring, listed: true }); }
+    try { result = await api.createSession(baseUrl, { name, style, tableCount: sessionTables, boardCount: importedBoards?.boards.length ?? sessionBoards,
+      scoring: sessionScoring, listed: true, ...(importedBoards ? { boards: importedBoards.boards } : {}) }); }
     catch { result = { error: "failed" }; }
     creatingNow.current = false;
     if (!mounted.current) return;
@@ -153,6 +167,30 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
       setListError(false);
       setCreateError(createErrorText("error" in result ? result.error : "failed"));
     }
+  }
+
+  async function loadSessionPbn(file: File | undefined) {
+    setCreateError(undefined);
+    if (!file) { setImportedBoards(undefined); return; }
+    let parsed: ReturnType<typeof boardSetFromPbn>;
+    try { parsed = boardSetFromPbn(await fileText(file)); }
+    catch { setImportedBoards(undefined); setCreateError("Couldn't read that PBN file."); return; }
+    if (!parsed.set) {
+      setImportedBoards(undefined);
+      setCreateError("No readable boards were found in that PBN file.");
+      return;
+    }
+    if (parsed.set.records.length > 32) {
+      setImportedBoards(undefined);
+      setCreateError("An online session can import at most 32 boards.");
+      return;
+    }
+    const boards = parsed.set.records.map((record, index) => {
+      const labelNumber = Number(record.board);
+      return { number: Number.isSafeInteger(labelNumber) && labelNumber > 0 ? labelNumber : index + 1,
+        deal: record.deal, dealer: record.dealer, vulnerability: record.vulnerability };
+    });
+    setImportedBoards({ fileName: file.name, boards, skipped: parsed.skipped });
   }
 
   // Whichever failed most recently wins: each failure clears the other.
@@ -203,9 +241,11 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
         <form className="lobby-panel" aria-label="New duplicate session" onSubmit={(event) => { event.preventDefault(); void createDuplicateSession(); }}>
           <h2>New duplicate session</h2>
           <label>Tables<select aria-label="Session tables" value={sessionTables} onChange={(event) => setSessionTables(Number(event.target.value))}>{[2, 3, 4, 6, 8].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
-          <label>Boards<select aria-label="Session boards" value={sessionBoards} onChange={(event) => setSessionBoards(Number(event.target.value))}>{[4, 8, 12, 16, 24, 32].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
+          <label>Boards<select aria-label="Session boards" disabled={!!importedBoards} value={sessionBoards} onChange={(event) => setSessionBoards(Number(event.target.value))}>{[4, 8, 12, 16, 24, 32].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           <label>Scoring method<select aria-label="Session scoring" value={sessionScoring} onChange={(event) => setSessionScoring(event.target.value as "matchpoints" | "imps")}><option value="matchpoints">Matchpoints</option><option value="imps">Cross-IMPs</option></select></label>
           <label>Session bidding style<select aria-label="Session bidding style" value={style} onChange={(event) => setStyle(event.target.value as TableStyle)}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+          <label>PBN board set<input aria-label="PBN board set" type="file" accept=".pbn,text/plain" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void loadSessionPbn(file); }} /></label>
+          {importedBoards ? <p className="quiet-copy">Loaded {importedBoards.boards.length} board{importedBoards.boards.length === 1 ? "" : "s"} from {importedBoards.fileName}{importedBoards.skipped ? ` · skipped ${importedBoards.skipped} unreadable` : ""}. Only deal and board details are sent. <button className="secondary-button" type="button" onClick={() => setImportedBoards(undefined)}>Remove PBN set</button></p> : null}
           <p className="quiet-copy">Session tables appear in the open lobby so players can join different tables.</p>
           <button className="primary-button" type="submit" disabled={creating}>Create session</button>
         </form>

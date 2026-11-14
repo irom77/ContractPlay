@@ -130,7 +130,7 @@ describe("OnlineTable seating", () => {
     const service = setup();
     const game = newGame();
     service.push(tableView({ yourSeat: "north", seats: seatedNorth, game: publicGame(game, ["north"]), handInProgress: true,
-      session: { board: 2, boardCount: 8, scoring: "matchpoints", completedBoards: 1, complete: false, waitingForTables: true, rank: 1, tableCount: 2,
+      session: { board: 2, position: 2, boardCount: 8, scoring: "matchpoints", completedBoards: 1, complete: false, waitingForTables: true, rank: 1, tableCount: 2,
         matchpoints: { points: 2, top: 2, percentage: 100 }, crossImps: 5 } }));
     expect(screen.getByText(/Board 2 complete · waiting for other tables · Place 1 of 2 · 100\.0% matchpoints/)).toBeTruthy();
   });

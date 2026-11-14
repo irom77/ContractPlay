@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createDeck, deal } from "@contractplay/core";
 import type { TableView } from "@contractplay/protocol";
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import { connectTable, createSession, createTable, listTables, serviceUrl, type ConnectionStatus } from "./connection.js";
@@ -237,7 +238,8 @@ describe("HTTP helpers", () => {
   it("creates a duplicate session", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ sessionId: "SESSION1", tableIds: ["ABC234", "DEF567"] }), { status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
-    const input = { name: "Club", style: "SAYC" as const, tableCount: 2, boardCount: 8, scoring: "matchpoints" as const, listed: true };
+    const boards = [{ number: 7, deal: deal(createDeck()), dealer: "north" as const, vulnerability: "None" as const }];
+    const input = { name: "Club", style: "SAYC" as const, tableCount: 2, boardCount: 1, scoring: "matchpoints" as const, listed: true, boards };
     await expect(createSession("https://x.test", input)).resolves.toEqual({ sessionId: "SESSION1", tableIds: ["ABC234", "DEF567"] });
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://x.test/api/sessions");
     expect(JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)).toEqual(input);

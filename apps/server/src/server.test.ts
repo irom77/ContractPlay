@@ -1,12 +1,12 @@
 import { env } from "cloudflare:workers";
 import { SELF, evictDurableObject, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
-import { SEATS, playContextFor } from "@contractplay/core";
+import { createDeck, deal, SEATS, playContextFor } from "@contractplay/core";
 import type { GameAction, GameState, Seat } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import type { ClientMessage, ServerMessage, TableSummary, TableView } from "@contractplay/protocol";
 import { BOT_PAUSE_MS, EMPTY_TABLE_MS, TRICK_PAUSE_MS } from "@contractplay/table";
-import type { TableState } from "@contractplay/table";
+import type { DuplicateSession, TableState } from "@contractplay/table";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import type { LobbyObject } from "./lobby-object.js";
 
@@ -246,6 +246,28 @@ describe("lobby", () => {
       const response = await SELF.fetch("https://x/api/sessions", { method: "POST", body: JSON.stringify(input) });
       expect(response.status).toBe(400);
     }
+  });
+
+  it("accepts user-supplied boards only after validating the complete deals", async () => {
+    const sharedDeal = deal(createDeck());
+    const input = { name: "Imported club boards", style: "2/1", tableCount: 2, boardCount: 1, scoring: "imps", listed: true,
+      boards: [{ number: 7, deal: sharedDeal, dealer: "east", vulnerability: "Both", field: [{ nsScore: 420, name: "Smith" }], original: [{ type: "bid", seat: "north", bid: "4spades" }] }] };
+    const response = await SELF.fetch("https://x/api/sessions", {
+      method: "POST", headers: { "content-type": "application/json", "CF-Connecting-IP": freshIp() }, body: JSON.stringify(input)
+    });
+    expect(response.status).toBe(201);
+    const created = await response.json<{ sessionId: string; tableIds: string[] }>();
+    const coordinator = env.SESSIONS.get(env.SESSIONS.idFromName(created.sessionId));
+    expect(await coordinator.boardFor(created.tableIds[0]!, 0)).toMatchObject({ number: 7, deal: sharedDeal, dealer: "east", vulnerability: "Both" });
+    const stored = await runInDurableObject(coordinator, (_instance, state) => state.storage.get<DuplicateSession>("session"));
+    expect(Object.keys(stored!.boards[0]!).sort()).toEqual(["deal", "dealer", "number", "vulnerability"]);
+    const invalid = { ...input, boards: [{ ...input.boards[0], deal: { north: [], east: [], south: [], west: [] } }] };
+    const rejected = await SELF.fetch("https://x/api/sessions", { method: "POST", body: JSON.stringify(invalid) });
+    expect(rejected.status).toBe(400);
+    const repeatedCard = { ...sharedDeal, east: [sharedDeal.north[0]!, ...sharedDeal.east.slice(1)] };
+    const duplicated = { ...input, boards: [{ ...input.boards[0], deal: repeatedCard }] };
+    const duplicateRejected = await SELF.fetch("https://x/api/sessions", { method: "POST", body: JSON.stringify(duplicated) });
+    expect(duplicateRejected.status).toBe(400);
   });
 
   it("refuses a bad name, style, or scoring", async () => {

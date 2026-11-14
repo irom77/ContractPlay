@@ -1,5 +1,8 @@
 import { MAX_MESSAGE_BYTES, MAX_TABLE_NAME, PROTOCOL_VERSION, TABLE_SCORINGS, cleanName } from "@contractplay/protocol";
 import type { TableScoring, TableStyle } from "@contractplay/protocol";
+import { RANKS, SEATS, SUITS } from "@contractplay/core";
+import type { Card, Deal, Seat, Vulnerability } from "@contractplay/core";
+import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 
 // The entry module may only export handlers and Durable Object classes.
@@ -9,6 +12,42 @@ export { SessionObject } from "./session-object.js";
 
 const TABLE_ID = new RegExp(`^([${ID_ALPHABET}]{${LISTED_ID_LENGTH}}|[${ID_ALPHABET}]{${UNLISTED_ID_LENGTH}})$`);
 const STYLES: readonly unknown[] = ["SAYC", "2/1"] satisfies TableStyle[];
+const SESSION_BODY_BYTES = 128_000;
+const VULNERABILITIES: readonly unknown[] = ["None", "NS", "EW", "Both"] satisfies Vulnerability[];
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Sanitizes uploaded deals: exactly thirteen distinct cards in each hand, all 52 cards unique. */
+function importedBoards(value: unknown): DuplicateSessionBoard[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 32) return undefined;
+  const boards: DuplicateSessionBoard[] = [];
+  for (const raw of value) {
+    if (!record(raw) || typeof raw.number !== "number" || !Number.isSafeInteger(raw.number) || raw.number < 1
+      || !SEATS.includes(raw.dealer as Seat) || !VULNERABILITIES.includes(raw.vulnerability)) return undefined;
+    if (!record(raw.deal)) return undefined;
+    const seen = new Set<string>();
+    const hands = {} as Record<Seat, Card[]>;
+    for (const seat of SEATS) {
+      const hand = raw.deal[seat];
+      if (!Array.isArray(hand) || hand.length !== 13) return undefined;
+      const cards: Card[] = [];
+      for (const rawCard of hand) {
+        if (!record(rawCard) || !SUITS.includes(rawCard.suit as Card["suit"])
+          || !RANKS.includes(rawCard.rank as Card["rank"])) return undefined;
+        const key = `${String(rawCard.suit)}:${String(rawCard.rank)}`;
+        if (seen.has(key)) return undefined;
+        seen.add(key);
+        cards.push({ suit: rawCard.suit as Card["suit"], rank: rawCard.rank as Card["rank"] });
+      }
+      hands[seat] = cards;
+    }
+    if (seen.size !== 52) return undefined;
+    boards.push({ number: raw.number, deal: hands as Deal, dealer: raw.dealer as Seat, vulnerability: raw.vulnerability as Vulnerability });
+  }
+  return boards;
+}
 
 /** The request body as text, or undefined once it is over `limit` bytes; never buffers more than `limit` bytes plus one chunk. */
 async function readLimited(request: Request, limit: number): Promise<string | undefined> {
@@ -51,7 +90,7 @@ async function createTable(request: Request, env: Env): Promise<Response> {
 }
 
 async function createSession(request: Request, env: Env): Promise<Response> {
-  const text = await readLimited(request, MAX_MESSAGE_BYTES);
+  const text = await readLimited(request, SESSION_BODY_BYTES);
   if (text === undefined) return Response.json({ error: "bad-request" }, { status: 400 });
   let body: unknown;
   try { body = JSON.parse(text); } catch { return Response.json({ error: "bad-request" }, { status: 400 }); }
@@ -60,12 +99,14 @@ async function createSession(request: Request, env: Env): Promise<Response> {
   const name = cleanName(data.name, MAX_TABLE_NAME);
   const tableCount = typeof data.tableCount === "number" ? data.tableCount : NaN;
   const boardCount = typeof data.boardCount === "number" ? data.boardCount : NaN;
+  const boards = data.boards === undefined ? undefined : importedBoards(data.boards);
   if (name === undefined || !STYLES.includes(data.style) || typeof data.listed !== "boolean"
     || !Number.isInteger(tableCount) || !Number.isInteger(boardCount)
     || tableCount < 2 || tableCount > 8 || boardCount < 1 || boardCount > 32
+    || (data.boards !== undefined && (boards === undefined || boards.length !== boardCount))
     || (data.scoring !== "matchpoints" && data.scoring !== "imps")) return Response.json({ error: "bad-request" }, { status: 400 });
   const result = await lobbyOf(env).createSession({ name, style: data.style as TableStyle, listed: data.listed,
-    tableCount, boardCount, scoring: data.scoring }, request.headers.get("CF-Connecting-IP") ?? "unknown");
+    tableCount, boardCount, scoring: data.scoring, ...(boards ? { boards } : {}) }, request.headers.get("CF-Connecting-IP") ?? "unknown");
   if ("error" in result) return Response.json(result, { status: result.error === "bad-request" ? 400 : 429 });
   return Response.json(result, { status: 201 });
 }

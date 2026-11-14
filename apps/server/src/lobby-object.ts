@@ -3,6 +3,7 @@ import { createDeck, deal, shuffle } from "@contractplay/core";
 import type { Vulnerability } from "@contractplay/core";
 import { MAX_TABLE_NAME } from "@contractplay/protocol";
 import type { TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
+import type { DuplicateSessionBoard } from "@contractplay/table";
 
 /** Listed and unlisted tables are capped separately, so neither kind can starve the other. */
 export const MAX_LISTED_TABLES = 100, MAX_UNLISTED_TABLES = 400;
@@ -94,9 +95,10 @@ export class LobbyObject extends DurableObject<Env> {
   }
 
   /** Creates a fixed set of duplicate tables and a shared generated board set. */
-  async createSession(input: { name: string; style: TableStyle; tableCount: number; boardCount: number; scoring: "matchpoints" | "imps"; listed: boolean }, address: string): Promise<{ sessionId: string; tableIds: string[] } | { error: string }> {
+  async createSession(input: { name: string; style: TableStyle; tableCount: number; boardCount: number; scoring: "matchpoints" | "imps"; listed: boolean; boards?: readonly DuplicateSessionBoard[] }, address: string): Promise<{ sessionId: string; tableIds: string[] } | { error: string }> {
     if (!Number.isInteger(input.tableCount) || input.tableCount < 2 || input.tableCount > 8
-      || !Number.isInteger(input.boardCount) || input.boardCount < 1 || input.boardCount > 32) return { error: "bad-request" };
+      || !Number.isInteger(input.boardCount) || input.boardCount < 1 || input.boardCount > 32
+      || (input.boards !== undefined && input.boards.length !== input.boardCount)) return { error: "bad-request" };
     const sessionId = randomTableId(UNLISTED_ID_LENGTH);
     const tableIds: string[] = [];
     const prefix = input.name.trim().slice(0, Math.max(1, MAX_TABLE_NAME - 16));
@@ -109,7 +111,7 @@ export class LobbyObject extends DurableObject<Env> {
       tableIds.push(created.id);
     }
     const vulnerability: readonly Vulnerability[] = ["None", "NS", "EW", "Both", "NS", "EW", "Both", "None", "EW", "Both", "None", "NS", "Both", "None", "NS", "EW"];
-    const boards = Array.from({ length: input.boardCount }, (_, index) => ({
+    const boards = input.boards ?? Array.from({ length: input.boardCount }, (_, index) => ({
       number: index + 1,
       deal: deal(shuffle(createDeck(), secureRandom)),
       dealer: (["north", "east", "south", "west"] as const)[index % 4]!,

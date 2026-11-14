@@ -49,7 +49,7 @@ function refusalText(reason: RefusalReason): string | undefined {
 function sessionLabel(session: NonNullable<TableViewData["session"]>): string {
   const progress = session.complete ? "Session complete"
     : session.waitingForTables ? `Board ${session.board} complete · waiting for other tables`
-      : `Board ${session.board} of ${session.boardCount}`;
+      : `Board ${session.board} · ${session.position} of ${session.boardCount}`;
   if (session.completedBoards === 0) return progress;
   const metric = session.scoring === "matchpoints" ? `${session.matchpoints.percentage.toFixed(1)}% matchpoints` : `${session.crossImps} cross-IMPs`;
   return `${progress} · Place ${session.rank} of ${session.tableCount} · ${metric}`;
