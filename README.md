@@ -19,11 +19,13 @@
 > | 13 | Hand result | 27 | Solo: reviewing a saved hand |
 > | 14 | Scores | 28 | Solo: result against the field |
 > |  |  | 29 | Solo: viewing the original play |
+> | 30 | Email sign-in |  |  |
+> | 31 | Email link sent |  |  |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/29` button brings it back. **Exit** returns to the app.
-> - **Nothing is played or saved:** the screens are look-only. Clicks go nowhere, and names, hints, and hand history stay out of the browser's storage.
-> - **Always current:** each screen is a real table state built with the same rules engine and reducer the server runs, projected with the server's `viewFor`, and drawn by the real `Lobby` and `OnlineTable` components; the solo screens (17–29) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Inspect without the bar:** × hides it; the small `N/31` button brings it back. **Exit** returns to the app.
+> - **Nothing is played or saved:** table and lobby clicks do not contact the server, and preview names, hints, and hand history stay out of browser storage. The email form advances only to its mock confirmation; it never sends a message.
+> - **Always current:** each online table and lobby screen is built from a real table state and drawn by the real `Lobby` and `OnlineTable` components; screens 30–31 use the real email sign-in form with a mock request, and the solo screens (17–29) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
 
 <p align="center">

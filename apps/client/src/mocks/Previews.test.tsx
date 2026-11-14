@@ -204,6 +204,18 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(document.querySelector(".status-pill")!.textContent).toMatch(/Original play: action 8 of/);
     expect(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to your result" })).toBeTruthy();
     expect(document.querySelector(".board-label")).toBeNull();
+  },
+  "email-sign-in": async () => {
+    expect(screen.getByRole("region", { name: "Email sign-in" })).toBeTruthy();
+    expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("alex@example.com");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Send sign-in link" }));
+    expect(await screen.findByText("Check your email for a sign-in link.")).toBeTruthy();
+  },
+  "email-link-sent": () => {
+    expect(screen.getByRole("region", { name: "Email sign-in" })).toBeTruthy();
+    expect(screen.getByText("Check your email for a sign-in link.")).toBeTruthy();
+    expect(screen.queryByLabelText("Email")).toBeNull();
   }
 };
 

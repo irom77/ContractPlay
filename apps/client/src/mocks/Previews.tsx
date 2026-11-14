@@ -5,7 +5,7 @@ import type { StorageLike } from "@contractplay/persistence";
 import type { TableView } from "@contractplay/protocol";
 import type { connectTable } from "../online/connection.js";
 import { saveIdentity } from "../online/identity.js";
-import { Lobby } from "../online/Lobby.js";
+import { EmailGate, Lobby } from "../online/Lobby.js";
 import { OnlineTable } from "../online/OnlineTable.js";
 import { previewScreens, type PreviewData } from "./scenarios.js";
 
@@ -36,10 +36,12 @@ function SoloPreviewScreen({ data }: { data: Extract<PreviewData, { kind: "solo"
 
 function PreviewScreen({ data }: { data: PreviewData }) {
   if (data.kind === "solo") return <SoloPreviewScreen data={data} />;
+  if (data.kind === "auth") return <EmailGate identity={undefined} initialEmail="alex@example.com" initialSent={data.sent}
+    requestLink={async () => {}} onBack={() => {}} />;
   return <OnlineScreen data={data} />;
 }
 
-function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" }> }) {
+function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | { kind: "auth" }> }) {
   const storage = useMemo(() => {
     const store = memoryStorage(data.kind === "table" && data.hints ? { "contractplay.hints": "on" } : {});
     saveIdentity(store, data.viewerName);

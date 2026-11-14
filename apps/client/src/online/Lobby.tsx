@@ -87,14 +87,17 @@ export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, ap
   </>;
 }
 
-function EmailGate({ identity, onBack }: { identity: Identity | undefined; onBack(): void }) {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+export function EmailGate({ identity, onBack, initialEmail = "", initialSent = false, requestLink = requestMagicLink }: {
+  identity: Identity | undefined; onBack(): void; initialEmail?: string; initialSent?: boolean;
+  requestLink?: typeof requestMagicLink;
+}) {
+  const [email, setEmail] = useState(initialEmail);
+  const [sent, setSent] = useState(initialSent);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   async function submit() {
     setPending(true); setError(false);
-    try { await requestMagicLink(email.trim(), identity?.secret, identity?.name); setSent(true); }
+    try { await requestLink(email.trim(), identity?.secret, identity?.name); setSent(true); }
     catch { setError(true); }
     finally { setPending(false); }
   }

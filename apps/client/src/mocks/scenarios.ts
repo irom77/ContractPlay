@@ -129,6 +129,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
   | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard }
+  | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage"> };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
@@ -371,8 +372,19 @@ export const soloScreens: readonly PreviewScreen[] = [
   }
 ];
 
-/** Every preview, online screens first and then solo play. */
-export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens];
+const authScreens: readonly PreviewScreen[] = [
+  {
+    id: "email-sign-in", title: "Email sign-in", detail: "The real sign-in form with a sample address; submitting in this preview never contacts the server.",
+    build: () => ({ kind: "auth", sent: false })
+  },
+  {
+    id: "email-link-sent", title: "Email link sent", detail: "The confirmation shown after requesting a sign-in link; no email is sent by this preview.",
+    build: () => ({ kind: "auth", sent: true })
+  }
+];
+
+/** Every preview, online screens first, then solo play and account sign-in. */
+export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens, ...authScreens];
 
 function playUntilView(people: People, seat: Seat, stop: (game: GameState) => boolean): PreviewData {
   const humans = Object.keys(people) as Seat[];
