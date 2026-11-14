@@ -2,6 +2,14 @@
   "name": "contractplay",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-22",
+  "vars": {
+    "AUTH_PUBLIC_ORIGIN": "https://contractplay.niuk.workers.dev"
+  },
+  // Mail remains disabled until AUTH_EMAIL_FROM is set to an approved sender.
+  // With an onboarded Cloudflare sending domain, add send_email: [{ name: "EMAIL" }].
+  // Otherwise set AUTH_EMAIL_PROVIDER=resend and store RESEND_API_KEY as a Worker secret.
+  // Local .dev.vars may override AUTH_PUBLIC_ORIGIN=http://localhost:8787 and
+  // AUTH_ALLOW_INSECURE_LOCALHOST=true. Never enable insecure cookies for remote hosts.
   "assets": {
     "directory": "../client/dist",
     "binding": "ASSETS",

@@ -4,6 +4,7 @@ import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, Seat, Vulnerability } from "@contractplay/core";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
+import { authRoute } from "./auth.js";
 
 // The entry module may only export handlers and Durable Object classes.
 export { LobbyObject } from "./lobby-object.js";
@@ -132,6 +133,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path.startsWith("/api/auth/")) return authRoute(request, env);
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
     if (path === "/admin" && (request.method === "GET" || request.method === "HEAD")) {
       return env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method, headers: request.headers }));

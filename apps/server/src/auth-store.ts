@@ -55,6 +55,42 @@ export class AuthStore {
       .bind(link.tokenHash, normalizeEmail(link.email), link.displayName, link.guestPlayerId ?? null, link.expiresAt).run();
   }
 
+  /** Pending delivery is deliberately ineligible for redemption, even if sending fails. */
+  async insertPendingMagicLink(link: MagicLink, now: number): Promise<void> {
+    await this.db.prepare("INSERT INTO magic_links (token_hash, email, display_name, guest_player_id, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(link.tokenHash, normalizeEmail(link.email), link.displayName, link.guestPlayerId ?? null, link.expiresAt, now).run();
+  }
+
+  async activateMagicLink(tokenHash: string): Promise<void> {
+    await this.db.prepare("UPDATE magic_links SET consumed_at = NULL WHERE token_hash = ? AND redemption_id IS NULL")
+      .bind(tokenHash).run();
+  }
+
+  async magicLinkEmail(tokenHash: string): Promise<string | null> {
+    const row = await this.db.prepare("SELECT email FROM magic_links WHERE token_hash = ?").bind(tokenHash).first<{ email: string }>();
+    return row?.email ?? null;
+  }
+
+  /** Atomic fixed-window admission, shared by all Worker instances. Only hashed keys persist. */
+  async admitAuthAttempt(keyHash: string, now: number, windowMs: number, limit: number, cooldownMs = 0): Promise<boolean> {
+    const row = await this.db.prepare(`INSERT INTO auth_rate_limits (key_hash, attempts, expires_at, last_at) VALUES (?, 1, ?, ?)
+      ON CONFLICT(key_hash) DO UPDATE SET
+        attempts = CASE WHEN expires_at <= ? THEN 1 ELSE attempts + 1 END,
+        expires_at = CASE WHEN expires_at <= ? THEN excluded.expires_at ELSE expires_at END,
+        last_at = excluded.last_at
+      WHERE (expires_at <= ? OR attempts < ?) AND last_at <= ? RETURNING key_hash`)
+      .bind(keyHash, now + windowMs, now, now, now, now, limit, now - cooldownMs).first();
+    return row !== null;
+  }
+
+  async cleanupAuth(now: number): Promise<void> {
+    await this.db.batch([
+      this.db.prepare("DELETE FROM magic_links WHERE expires_at <= ?").bind(now),
+      this.db.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(now),
+      this.db.prepare("DELETE FROM auth_rate_limits WHERE expires_at <= ?").bind(now)
+    ]);
+  }
+
   /** All writes are guarded by this redemption's fresh transaction ID within one transaction. */
   async redeemMagicLink(input: { tokenHash: string; sessionHash: string; now: number; sessionExpiresAt: number }): Promise<Account | null> {
     const { tokenHash, sessionHash, now, sessionExpiresAt } = input;

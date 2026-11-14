@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Email sign-in server foundation.** Added same-origin magic-link and session endpoints with single-use 15-minute links, 30-day sessions, guest identity proof, and durable request limits. Delivery supports a configured Cloudflare Email Service binding or Resend. D1 migrations and an approved sender must be configured before use; the sign-in interface and account-backed online play are still being integrated.
+
 - **Download a licensed practice set.** Recent hands includes an eight-board PBN set from Bridge Training's “Ruffing in the short hand — Level 1.” It preserves the deals, auctions, contracts, and opening leads, carries per-board source and CC0 tags, and links to the originating collection.
 
 - **Play online duplicate sessions.** Create 2–8 tables with 4–32 shared boards, either generated or imported from a PBN file, scored by matchpoints or cross-IMPs. PBN imports send only validated deals, board numbers, dealers, and vulnerability; field rows and original play are discarded. The session coordinator releases boards in order after each table finishes, accepts safe score retries, and shows the current place and aggregate result. Passed-out boards count as zero; unfinished boards stay out of the ranking. Online tables moved to protocol version 5.

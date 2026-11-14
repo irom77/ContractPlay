@@ -7,6 +7,12 @@ declare global {
     interface Env {
       ASSETS: Fetcher;
       DB: D1Database;
+      AUTH_PUBLIC_ORIGIN?: string;
+      AUTH_ALLOW_INSECURE_LOCALHOST?: string;
+      AUTH_EMAIL_FROM?: string;
+      EMAIL?: SendEmail;
+      AUTH_EMAIL_PROVIDER?: "resend";
+      RESEND_API_KEY?: string;
       TABLES: DurableObjectNamespace<TableObject>;
       LOBBY: DurableObjectNamespace<LobbyObject>;
       SESSIONS: DurableObjectNamespace<SessionObject>;
