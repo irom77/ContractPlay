@@ -25,7 +25,7 @@ describe("boardSetFromPbn", () => {
     const { set, skipped } = boardSetFromPbn(bridgewebsPbn);
     expect(skipped).toBe(0);
     expect(set?.records).toHaveLength(32);
-    expect(set?.records[0]).toMatchObject({ board: "1", event: "Regis_2016_12_13", dealer: "north", vulnerability: "None" });
+    expect(set?.records[0]).toMatchObject({ board: "1", event: "Regis_2016_12_13", dealer: "north", vulnerability: "None", doubleDummyPar: 90 });
   });
 
   it("skips boards without a deal", () => {
@@ -33,6 +33,13 @@ describe("boardSetFromPbn", () => {
     const { set, skipped } = boardSetFromPbn(`${board()}\n\n${noDeal}\n\n${board()}`);
     expect(set?.records).toHaveLength(2);
     expect(skipped).toBe(1);
+  });
+
+  it("uses the fullest traveller as the expected count for uneven boards", () => {
+    const { set } = boardSetFromPbn(`${board(table)}\n\n${board("", "east")}`);
+    expect(set?.records).toHaveLength(2);
+    expect(set?.records[0]?.expectedFieldCount).toBe(2);
+    expect(set?.records[1]?.expectedFieldCount).toBe(2);
   });
 
   it("falls back to a default name and reports nothing readable", () => {

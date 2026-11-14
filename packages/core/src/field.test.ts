@@ -42,7 +42,11 @@ describe("field scoring", () => {
     expect(compareWithField([row(100, { multiplicity: 1_000_000_000 })], 100, "NS", "matchpoints")!.count).toBe(1_000_000_000);
   });
   it("matchpoints a new score as an extra table", () => {
-    expect(compareWithField(field, 420, "NS", "matchpoints")!.matchpoints).toEqual({ points: 6, top: 10, percentage: 60 });
+    expect(compareWithField(field, 420, "NS", "matchpoints")!.matchpoints).toEqual({ points: 6, top: 10, percentage: 60, neuberg: false });
+  });
+  it("uses Neuberg when the actual field has fewer scores than expected", () => {
+    expect(compareWithField([row(100)], 200, "NS", "matchpoints", 3)!.matchpoints)
+      .toEqual({ points: 5, top: 6, percentage: 100 * 5 / 6, neuberg: true });
   });
   it("IMPs against the rounded average datum and across the field", () => {
     const result = compareWithField(field, 420, "NS", "butler")!;
@@ -56,7 +60,7 @@ describe("field scoring", () => {
   });
   it("scores from East-West's side when the player sat East-West", () => {
     const result = compareWithField(field, -50, "EW", "matchpoints")!; // EW +50: beats four tables, ties one
-    expect(result.matchpoints).toEqual({ points: 9, top: 10, percentage: 90 });
+    expect(result.matchpoints).toEqual({ points: 9, top: 10, percentage: 90, neuberg: false });
     expect(result.butler.datum).toBe(-240);
   });
   it("has no comparison without real scores", () => {

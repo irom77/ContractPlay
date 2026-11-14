@@ -51,6 +51,12 @@ describe("FieldResult", () => {
     expect(panel().getByText("+19 IMPs across the field · 3.8 per comparison")).toBeTruthy();
   });
 
+  it("shows a PBN-provided double-dummy par score", () => {
+    render(<FieldResult record={{ ...record("MP", []), doubleDummyPar: -420 }} nsScore={420} side="NS" />);
+    expect(panel().getByText("Double-dummy par: NS -420")).toBeTruthy();
+    expect(panel().getByText("No field results for this board.")).toBeTruthy();
+  });
+
   it("shows the Butler-2 datum after dropping the high and low results", () => {
     render(<FieldResult record={record("IMP;Butler-2")} nsScore={420} side="NS" />);
     expect(panel().getByText("+4 IMPs against a Butler-2 datum of NS +280")).toBeTruthy();

@@ -601,16 +601,31 @@ export function parsePbnMetadata(pbn: string): Pick<PbnHand, "dealer" | "vulnera
   return { dealer: board.dealer, vulnerability: board.vulnerability };
 }
 
+/** PBN 2.1 OptimumScore, normalized to North-South score units. */
+function doubleDummyPar(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  // Some PBN 2.1 exporters list optimum contracts before the signed NS score.
+  const trailingScore = /;\s*([+-]?\d+)\s*$/.exec(value);
+  if (trailingScore) return Number(trailingScore[1]);
+  const scores = [...value.matchAll(/\b(NS|EW)\s+([+-]?\d+)\b/gi)];
+  if (!scores.length) return undefined;
+  const nsScore = scores.find((match) => match[1]!.toUpperCase() === "NS");
+  const ewScore = scores.find((match) => match[1]!.toUpperCase() === "EW");
+  return nsScore ? Number(nsScore[2]) : ewScore ? -Number(ewScore[2]) : undefined;
+}
+
 /** Maps a parsed board to a hand record for comparing results with the field, or undefined when it has no usable deal. */
 export function pbnBoardToRecord(board: PbnBoard): HandRecord | undefined {
   if (!board.deal || !board.dealer || board.diagnostics.some((entry) => entry.severity === "error")) return undefined;
   const tag = (name: string) => board.tags.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value;
   const [boardNumber, event, scoring] = [tag("Board"), tag("Event"), tag("Scoring")];
+  const par = doubleDummyPar(tag("OptimumScore"));
   const unavailableOriginal = board.diagnostics.some((entry) => entry.message.startsWith("Invalid play:") || entry.message.startsWith("Play starting seat does not match"));
   return {
     ...(boardNumber !== undefined ? { board: boardNumber } : {}),
     ...(event !== undefined ? { event } : {}),
     ...(scoring !== undefined ? { scoring } : {}),
+    ...(par !== undefined ? { doubleDummyPar: par } : {}),
     dealer: board.dealer,
     vulnerability: board.vulnerability ?? "None",
     deal: board.deal,

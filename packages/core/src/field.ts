@@ -24,6 +24,10 @@ export type HandRecord = Readonly<{
   dealer: Seat;
   vulnerability: Vulnerability;
   deal: Deal;
+  /** Expected number of scored field tables when the archive shows uneven board counts. */
+  expectedFieldCount?: number;
+  /** PBN OptimumScore in North-South score units, when supplied by the archive. */
+  doubleDummyPar?: number;
   original?: readonly GameAction[];
   field: readonly TravellerRow[];
 }>;
@@ -34,7 +38,7 @@ export type FieldMethod = "matchpoints" | "butler" | "butler-2" | "cross";
 export type FieldComparison = Readonly<{
   method: FieldMethod;
   count: number;
-  matchpoints: Readonly<{ points: number; top: number; percentage: number }>;
+  matchpoints: Readonly<{ points: number; top: number; percentage: number; neuberg: boolean }>;
   butler: Readonly<{ datum: number; imps: number }>;
   cross: Readonly<{ total: number; perComparison: number }>;
 }>;
@@ -74,7 +78,8 @@ export function compareWithField(
   rows: readonly TravellerRow[],
   nsScore: number,
   side: "NS" | "EW",
-  method: FieldMethod
+  method: FieldMethod,
+  expectedFieldCount?: number
 ): FieldComparison | undefined {
   const sign = side === "NS" ? 1 : -1;
   const counted = rows
@@ -83,8 +88,12 @@ export function compareWithField(
   const count = counted.reduce((sum, { weight }) => sum + weight, 0);
   if (count === 0) return undefined;
   const mine = sign * nsScore;
-  const points = counted.reduce((sum, { score, weight }) => sum + weight * (score < mine ? 2 : score === mine ? 1 : 0), 0);
-  const top = 2 * count;
+  const rawPoints = counted.reduce((sum, { score, weight }) => sum + weight * (score < mine ? 2 : score === mine ? 1 : 0), 0);
+  const neuberg = method === "matchpoints" && expectedFieldCount !== undefined && expectedFieldCount > count;
+  const expected = neuberg ? expectedFieldCount! + 1 : count + 1;
+  const actual = count + 1;
+  const points = neuberg ? (rawPoints * expected + expected - actual) / actual : rawPoints;
+  const top = 2 * (expected - 1);
   let datumTotal = counted.reduce((sum, { score, weight }) => sum + score * weight, 0);
   let datumCount = count;
   if (method === "butler-2" && count > 2) {
@@ -97,7 +106,7 @@ export function compareWithField(
   return {
     method,
     count,
-    matchpoints: { points, top, percentage: (100 * points) / top },
+    matchpoints: { points, top, percentage: (100 * points) / top, neuberg },
     butler: { datum, imps: impsFor(mine - datum) },
     cross: { total, perComparison: total / count }
   };

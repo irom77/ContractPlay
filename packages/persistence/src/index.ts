@@ -96,6 +96,8 @@ function isHandRecord(value: unknown): value is HandRecord {
     (value.board === undefined || typeof value.board === "string") &&
     (value.event === undefined || typeof value.event === "string") &&
     (value.scoring === undefined || typeof value.scoring === "string") &&
+    (value.expectedFieldCount === undefined || (Number.isInteger(value.expectedFieldCount) && Number(value.expectedFieldCount) >= 0)) &&
+    (value.doubleDummyPar === undefined || Number.isInteger(value.doubleDummyPar)) &&
     (value.original === undefined || (Array.isArray(value.original) && value.original.every(isAction))) &&
     Array.isArray(value.field) && value.field.every(isTravellerRow);
 }

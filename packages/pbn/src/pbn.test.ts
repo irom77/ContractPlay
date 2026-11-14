@@ -299,6 +299,15 @@ describe("PBN tables, inheritance, and hand records", () => {
     expect(pbnBoardToRecord(parsePbn(fixture).boards[0]!)).toMatchObject({ board: "1", event: "Club Pairs", scoring: "MP", dealer: "north", vulnerability: "None", field: expect.any(Array) });
   });
 
+  it("maps PBN OptimumScore to a North-South double-dummy par score", () => {
+    const standard = pbnBoardToRecord(parsePbn(`${header}\n[OptimumScore "EW -420"]`).boards[0]!);
+    const compact = pbnBoardToRecord(parsePbn(`${header}\n[OptimumScore "NS 1N,NS 2D; 90"]`).boards[0]!);
+    const invalid = pbnBoardToRecord(parsePbn(`${header}\n[OptimumScore "unknown"]`).boards[0]!);
+    expect(standard?.doubleDummyPar).toBe(420);
+    expect(compact?.doubleDummyPar).toBe(90);
+    expect(invalid?.doubleDummyPar).toBeUndefined();
+  });
+
   it("returns no record for a board without a deal or with an error", () => {
     expect(pbnBoardToRecord(parsePbn('[Dealer "N"]\n[Vulnerable "None"]').boards[0]!)).toBeUndefined();
     const broken = parsePbn(header.replace('[Vulnerable "None"]', '[Vulnerable "Sideways"]')).boards[0]!;

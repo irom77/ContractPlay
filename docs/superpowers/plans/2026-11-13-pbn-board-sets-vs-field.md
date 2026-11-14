@@ -346,6 +346,10 @@ PBN `Scoring` modifier `Butler-2` is now supported in `packages/core/src/field.t
 Implemented in `packages/persistence` and `apps/client/src/App.tsx`: Recent hands stores up to eight imported sets within a 1.5 MB serialized-data cap, tracks progress, and offers resume, restart, delete, and portable JSON backup export/import. Browser downloads and Tauri's scoped file dialogs both support JSON backups. The remaining hand-record extensions are tracked in `TODO.md`.
 
 The public BridgeWebs test-system archive `https://www.bridgewebs.com/test/regis.pbn` is kept as `apps/client/src/fixtures/bridgewebs-regis.pbn`; the board-set parser and browser file-import path are covered against all 32 boards. Manual verification in a real browser and an ACBL Live for Clubs archive remain open because this environment has no browser runner.
+
+Neuberg adjustment is also implemented for uneven PBN fields. `boardSetFromPbn` takes the fullest board's count of scored traveller results as the expected count, stores it on each `HandRecord`, and the core applies the EBU formula to matchpoints only when that board has fewer results. The result panel labels adjusted comparisons. A missing-score test covers the multiplier and top calculation.
+
+PBN 2.1's `OptimumScore` is parsed as signed North–South points and shown as double-dummy par. The BridgeWebs fixture covers its exporter-specific `"NS 1N,NS 2D; 90"` form as well as standard `NS`/`EW` score forms. The [PBN 2.1 standard](https://www.sackab.fi/data/PBN/PBN21a_1.pdf) defines this tag as the optimum score with open cards; computing par from `OptimumResultTable` when the tag is absent remains open.
 - **Your side.** The comparison is from your partnership against bots, and from North–South at a manual table.
 - **The original play** is viewable only after the hand ends, through the existing review controls.
 - **Solo only.** Online board sets are phase 5.

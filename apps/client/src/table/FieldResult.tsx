@@ -22,7 +22,7 @@ function headline(comparison: FieldComparison, side: "NS" | "EW"): string {
   if (comparison.method === "butler" || comparison.method === "butler-2") return `${imps(comparison.butler.imps)} against a ${comparison.method === "butler-2" ? "Butler-2 " : ""}datum of ${side} ${signed(comparison.butler.datum)}`;
   if (comparison.method === "cross") return `${imps(comparison.cross.total)} across the field · ${comparison.cross.perComparison.toFixed(1)} per comparison`;
   const { percentage, points, top } = comparison.matchpoints;
-  return `${percentage.toFixed(1)}% · ${points} of ${top} matchpoints`;
+  return `${percentage.toFixed(1)}% · ${comparison.matchpoints.neuberg ? points.toFixed(1) : points} of ${top} matchpoints${comparison.matchpoints.neuberg ? " (Neuberg)" : ""}`;
 }
 
 const seatLetter = (seat: string): string => seat[0]!.toUpperCase();
@@ -41,10 +41,11 @@ function lines(field: readonly TravellerRow[], nsScore: number): Line[] {
 
 /** How a board-set result compares with the field that played the board elsewhere. Pair names are never shown. */
 export function FieldResult({ record, nsScore, side, label, showPoints = true, actions }: FieldResultProps) {
-  const comparison = compareWithField(record.field, nsScore, side, fieldMethod(record.scoring));
+  const comparison = compareWithField(record.field, nsScore, side, fieldMethod(record.scoring), record.expectedFieldCount);
   return <section className="field-result" aria-label="Result against the field">
     <h3>Against the field</h3>
     {label ? <p className="field-label">{label}</p> : null}
+    {record.doubleDummyPar !== undefined ? <p className="field-par">Double-dummy par: NS {signed(record.doubleDummyPar)}</p> : null}
     {comparison ? <>
       <p className="field-headline">{headline(comparison, side)}</p>
       <table className="field-table">

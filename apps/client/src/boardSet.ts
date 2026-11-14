@@ -23,7 +23,7 @@ export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number
     const key = boardKey(board, index);
     groups.set(key, [...(groups.get(key) ?? []), board]);
   });
-  const records: HandRecord[] = [];
+  let records: HandRecord[] = [];
   let skipped = 0;
   for (const games of groups.values()) {
     const readable = games.map(pbnBoardToRecord).filter((record): record is HandRecord => record !== undefined);
@@ -39,6 +39,8 @@ export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number
     const field = games.map(tableResult).filter((row): row is TravellerRow => row !== undefined);
     records.push({ ...record, field });
   }
+  const expectedFieldCount = Math.max(0, ...records.map((record) => record.field.reduce((count, row) => count + (row.artificial || row.nsScore === undefined ? 0 : row.multiplicity), 0)));
+  if (expectedFieldCount > 0) records = records.map((record) => ({ ...record, expectedFieldCount }));
   return records.length ? { set: { id: createBoardSetId(), name: records[0]!.event || "Imported boards", records, position: 0 }, skipped, boards } : { skipped, boards };
 }
 
