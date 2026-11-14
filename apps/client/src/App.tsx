@@ -13,6 +13,7 @@ import {
   redoAction,
   remainingTricks,
   replayOriginal,
+  SEATS,
   summarizeRubber,
   playContextFor,
   requestHint,
@@ -27,7 +28,7 @@ import {
   type TrickCard,
   type Vulnerability
 } from "@contractplay/core";
-import { exportPbn, parsePbn } from "@contractplay/pbn";
+import { exportPbn } from "@contractplay/pbn";
 import { deleteSavedHand, loadSoloData, saveSoloData, type BoardSet, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { boardLabel, boardSetFromPbn, isBoardSetFile } from "./boardSet.js";
@@ -217,6 +218,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
         id: currentHandId,
         // Named after the dealt cards of the player's seat against bots, otherwise South's.
         name: existing?.name ?? createHandName(game.initialDeal[playAgainstBots ? userSeat : "south"], new Set(completedHands.map(savedHandName))),
+        playerSeat: existing?.playerSeat ?? (playAgainstBots ? userSeat : "south"),
         game,
         savedAt: new Date().toISOString(),
         ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {}),
@@ -455,14 +457,14 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   }
 
   function importHand(contents = pbnInput) {
-    const { set, skipped } = boardSetFromPbn(contents);
+    const { set, skipped, boards } = boardSetFromPbn(contents);
     if (set && isBoardSetFile(set)) {
       startBoard(set);
       setPbnInput("");
       setMessage(skipped ? `Skipped ${skipped} board(s) that could not be read.` : "");
       return;
     }
-    const board = parsePbn(contents).boards[0];
+    const board = boards[0];
     const diagnostic = board?.diagnostics.find((entry) => entry.severity === "error");
     if (!board?.deal || !board.dealer || diagnostic) {
       setMessage(`Cannot import PBN: ${diagnostic?.message ?? "include a valid deal and dealer"}`);
@@ -489,7 +491,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setReviewHandId(undefined);
     setOriginal(undefined);
     setPbnInput("");
-    setMessage("");
+    setMessage(skipped ? `Skipped ${skipped} board(s) that could not be read.` : "");
   }
 
   async function choosePbnFile() {
@@ -545,6 +547,38 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     setOriginal(undefined);
     setReviewCursor(0);
     setLastTrickOpen(false);
+    setMessage("");
+  }
+
+  function replaySavedDeal(hand: SavedHand) {
+    const attempts = soloData.completedHands.filter((candidate) => candidate.game.score && candidate.game.dealer === hand.game.dealer &&
+      candidate.game.vulnerability === hand.game.vulnerability && SEATS.every((seat) =>
+        candidate.game.initialDeal[seat].map(cardId).sort().join(",") === hand.game.initialDeal[seat].map(cardId).sort().join(",")));
+    const record: HandRecord = {
+      board: hand.name ?? savedHandName(hand),
+      event: "Previous attempts",
+      scoring: "MP",
+      dealer: hand.game.dealer,
+      vulnerability: hand.game.vulnerability,
+      deal: hand.game.initialDeal,
+      field: attempts.map(({ game: previous }) => ({
+        nsScore: previous.score!.score,
+        contract: previous.contract ? `${previous.contract.level}${({ clubs: "C", diamonds: "D", hearts: "H", spades: "S", notrump: "NT" } as const)[previous.contract.strain]}${["", "X", "XX"][previous.contract.doubled]}` : "Pass",
+        ...(previous.contract ? { declarer: previous.contract.declarer } : {}),
+        tricks: previous.score!.tricksTaken,
+        multiplicity: 1,
+        artificial: false
+      }))
+    };
+    setCurrentHandId(createHandId());
+    setGame(createGameState({ deal: hand.game.initialDeal, dealer: hand.game.dealer, vulnerability: hand.game.vulnerability }));
+    setCurrentPbnMetadata(undefined);
+    setCurrentRecord(record);
+    setBoardSet(undefined);
+    setDialog(undefined);
+    setReviewHandId(undefined);
+    setOriginal(undefined);
+    setAuctionShown(false);
     setMessage("");
   }
 
@@ -658,7 +692,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     <div className="section-heading"><h2>Recent hands</h2><span className="auction-count">{soloData.completedHands.length}</span></div>
     {soloData.completedHands.length ? <ul className="recent-list">{soloData.completedHands.map((hand) => <li key={hand.id}>
       <button className="review-link" aria-label={`Review ${savedHandName(hand)}, played ${playedOn(hand)}`} onClick={() => openReview(hand)}><strong>{savedHandName(hand)}</strong><span>Played {playedOn(hand)}</span></button>
-      <div className="recent-actions"><button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
+      <div className="recent-actions">{(!hand.record || hand.record.event === "Previous attempts") && !hand.pbnMetadata && hand.game.score ? <button onClick={() => replaySavedDeal(hand)} aria-label={`Play this deal again from ${savedHandName(hand)}`}>Play this deal again</button> : null}<button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}
   </section>;
   const fullscreenButton = <button className="icon-button" type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} aria-pressed={fullscreen} title={`${fullscreen ? "Exit full screen" : "Full screen"} (F)`} onClick={() => { void toggleFullscreen(); }}>
@@ -787,7 +821,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     record={shownRecord}
     nsScore={duplicateScore}
     showPoints={phase === "complete"}
-    side={playAgainstBots ? partnership(userSeat) : "NS"}
+    side={partnership(selectedHand?.playerSeat ?? (playAgainstBots ? userSeat : "south"))}
     {...(!isReviewing && boardSet ? { label: boardLabel(boardSet) } : {})}
     actions={<>
       {handOver && replayOriginal(shownRecord) ? <button className="secondary-button" type="button" onClick={() => viewOriginal(shownRecord)}>View original play</button> : null}
@@ -795,7 +829,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     </>} /> : null;
   // The original table's result is marked as such, with the way back to the player's own result on it.
   const originalTag = original ? <p className="original-tag">At the original table</p> : null;
-  const backButton = original ? <button className="primary-button" type="button" onClick={backToResult}>Back to your result</button> : null;
+  const backButton = original ? <button className="primary-button" type="button" onClick={backToResult}>{selectedHand ? "Back to the review" : "Back to your result"}</button> : null;
   const tableOverlay = <>
     {phase === "complete" && shownGame.score && contract && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""} ${displayedTrick.length ? "score-panel-hidden" : ""}`} aria-label="Hand result">
       {originalTag}
@@ -815,7 +849,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     {isReviewing ? <div className="history-controls review-controls" role="group" aria-label="Review controls">
       <button className="secondary-button" aria-label="Previous action" disabled={reviewCursor === 0} onClick={() => setReviewCursor((cursor) => Math.max(0, cursor - 1))}><span aria-hidden="true">‹</span> Previous</button>
       <button className="secondary-button" aria-label="Next action" disabled={reviewCursor >= handCount} onClick={() => setReviewCursor((cursor) => Math.min(handCount, cursor + 1))}>Next <span aria-hidden="true">›</span></button>
-      {original ? <button className="secondary-button" type="button" onClick={backToResult}>Back to your result</button>
+      {original ? <button className="secondary-button" type="button" onClick={backToResult}>{selectedHand ? "Back to the review" : "Back to your result"}</button>
         : <button className="secondary-button" type="button" onClick={exitReview}>Exit review</button>}
     </div> : null}
 

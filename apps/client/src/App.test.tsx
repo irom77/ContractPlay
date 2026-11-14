@@ -1379,8 +1379,9 @@ describe("bridge table", () => {
 
     fireEvent.click(menuItem("Recent hands")!);
     await user.click(screen.getByText("Import a PBN deal"));
-    fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: one("north") } });
+    fireEvent.change(screen.getByLabelText("PBN deal"), { target: { value: `${one("north")}\n\n${noDeal}` } });
     await user.click(screen.getByRole("button", { name: "Import hand" }));
+    expect(screen.getByText("Skipped 1 board(s) that could not be read.")).toBeTruthy();
     expect(menuItem("Deal a new hand")).toBeTruthy();
     expect(menuItem("Finish board set")).toBeNull();
     expect(document.querySelector(".board-label")).toBeNull();
@@ -1474,6 +1475,25 @@ describe("bridge table", () => {
 
     await user.click(within(fieldPanel()!).getByRole("button", { name: "View original play" }));
     chooseMenu("Back to your result");
+    expect(fieldPanel()).toBeTruthy();
+  });
+
+  it("returns to the saved hand review position after viewing its original play", async () => {
+    const user = userEvent.setup();
+    const saved = completedGame();
+    const record = { dealer: saved.dealer, vulnerability: saved.vulnerability, deal: saved.initialDeal, original: saved.history.actions, scoring: "MP", field: [{ nsScore: saved.score!.score + 100, multiplicity: 1, artificial: false }] };
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "active", currentGame: createGameState({ deal: deal(), dealer: "north", vulnerability: "None" }), completedHands: [{ id: "saved-record", game: saved, savedAt: "2026-10-25T12:00:00.000Z", record, playerSeat: "east" }] }));
+    render(<App />);
+    chooseMenu("Recent hands");
+    await user.click(screen.getByRole("button", { name: /^Review / }));
+    for (let index = 0; index < saved.history.actions.length; index += 1) await user.click(screen.getByRole("button", { name: "Next action" }));
+    expect(within(fieldPanel()!).getByText("100.0% · 2 of 2 matchpoints")).toBeTruthy();
+    expect(fieldPanel()).toBeTruthy();
+    await user.click(within(fieldPanel()!).getByRole("button", { name: "View original play" }));
+    expect(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to the review" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Next action" }));
+    await user.click(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to the review" }));
+    expect(screen.getByText(`Reviewing action ${saved.history.actions.length} of ${saved.history.actions.length}`)).toBeTruthy();
     expect(fieldPanel()).toBeTruthy();
   });
 
@@ -1628,6 +1648,24 @@ describe("bridge table", () => {
 
     expect(screen.getByText("East to bid")).toBeTruthy();
     expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.currentActor).toBe("east");
+  });
+
+  it("starts a new attempt on the saved random deal and records the previous result as its field", async () => {
+    const user = userEvent.setup();
+    const finished = completedGame();
+    const active = createGameState({ deal: deal(), dealer: "east", vulnerability: "EW" });
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: "active", currentGame: active,
+      completedHands: [{ id: "finished-attempt", game: finished, savedAt: "2026-10-25T12:00:00.000Z" }]
+    });
+    render(<App />);
+    chooseMenu("Recent hands");
+    await user.click(screen.getByRole("button", { name: /^Play this deal again/ }));
+    expect(screen.getByText(/to bid/)).toBeTruthy();
+    const saved = JSON.parse(window.localStorage.getItem("contractplay.solo")!);
+    expect(saved.currentGame.initialDeal).toEqual(finished.initialDeal);
+    expect(saved.currentGame.history.actions).toEqual([]);
+    expect(saved.currentRecord).toMatchObject({ scoring: "MP", field: [{ nsScore: finished.score!.score, multiplicity: 1, artificial: false }] });
   });
 });
 

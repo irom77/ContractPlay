@@ -19,6 +19,15 @@ describe("field scoring", () => {
     expect([0, 10, 20, 40, 50, 180, 430, 490, 500, 3990, 4000, 7600].map(impsFor)).toEqual([0, 0, 1, 1, 2, 5, 10, 10, 11, 23, 24, 24]);
     expect(impsFor(-180)).toBe(-5);
   });
+  it("changes IMPs exactly at every scale boundary in both directions", () => {
+    const thresholds = [20, 50, 90, 130, 170, 220, 270, 320, 370, 430, 500, 600, 750, 900, 1100, 1300, 1500, 1750, 2000, 2250, 2500, 3000, 3500, 4000];
+    thresholds.forEach((threshold, index) => {
+      expect(impsFor(threshold - 1)).toBe(index);
+      expect(impsFor(threshold)).toBe(index + 1);
+      expect(impsFor(-threshold + 1)).toBe(-index);
+      expect(impsFor(-threshold)).toBe(-(index + 1));
+    });
+  });
   it("keeps only real scores, repeated by multiplicity", () => {
     expect(fieldScores([...field, row(100, { multiplicity: 3 })])).toEqual([420, -50, 430, 0, 420, 100, 100, 100]);
   });
@@ -66,6 +75,12 @@ describe("replayOriginal", () => {
   });
   it("refuses an action by the wrong seat", () => {
     expect(replayOriginal(record([{ type: "bid", seat: "east", bid: "1clubs" }]))).toBeUndefined();
+  });
+  it("refuses an original play that fails partway through its auction", () => {
+    expect(replayOriginal(record([
+      { type: "bid", seat: "north", bid: "1clubs" },
+      { type: "bid", seat: "south", bid: "pass" }
+    ]))).toBeUndefined();
   });
   it("has nothing to replay without original actions", () => {
     expect(replayOriginal(record())).toBeUndefined();

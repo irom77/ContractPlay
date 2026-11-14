@@ -103,9 +103,22 @@ export function exportPbn(hand: PbnHand): string {
   const playTokens = [...plays.map((action) => serializeCard(action.card)), ...(claim ? ["*"] : [])];
   const playSeat = plays[0]?.seat ?? (claim ? openingLeader(hand) : undefined);
   if (playTokens.length && playSeat) {
-    sections.push(`[Play "${seatLetter[playSeat]}"]\n${playTokens.join(" ")}`);
+    const rows: string[] = [];
+    for (let offset = 0; offset < plays.length; offset += 4) {
+      const columns = ["-", "-", "-", "-"];
+      for (const action of plays.slice(offset, offset + 4)) {
+        const column = (SEATS.indexOf(action.seat) - SEATS.indexOf(playSeat) + 4) % 4;
+        columns[column] = serializeCard(action.card);
+      }
+      rows.push(columns.join(" "));
+    }
+    if (claim) {
+      if (rows.length) rows[rows.length - 1] += " *";
+      else rows.push("*");
+    }
+    sections.push(`[Play "${seatLetter[playSeat]}"]\n${rows.join("\n")}`);
   }
-  return sections.join("\n\n");
+  return sections.join("\n");
 }
 
 type RawSection = { seat?: Seat; text: string; line: number };
@@ -349,7 +362,7 @@ function materializeBoard(raw: RawBoard): PbnBoard {
   const tagLine = (name: string) => raw.tags.find((tag) => tag.name.toLowerCase() === name.toLowerCase())?.line ?? 1;
   const dealerCode = tagValue("Dealer")?.toUpperCase();
   const dealer = dealerCode ? letterSeat[dealerCode] : undefined;
-  if (dealerCode && !dealer) raw.diagnostics.push({ severity: "error", message: "Invalid Dealer tag", line: tagLine("Dealer") });
+  if (dealerCode && !dealer && !raw.diagnostics.some((entry) => entry.severity === "error" && entry.message === "Tag Dealer cannot inherit a value")) raw.diagnostics.push({ severity: "error", message: "Invalid Dealer tag", line: tagLine("Dealer") });
   if (!dealerCode) raw.diagnostics.push({ severity: "warning", message: "Missing Dealer tag", line: 1 });
   const vulnerableCode = tagValue("Vulnerable")?.toLowerCase();
   const vulnerability = vulnerableCode
@@ -375,7 +388,7 @@ function materializeBoard(raw: RawBoard): PbnBoard {
     }
   }
   if (raw.play?.seat && playState?.phase === "play" && raw.play.seat !== playState.currentActor) {
-    raw.diagnostics.push({ severity: "error", message: "Play starting seat does not match the opening leader", line: raw.play.line });
+    raw.diagnostics.push({ severity: "warning", message: "Play starting seat does not match the opening leader; original play is unavailable", line: raw.play.line });
   }
   const byColumns = raw.play && playState?.phase === "play" ? playByColumns(raw.play, playState) : undefined;
   if (byColumns) {
@@ -387,7 +400,7 @@ function materializeBoard(raw: RawBoard): PbnBoard {
     const seat = playState!.currentActor;
     const result = applyAction(playState!, { type: "play", seat, card });
     if (!result.ok) {
-      raw.diagnostics.push({ severity: "error", message: `Invalid play: ${result.error.message}`, line: raw.play?.line ?? 1 });
+      raw.diagnostics.push({ severity: "warning", message: `Invalid play: ${result.error.message}; original play is unavailable`, line: raw.play?.line ?? 1 });
       playState = undefined;
       return undefined;
     }
@@ -510,12 +523,15 @@ export function parsePbn(input: string): PbnDocument {
       }
       continue;
     }
+    if (activeSection === "table" && !tagMatch) {
+      // Keep physical line positions for diagnostics, but brace comments are not table values.
+      current.tables[activeTable] += `${line.replace(/\{[^}]*\}/g, "")}\n`;
+      continue;
+    }
     if (!line.trim()) continue;
     // PBN §2.4: a line starting with % is an escape line (such as "% PBN 2.1") and carries no game data.
     if (line.startsWith("%")) continue;
-    if (activeSection === "table") {
-      current.tables[activeTable] += `${line}\n`;
-    } else if (activeSection) {
+    if (activeSection) {
       const section = activeSection === "auction" ? current.auction : current.play;
       if (section) section.text += `${line}\n`;
     } else {
@@ -546,7 +562,8 @@ export function serializePbn(document: PbnDocument): string {
     const lines = board.tags.map(({ name, value }) => {
       const table = board.tables?.[name];
       // Table headers keep their `\<width>[LR]` column suffixes as written, so only quotes are escaped.
-      return table === undefined ? `[${name} "${escapeTag(value)}"]` : `[${name} "${value.replaceAll('"', '\\"')}"]\n${table.trim()}`;
+      const rows = table?.split(/\r?\n/).filter((row) => row.trim()).join("\n");
+      return table === undefined ? `[${name} "${escapeTag(value)}"]` : `[${name} "${value.replaceAll('"', '\\"')}"]\n${rows}`;
     });
     const rawSections = [board.auctionText, board.playText].filter((text): text is string => text !== undefined);
     for (const comment of board.comments) {
@@ -558,7 +575,7 @@ export function serializePbn(document: PbnDocument): string {
     if (board.playText !== undefined && board.playStartSeat) {
       lines.push(`[Play "${seatLetter[board.playStartSeat]}"]\n${board.playText.trim()}`);
     }
-    return lines.join("\n\n");
+    return lines.join("\n");
   }).join("\n\n");
 }
 
@@ -589,6 +606,7 @@ export function pbnBoardToRecord(board: PbnBoard): HandRecord | undefined {
   if (!board.deal || !board.dealer || board.diagnostics.some((entry) => entry.severity === "error")) return undefined;
   const tag = (name: string) => board.tags.find((entry) => entry.name.toLowerCase() === name.toLowerCase())?.value;
   const [boardNumber, event, scoring] = [tag("Board"), tag("Event"), tag("Scoring")];
+  const unavailableOriginal = board.diagnostics.some((entry) => entry.message.startsWith("Invalid play:") || entry.message.startsWith("Play starting seat does not match"));
   return {
     ...(boardNumber !== undefined ? { board: boardNumber } : {}),
     ...(event !== undefined ? { event } : {}),
@@ -596,7 +614,7 @@ export function pbnBoardToRecord(board: PbnBoard): HandRecord | undefined {
     dealer: board.dealer,
     vulnerability: board.vulnerability ?? "None",
     deal: board.deal,
-    ...(board.actions.length ? { original: board.actions } : {}),
+    ...(board.actions.length && !unavailableOriginal ? { original: board.actions } : {}),
     field: board.field ?? []
   };
 }

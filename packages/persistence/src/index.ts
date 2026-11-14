@@ -7,6 +7,8 @@ export type SavedHand = Readonly<{
   id: string;
   /** Display name given when the hand was played; hands saved before names existed have none. */
   name?: string;
+  /** Seat used for this saved attempt, so field comparisons remain stable when settings change. */
+  playerSeat?: Seat;
   game: GameState;
   savedAt: string;
   pbnMetadata?: PbnMetadata;
@@ -117,13 +119,13 @@ function isGame(value: unknown): value is GameState {
 
 function isSavedHand(value: unknown): value is SavedHand {
   return isRecord(value) && typeof value.id === "string" && typeof value.savedAt === "string" && (value.name === undefined || typeof value.name === "string") && isGame(value.game) && value.game.phase === "complete" &&
-    (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata));
+    (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata)) && (value.playerSeat === undefined || isSeat(value.playerSeat));
 }
 
 /** A saved hand with a malformed board record dropped; the hand itself stays. */
 function cleanSavedHand(hand: SavedHand): SavedHand {
   if (hand.record === undefined || isHandRecord(hand.record)) return hand;
-  return { id: hand.id, ...(hand.name === undefined ? {} : { name: hand.name }), game: hand.game, savedAt: hand.savedAt, ...(hand.pbnMetadata === undefined ? {} : { pbnMetadata: hand.pbnMetadata }) };
+  return { id: hand.id, ...(hand.name === undefined ? {} : { name: hand.name }), ...(hand.playerSeat === undefined ? {} : { playerSeat: hand.playerSeat }), game: hand.game, savedAt: hand.savedAt, ...(hand.pbnMetadata === undefined ? {} : { pbnMetadata: hand.pbnMetadata }) };
 }
 
 function isSidePoints(value: unknown): boolean {

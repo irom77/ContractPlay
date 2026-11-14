@@ -16,9 +16,10 @@ function boardKey(board: PbnBoard, index: number): string {
  * "full" export does) becomes one board whose field is those tables' results, and whose original play is the first
  * table's that can be read. A board with a `ScoreTable` keeps that table as its field.
  */
-export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number } {
+export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number; boards: readonly PbnBoard[] } {
   const groups = new Map<string, PbnBoard[]>();
-  parsePbn(text).boards.forEach((board, index) => {
+  const boards = parsePbn(text).boards;
+  boards.forEach((board, index) => {
     const key = boardKey(board, index);
     groups.set(key, [...(groups.get(key) ?? []), board]);
   });
@@ -38,7 +39,7 @@ export function boardSetFromPbn(text: string): { set?: BoardSet; skipped: number
     const field = games.map(tableResult).filter((row): row is TravellerRow => row !== undefined);
     records.push({ ...record, field });
   }
-  return records.length ? { set: { name: records[0]!.event || "Imported boards", records, position: 0 }, skipped } : { skipped };
+  return records.length ? { set: { name: records[0]!.event || "Imported boards", records, position: 0 }, skipped, boards } : { skipped, boards };
 }
 
 /** A file played as a set: several boards, or boards that carry the field's results. */

@@ -89,6 +89,13 @@ describe("local solo store", () => {
     expect(loadSoloData(storage).completedHands.map((hand) => hand.name)).toEqual(["Bold Finesse", undefined]);
   });
 
+  it("remembers the seat used for a saved hand", () => {
+    const storage = new MemoryStorage();
+    const data: SoloData = { ...emptyData, completedHands: [{ ...record, playerSeat: "east" }] };
+    saveSoloData(storage, data);
+    expect(loadSoloData(storage).completedHands[0]?.playerSeat).toBe("east");
+  });
+
   it("keeps the rubber in progress and drops a malformed one", () => {
     const storage = new MemoryStorage();
     const rubber = { hands: [{ handId: "h1", below: { NS: 60, EW: 0 }, above: { NS: 30, EW: 0 } }], lastDealer: "east" as const, activeHandId: "h2" };

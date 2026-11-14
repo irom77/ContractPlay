@@ -62,6 +62,10 @@ describe("PBN import and export", () => {
     }
 
     const pbn = exportPbn({ dealer: game.dealer, vulnerability: game.vulnerability, deal: game.initialDeal, actions: game.history.actions });
+    expect(pbn).not.toContain("\n\n");
+    const playLines = pbn.split('[Play "')[1]!.split("\n").slice(1);
+    expect(playLines).toHaveLength(13);
+    expect(playLines.every((line) => line.split(/\s+/).length === 4)).toBe(true);
     expect(parsePbn(pbn).boards[0]?.actions).toEqual(game.history.actions);
   });
 
@@ -71,6 +75,15 @@ describe("PBN import and export", () => {
     expect(boards).toHaveLength(2);
     expect(boards[0]?.diagnostics).toContainEqual(expect.objectContaining({ severity: "error", message: "Invalid or incomplete Deal tag" }));
     expect(boards[1]).toMatchObject({ dealer: "east", vulnerability: "Both" });
+  });
+
+  it("keeps a valid deal when its recorded play is illegal so the board remains playable", () => {
+    const source = exportPbn({ dealer: "north", vulnerability: "None", actions: [], deal: deal(createDeck()) });
+    const board = parsePbn(`${source}\n[Auction "N"]\n1C P P P\n[Play "E"]\nSA`).boards[0]!;
+    expect(board.deal).toBeDefined();
+    expect(board.diagnostics).toContainEqual(expect.objectContaining({ severity: "warning", message: expect.stringContaining("Invalid play") }));
+    expect(pbnBoardToRecord(board)).toMatchObject({ dealer: "north", deal: board.deal });
+    expect(pbnBoardToRecord(board)?.original).toBeUndefined();
   });
 
   it("reports missing required metadata when converting a board to a hand", () => {
@@ -251,8 +264,34 @@ describe("PBN tables, inheritance, and hand records", () => {
     expect(serializePbn(parsePbn(text))).toContain('[OptimumResultTable "Declarer;Denomination\\2R;Result\\2R"]\nN C  7\nN D  8');
   });
 
+  it("keeps ScoreTable diagnostic line numbers through blank lines", () => {
+    const [board] = parsePbn(minimal('[ScoreTable "Score_NS;Contract"]\n\n10 4S\n\n30 3NT extra')).boards;
+    expect(board!.diagnostics).toContainEqual(expect.objectContaining({ message: expect.stringContaining("skipped: 30 3NT extra"), line: 7 }));
+  });
+
+  it("ignores brace comment lines inside ScoreTable instead of treating them as traveller rows", () => {
+    const [board] = parsePbn(minimal('[ScoreTable "Score_NS;Contract"]\n420 4S\n{director note}\n- 3NT')).boards;
+    expect(board!.field).toEqual([
+      { nsScore: 420, contract: "4S", multiplicity: 1, artificial: false },
+      { contract: "3NT", multiplicity: 1, artificial: false }
+    ]);
+    expect(board!.diagnostics.filter((entry) => entry.message.includes("ScoreTable row"))).toEqual([]);
+  });
+
+  it("keeps table row indentation, ignores PBN comment lines, and avoids duplicate inheritance errors", () => {
+    const text = '[Dealer "#"]\n[Vulnerable "None"]\n[OptimumResultTable "X"]\n  row one\n{comment}\n  row two';
+    const [board] = parsePbn(text).boards;
+    expect(board!.diagnostics.filter((entry) => entry.severity === "error")).toHaveLength(1);
+    expect(board!.tables!.OptimumResultTable).toBe("  row one\n\n  row two\n");
+    expect(serializePbn(parsePbn(text))).toContain('[OptimumResultTable "X"]\n  row one\n  row two');
+  });
+
   it("round-trips a ScoreTable", () => {
-    const again = parsePbn(serializePbn(parsePbn(fixture)));
+    const board = parsePbn(fixture).boards[0]!;
+    const serialized = serializePbn({ boards: [board] });
+    expect(serialized).not.toContain("\n\n");
+    expect(serializePbn({ boards: [board, board] }).match(/\n\n/g)).toHaveLength(1);
+    const again = parsePbn(serialized);
     expect(again.boards[0]!.field).toEqual(parsePbn(fixture).boards[0]!.field);
   });
 
