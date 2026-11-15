@@ -23,7 +23,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [ ] Set up `bridge.romaniuk.us` as the public address for online multiplayer. A CNAME at Squarespace will not work; a Workers custom domain needs the zone on Cloudflare. Steps for the owner: add `romaniuk.us` to Cloudflare (Free plan) and check the imported records, especially email (MX, TXT); switch the name servers in Squarespace Domains to the two Cloudflare gives (registration stays at Squarespace); once active, add `bridge.romaniuk.us` under Workers & Pages → `contractplay` → Settings → Domains & Routes → Custom domain. Then record the custom domain in `apps/server` wrangler configuration so deploys keep it.
 - [x] Add sign-in (authentication) so a seat and hand history follow a person across devices. Email magic links, linked seat recovery, and account-owned online archives pass the workspace release checks; deployment setup and live verification remain below.
 - [x] Provision the sign-in D1 database and apply production migrations.
-- [x] Verify the Resend sending domain and configure the production Worker with `RESEND_API_KEY` and `signin@auth.romaniuk.us`.
+- [x] Verify the Resend sending domain and configure the production Worker with `RESEND_API_KEY` and `signin@romaniuk.us`.
 - [ ] Verify live email delivery, cross-device seat recovery, and archive sync. Follow [the deployment runbook](docs/platform-delivery.md#email-sign-in-prerequisites).
 - [ ] Add permissions (authorization) beyond the current host and seated-player rules.
 - [ ] Protect `/admin` and its API with authorization before public production use; email sign-in does not restrict them.

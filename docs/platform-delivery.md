@@ -59,7 +59,7 @@ Use `pnpm --filter @contractplay/server exec wrangler deploy --dry-run` (after `
 
 ### Email sign-in prerequisites
 
-The production D1 database is provisioned and its migrations are applied. Resend sender domain `auth.romaniuk.us` is verified, and the production Worker secret `RESEND_API_KEY` is set. The configured sender is `ContractPlay <signin@auth.romaniuk.us>`; real delivery, cross-device seat recovery, and archive sync still need live verification. All commands below run from the repository root and use `apps/server/wrangler.jsonc` through the server workspace.
+The production D1 database is provisioned and its migrations are applied. Resend sender domain `romaniuk.us` is verified, and the production Worker secret `RESEND_API_KEY` is set. The configured sender is `ContractPlay <signin@romaniuk.us>`; real delivery, cross-device seat recovery, and archive sync still need live verification. All commands below run from the repository root and use `apps/server/wrangler.jsonc` through the server workspace.
 
 1. **Create and bind D1.** Authenticate Wrangler to the intended Cloudflare account, then create the database:
 
