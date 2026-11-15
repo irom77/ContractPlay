@@ -19,7 +19,11 @@ describe("configured mail delivery", () => {
 
   it.each([302, 403, 500])("fails with a sanitized error on delivery status %s", async (status) => {
     vi.stubGlobal("fetch", async () => Response.json({ message: "private recipient and credential details" }, { status }));
-    await expect(configuredMailer(config).sendMagicLink(message)).rejects.toThrow(/^mail unavailable$/);
+    await expect(configuredMailer(config).sendMagicLink(message)).rejects.toMatchObject({
+      message: "mail unavailable",
+      reason: "provider-rejected",
+      status
+    });
   });
 
   it("requires a configured sender and provider secret without making a network call", async () => {

@@ -1,7 +1,7 @@
 import { cleanName, MAX_PLAYER_NAME } from "@contractplay/protocol";
 import { AuthStore } from "./auth-store.js";
 import type { Account } from "./auth-store.js";
-import { configuredMailer } from "./mailer.js";
+import { configuredMailer, MailDeliveryError } from "./mailer.js";
 
 const LINK_LIFETIME = 15 * 60_000;
 const SESSION_LIFETIME = 30 * 24 * 60 * 60_000;
@@ -119,7 +119,13 @@ async function requestMagicLink(request: Request, env: Env): Promise<Response> {
   try {
     await configuredMailer(env).sendMagicLink({ to: email, url: url.toString() });
     await store.activateMagicLink(tokenHash);
-  } catch { /* A pending record stays unusable until expiry. Never expose provider failures. */ }
+  } catch (error) {
+    // Only log safe diagnostics. Never include recipient, link, provider body, or credentials.
+    console.error("Magic-link email delivery failed", error instanceof MailDeliveryError
+      ? { reason: error.reason, ...(error.status ? { status: error.status } : {}) }
+      : { reason: "transport" });
+    /* A pending record stays unusable until expiry. Never expose provider failures. */
+  }
   return genericRequest();
 }
 
