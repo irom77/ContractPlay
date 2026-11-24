@@ -39,7 +39,7 @@ export function authRequestAllowed(request: Request, env: Env, callback = false)
   return true;
 }
 
-async function hash(value: string): Promise<string> {
+export async function hash(value: string): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }

@@ -1,10 +1,12 @@
 import { MAX_MESSAGE_BYTES, MAX_TABLE_NAME, PROTOCOL_VERSION, TABLE_SCORINGS, cleanName } from "@contractplay/protocol";
 import type { TableScoring, TableStyle } from "@contractplay/protocol";
-import { RANKS, SEATS, SUITS } from "@contractplay/core";
-import type { Card, Deal, Seat, Vulnerability } from "@contractplay/core";
+import { SEATS } from "@contractplay/core";
+import type { Seat, Vulnerability } from "@contractplay/core";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 import { authenticatedAccount, authRequestAllowed, authRoute } from "./auth.js";
+import { dealRoute } from "./deal-routes.js";
+import { parseDeal, readLimited } from "./deal-input.js";
 import { handHistoryRoute } from "./hand-history.js";
 import { VERIFIED_ACCOUNT_HEADER } from "./table-object.js";
 import type { VerifiedAccount } from "./table-object.js";
@@ -30,51 +32,11 @@ function importedBoards(value: unknown): DuplicateSessionBoard[] | undefined {
   for (const raw of value) {
     if (!record(raw) || typeof raw.number !== "number" || !Number.isSafeInteger(raw.number) || raw.number < 1
       || !SEATS.includes(raw.dealer as Seat) || !VULNERABILITIES.includes(raw.vulnerability)) return undefined;
-    if (!record(raw.deal)) return undefined;
-    const seen = new Set<string>();
-    const hands = {} as Record<Seat, Card[]>;
-    for (const seat of SEATS) {
-      const hand = raw.deal[seat];
-      if (!Array.isArray(hand) || hand.length !== 13) return undefined;
-      const cards: Card[] = [];
-      for (const rawCard of hand) {
-        if (!record(rawCard) || !SUITS.includes(rawCard.suit as Card["suit"])
-          || !RANKS.includes(rawCard.rank as Card["rank"])) return undefined;
-        const key = `${String(rawCard.suit)}:${String(rawCard.rank)}`;
-        if (seen.has(key)) return undefined;
-        seen.add(key);
-        cards.push({ suit: rawCard.suit as Card["suit"], rank: rawCard.rank as Card["rank"] });
-      }
-      hands[seat] = cards;
-    }
-    if (seen.size !== 52) return undefined;
-    boards.push({ number: raw.number, deal: hands as Deal, dealer: raw.dealer as Seat, vulnerability: raw.vulnerability as Vulnerability });
+    const deal = parseDeal(raw.deal);
+    if (!deal) return undefined;
+    boards.push({ number: raw.number, deal, dealer: raw.dealer as Seat, vulnerability: raw.vulnerability as Vulnerability });
   }
   return boards;
-}
-
-/** The request body as text, or undefined once it is over `limit` bytes; never buffers more than `limit` bytes plus one chunk. */
-async function readLimited(request: Request, limit: number): Promise<string | undefined> {
-  const declared = request.headers.get("Content-Length");
-  if (declared !== null && !(Number(declared) <= limit)) return undefined;
-  if (!request.body) return "";
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) {
-      await reader.cancel().catch(() => undefined);
-      return undefined;
-    }
-    chunks.push(value);
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-  return new TextDecoder().decode(bytes);
 }
 
 async function createTable(request: Request, env: Env): Promise<Response> {
@@ -149,6 +111,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === "/api/account/online-hands" || path.startsWith("/api/account/online-hands/")) return handHistoryRoute(request, env);
+    if (path.startsWith("/api/deals/")) return dealRoute(request, env);
     if (path.startsWith("/api/auth/")) return authRoute(request, env);
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
     if (path === "/admin" && (request.method === "GET" || request.method === "HEAD")) {
