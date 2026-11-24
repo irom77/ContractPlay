@@ -27,7 +27,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [ ] Verify cross-device seat recovery and archive sync. Live email delivery and sign-in have been confirmed. Follow [the deployment runbook](docs/platform-delivery.md#email-sign-in-prerequisites).
 - [x] Let signed-in players change their account name from the lobby. Verified live on the deployment on 2026-11-24.
 - [x] Replay archived deals on every second new hand (solo against bots and online tables), with an anonymous D1 archive and a result comparison against earlier results. Design: `docs/superpowers/specs/2026-11-24-deal-replays-design.md`.
-- [ ] Apply migration 0003 to production and verify a replay live (`wrangler d1 migrations apply contractplay-auth --remote`, then finish a hand once an archived deal is at least a day old and check that an even-numbered hand shows the "Replayed deal" notice; until then hands deal and finish but nothing is archived or replayed).
+- [ ] Verify a deal replay live. Migration 0003 was applied to production on 2026-11-24 (`GET /api/deals/replay` answers 204 while the archive is empty). Finish online hands, or solo hands against bots; at least a day later, check that an even-numbered hand in the same mode shows the "Replayed deal" notice and, when it ends, the comparison.
 - [ ] Add permissions (authorization) beyond the current host and seated-player rules.
 - [ ] Protect `/admin` and its API with authorization before public production use; email sign-in does not restrict them.
 - [ ] Add invitations to a table.
