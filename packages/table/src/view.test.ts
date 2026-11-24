@@ -114,24 +114,39 @@ describe("viewFor", () => {
     // The board injected before the deal is never shown.
     for (const viewer of ["p0", "mallory", undefined]) expect(JSON.stringify(viewFor(boarded, viewer))).not.toContain("deal-1");
     let started = sendOk(boarded, "p1", { type: "deal" });
-    const notice = { firstPlayedAt: 1_700_000_000_000, rescored: false, original: replayRecord.replay!.original };
-    for (const viewer of ["p0", "mallory", undefined]) {
-      const view = viewFor(started, viewer);
-      expect(view.replay).toEqual(notice);
-      const json = JSON.stringify(view);
-      for (const hidden of ["deal-1", "field", "record"]) expect(json).not.toContain(hidden);
-    }
+    const notice = { firstPlayedAt: 1_700_000_000_000 };
+    const midHand = (state: TableState): void => {
+      for (const viewer of ["p0", "mallory", undefined]) {
+        const view = viewFor(state, viewer);
+        expect(view.replay).toEqual(notice);
+        const json = JSON.stringify(view);
+        for (const hidden of ["deal-1", "field", "record", "rescored", "original", "\"4S\"", "620"]) expect(json).not.toContain(hidden);
+      }
+    };
+    midHand(started);
     for (let k = 0; k < 4; k++) {
       const seat = started.game!.currentActor;
       started = sendOk(started, `p${SEATS.indexOf(seat)}`, { type: "act", handNumber: started.handNumber, revision: started.revision, action: { type: "bid", seat, bid: "pass" } });
-      if (k < 3) expect(viewFor(started, "p0").replay).toEqual(notice);
+      if (k < 3) midHand(started);
     }
     const shown = Object.fromEntries(Object.entries(replayRecord).filter(([key]) => key !== "original"));
     for (const viewer of ["p0", "mallory", undefined]) {
       const view = viewFor(started, viewer);
-      expect(view.replay).toEqual({ ...notice, record: shown });
+      expect(view.replay).toEqual({ ...notice, rescored: false, original: replayRecord.replay!.original, record: shown });
       expect("original" in view.replay!.record!).toBe(false);
     }
+  });
+
+  it("drops the replay when the last human leaves mid-hand, so its results are never shown", () => {
+    const t = sendOk(newTable("duplicate"), "alice", { type: "sit", seat: "north" });
+    let bots = t;
+    for (const seat of SEATS.slice(1)) bots = sendOk(bots, "alice", { type: "setBot", seat, skill: "advanced" });
+    const started = sendOk({ ...bots, handNumber: 1, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "alice", { type: "deal" });
+    expect(started.replay?.dealId).toBe("deal-1");
+    const left = sendOk(started, "alice", { type: "leave" });
+    expect("game" in left).toBe(false);
+    expect("replay" in left).toBe(false);
+    for (const viewer of ["alice", undefined]) expect(viewFor(left, viewer).replay).toBeUndefined();
   });
 
   it("marks away humans and shows stand-ins", () => {

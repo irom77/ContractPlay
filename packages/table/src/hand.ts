@@ -132,7 +132,7 @@ export function takeBack(state: TableState, player: PlayerId, at: number): Outco
 export function cancelHand(state: TableState, player: PlayerId, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (state.host !== player || betweenHands(state)) return refuse(state, "not-allowed");
-  return accept(withoutKeys(withoutGame(withoutClaim(state)), "replay"), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+  return accept(withoutGame(withoutClaim(state)), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
 export function applyBotEvent(state: TableState, revision: number, action: GameAction, at: number): Outcome {

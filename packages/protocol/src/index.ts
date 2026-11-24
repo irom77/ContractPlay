@@ -44,11 +44,11 @@ export type TableView = TableSummary & {
     complete: boolean; waitingForTables: boolean; rank: number; tableCount: number;
     matchpoints: { points: number; top: number; percentage: number }; crossImps: number };
   /**
-   * Present while the hand is a replayed archived deal, for every viewer: when it was first played, its first result,
-   * and whether earlier results were rescored at this table's vulnerability. `record` (earlier results, without the
-   * original play's actions) appears only once the hand is over.
+   * Present while the hand is a replayed archived deal, for every viewer, with when it was first played. Only once the
+   * hand is over: its first result (`original`), whether earlier results were rescored at this table's vulnerability,
+   * and `record` (earlier results, without the original play's actions).
    */
-  replay?: { firstPlayedAt: number; rescored: boolean; original: TravellerRow; record?: HandRecord };
+  replay?: { firstPlayedAt: number; rescored?: boolean; original?: TravellerRow; record?: HandRecord };
 };
 
 export type ClientMessage =

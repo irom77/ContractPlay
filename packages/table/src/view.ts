@@ -40,13 +40,16 @@ function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined
   };
 }
 
-/** A replayed hand's notice for everyone at the table; earlier results (without the original play) only once it is over. */
+/**
+ * A replayed hand's notice for everyone at the table. Only once it is over: the original result, whether earlier
+ * results were rescored, and the earlier results themselves (without the original play).
+ */
 function replayOf(state: TableState): TableView["replay"] {
   const record = state.replay?.record;
   if (!record?.replay) return undefined;
   const { firstPlayedAt, rescored, original } = record.replay;
   const shown = Object.fromEntries(Object.entries(record).filter(([key]) => key !== "original")) as HandRecord;
-  return { firstPlayedAt, rescored, original, ...(betweenHands(state) ? { record: shown } : {}) };
+  return betweenHands(state) ? { firstPlayedAt, rescored, original, record: shown } : { firstPlayedAt };
 }
 
 /** The only function that builds game data for a client. */

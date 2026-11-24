@@ -23,7 +23,7 @@ export type TableState = Readonly<{
    * always drops it. `record.field` holds earlier results, which views show only once the replayed hand is over.
    */
   replayBoard?: Readonly<{ index: number; dealId: string; record: HandRecord }>;
-  /** The current hand's replay, from the replay board it was dealt from; cleared by every fresh deal and a cancelled hand. */
+  /** The current hand's replay, from the replay board it was dealt from; cleared by every fresh deal and whenever the hand is removed. */
   replay?: Readonly<{ dealId: string; record: HandRecord }>;
   /** A rubber table's rubber, from its first deal. A won rubber stays until the next deal starts a new one. */
   rubber?: Rubber;
@@ -134,8 +134,8 @@ export function withoutAutoPlay(seats: TableState["seats"]): TableState["seats"]
 export const withoutKeys = (state: TableState, ...keys: (keyof TableState)[]): TableState =>
   Object.fromEntries(Object.entries(state).filter(([k]) => !(keys as string[]).includes(k))) as TableState;
 
-/** The state with no hand on the table, as before the first deal. */
-export const withoutGame = (state: TableState): TableState => withoutKeys(state, "game");
+/** The state with no hand on the table, as before the first deal; a replay goes with its hand. */
+export const withoutGame = (state: TableState): TableState => withoutKeys(state, "game", "replay");
 
 /** The state with no pending claim and no rejection notice. */
 export const withoutClaim = (state: TableState): TableState =>

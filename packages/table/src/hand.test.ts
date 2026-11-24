@@ -49,6 +49,10 @@ describe("replayed hands", () => {
     expect(started.game).toMatchObject({ dealer: "west", vulnerability: "None" });
     expect(started.rubber).toMatchObject({ lastDealer: "east", activeHandId: "hand-2" });
     expect(started.replay?.dealId).toBe("deal-1");
+    let done = started;
+    for (let k = 0; k < 4; k++) done = sendOk(done, `p${SEATS.indexOf(done.game!.currentActor)}`, act(done, pass(done.game!.currentActor)));
+    // The rotation carries on from East (hand 1's next dealer), not from the replay's West.
+    expect(sendOk(done, "p0", { type: "deal" }, 1, seededRandom(5)).game!.dealer).toBe("south");
   });
 
   it("drops the replay when the host cancels the hand, so its results are never shown", () => {
