@@ -1,4 +1,4 @@
-import type { Deal, GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
+import type { Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
 import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
 
@@ -18,6 +18,13 @@ export type TableState = Readonly<{
   sessionId?: string;
   /** The current released board, copied from the coordinator immediately before dealing. */
   sessionBoard?: Readonly<{ index: number; number: number; deal: Deal; dealer: Seat; vulnerability: GameState["vulnerability"] }>;
+  /**
+   * An archived deal to replay as hand `index + 1`, copied in by the server immediately before dealing. Dealing
+   * always drops it. `record.field` holds earlier results, which views show only once the replayed hand is over.
+   */
+  replayBoard?: Readonly<{ index: number; dealId: string; record: HandRecord }>;
+  /** The current hand's replay, from the replay board it was dealt from; cleared by every fresh deal and a cancelled hand. */
+  replay?: Readonly<{ dealId: string; record: HandRecord }>;
   /** A rubber table's rubber, from its first deal. A won rubber stays until the next deal starts a new one. */
   rubber?: Rubber;
   host?: PlayerId; seats: Readonly<Record<Seat, SeatState>>;
@@ -123,9 +130,12 @@ export function withoutAutoPlay(seats: TableState["seats"]): TableState["seats"]
   })) as TableState["seats"];
 }
 
+/** The state without the given keys. */
+export const withoutKeys = (state: TableState, ...keys: (keyof TableState)[]): TableState =>
+  Object.fromEntries(Object.entries(state).filter(([k]) => !(keys as string[]).includes(k))) as TableState;
+
 /** The state with no hand on the table, as before the first deal. */
-export const withoutGame = (state: TableState): TableState =>
-  Object.fromEntries(Object.entries(state).filter(([k]) => k !== "game")) as TableState;
+export const withoutGame = (state: TableState): TableState => withoutKeys(state, "game");
 
 /** The state with no pending claim and no rejection notice. */
 export const withoutClaim = (state: TableState): TableState =>

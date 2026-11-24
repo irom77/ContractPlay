@@ -1,10 +1,10 @@
-import { createDeck, deal, validatePlay } from "@contractplay/core";
+import { SEATS, createDeck, deal, validatePlay } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { botToAct, botWake } from "./hand.js";
+import { botToAct, botWake, isReplayHand, replayVulnerability } from "./hand.js";
 import { viewFor } from "./view.js";
 import { reduce } from "./reduce.js";
-import { fourHumans, newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
+import { afterOnePassedOut, fourHumans, newTable, playOut, replayRecord, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
 import type { TableState } from "./state.js";
 
 const act = (state: TableState, action: GameAction) =>
@@ -19,6 +19,62 @@ function expectTotals(done: TableState): void {
   const score = game.score!.score;
   expect(done.totals).toEqual(score >= 0 ? { ns: score, ew: 0 } : { ns: 0, ew: -score });
 }
+
+describe("replayed hands", () => {
+  it("deals hand 2 from the replay board with its dealer and vulnerability, then hand 3 fresh", () => {
+    const t = afterOnePassedOut("duplicate");
+    expect(isReplayHand(t)).toBe(true);
+    expect(replayVulnerability(t)).toBeUndefined();
+    const started = sendOk({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    expect(started.handNumber).toBe(2);
+    expect(started.game?.initialDeal).toEqual(replayRecord.deal);
+    expect(started.game).toMatchObject({ dealer: "west", vulnerability: "Both" });
+    expect(started.replay).toEqual({ dealId: "deal-1", record: replayRecord });
+    expect("replayBoard" in started).toBe(false);
+
+    let done = started;
+    for (let k = 0; k < 4; k++) done = sendOk(done, `p${SEATS.indexOf(done.game!.currentActor)}`, act(done, pass(done.game!.currentActor)));
+    expect(isReplayHand(done)).toBe(false);
+    const fresh = sendOk(done, "p2", { type: "deal" }, 1, seededRandom(5));
+    expect(fresh.handNumber).toBe(3);
+    expect(fresh.game!.initialDeal).not.toEqual(replayRecord.deal);
+    expect("replay" in fresh).toBe(false);
+  });
+
+  it("keeps the record's dealer but the rubber's vulnerability and dealer rotation at a rubber table", () => {
+    const t = afterOnePassedOut("rubber");
+    expect(replayVulnerability(t)).toBe("None");
+    const started = sendOk({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    expect(started.game?.initialDeal).toEqual(replayRecord.deal);
+    expect(started.game).toMatchObject({ dealer: "west", vulnerability: "None" });
+    expect(started.rubber).toMatchObject({ lastDealer: "east", activeHandId: "hand-2" });
+    expect(started.replay?.dealId).toBe("deal-1");
+  });
+
+  it("drops the replay when the host cancels the hand, so its results are never shown", () => {
+    const t = afterOnePassedOut("duplicate");
+    const started = sendOk({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    const cancelled = sendOk(started, "p0", { type: "cancelHand" });
+    expect("replay" in cancelled).toBe(false);
+    expect(viewFor(cancelled, "p0").replay).toBeUndefined();
+  });
+
+  it("ignores a replay board for another hand", () => {
+    const t = afterOnePassedOut("duplicate");
+    const started = sendOk({ ...t, replayBoard: { index: 0, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    expect(started.game!.initialDeal).not.toEqual(replayRecord.deal);
+    expect("replay" in started).toBe(false);
+    expect("replayBoard" in started).toBe(false);
+  });
+
+  it("replays every second hand, never at a session table", () => {
+    const t = fourHumans("duplicate");
+    expect(isReplayHand(t)).toBe(false);
+    expect(isReplayHand({ ...t, handNumber: 1 })).toBe(true);
+    expect(isReplayHand({ ...t, handNumber: 3 })).toBe(true);
+    expect(isReplayHand({ ...t, handNumber: 1, sessionId: "session" })).toBe(false);
+  });
+});
 
 describe("dealing", () => {
   it("deals the released session board with its recorded dealer and vulnerability", () => {

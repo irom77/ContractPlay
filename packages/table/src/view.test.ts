@@ -2,7 +2,7 @@ import { SEATS, cardId } from "@contractplay/core";
 import type { Card, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import type { TableState } from "./state.js";
-import { fourHumans, newTable, playOut, seededRandom, sendOk, tableInPlay, tableWithBots } from "./test-helpers.js";
+import { afterOnePassedOut, fourHumans, newTable, playOut, replayRecord, seededRandom, sendOk, tableInPlay, tableWithBots } from "./test-helpers.js";
 import { summaryOf, viewFor } from "./view.js";
 
 /** Every card object found anywhere in a JSON value. */
@@ -106,6 +106,32 @@ describe("viewFor", () => {
     const rejected = sendOk(pending, "east", { type: "answerClaim", accept: false, claimId: pending.pendingClaim!.madeAt });
     expect(viewFor(rejected, "east").game!.hands.south).toEqual([]);
     expect(viewFor(rejected, "east").claim).toBeUndefined();
+  });
+
+  it("tells everyone a hand is a replay, and shows earlier results only once it is over", () => {
+    const t = afterOnePassedOut("duplicate");
+    const boarded: TableState = { ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } };
+    // The board injected before the deal is never shown.
+    for (const viewer of ["p0", "mallory", undefined]) expect(JSON.stringify(viewFor(boarded, viewer))).not.toContain("deal-1");
+    let started = sendOk(boarded, "p1", { type: "deal" });
+    const notice = { firstPlayedAt: 1_700_000_000_000, rescored: false, original: replayRecord.replay!.original };
+    for (const viewer of ["p0", "mallory", undefined]) {
+      const view = viewFor(started, viewer);
+      expect(view.replay).toEqual(notice);
+      const json = JSON.stringify(view);
+      for (const hidden of ["deal-1", "field", "record"]) expect(json).not.toContain(hidden);
+    }
+    for (let k = 0; k < 4; k++) {
+      const seat = started.game!.currentActor;
+      started = sendOk(started, `p${SEATS.indexOf(seat)}`, { type: "act", handNumber: started.handNumber, revision: started.revision, action: { type: "bid", seat, bid: "pass" } });
+      if (k < 3) expect(viewFor(started, "p0").replay).toEqual(notice);
+    }
+    const shown = Object.fromEntries(Object.entries(replayRecord).filter(([key]) => key !== "original"));
+    for (const viewer of ["p0", "mallory", undefined]) {
+      const view = viewFor(started, viewer);
+      expect(view.replay).toEqual({ ...notice, record: shown });
+      expect("original" in view.replay!.record!).toBe(false);
+    }
   });
 
   it("marks away humans and shows stand-ins", () => {

@@ -1,6 +1,6 @@
 import { createBot } from "@contractplay/bots";
-import { SEATS, applyAction, playContextFor } from "@contractplay/core";
-import type { GameAction, Seat } from "@contractplay/core";
+import { SEATS, applyAction, createDeck, deal, playContextFor } from "@contractplay/core";
+import type { GameAction, HandRecord, Seat } from "@contractplay/core";
 import type { ClientMessage, TableScoring } from "@contractplay/protocol";
 import { chooseBotAction, deciderOf } from "./hand.js";
 import { reduce } from "./reduce.js";
@@ -99,4 +99,23 @@ export function tableInPlay(kinds: Record<Seat, "human" | "bot">, lead = true, s
     game = result.state;
   }
   return { ...t, game, revision: t.revision + 1 };
+}
+
+/** An archived deal as the server would inject it for a replay: dealt unshuffled, West dealing, Both vulnerable. */
+export const replayRecord: HandRecord = {
+  event: "Replay", scoring: "IMP", dealer: "west", vulnerability: "Both", deal: deal(createDeck()),
+  original: [{ type: "bid", seat: "west", bid: "pass" }],
+  field: [{ nsScore: 620, contract: "4S", declarer: "south", tricks: 10, multiplicity: 1, artificial: false }],
+  replay: { dealId: "deal-1", firstPlayedAt: 1_700_000_000_000, rescored: false,
+    original: { nsScore: 620, contract: "4S", declarer: "south", tricks: 10, multiplicity: 1, artificial: false } }
+};
+
+/** Deals hand 1 at four humans' table and passes it out. */
+export function afterOnePassedOut(scoring: "rubber" | "duplicate"): TableState {
+  let t = sendOk(fourHumans(scoring), "p0", { type: "deal" }, 1, seededRandom(2));
+  for (let k = 0; k < 4; k++) {
+    const seat = t.game!.currentActor;
+    t = sendOk(t, `p${SEATS.indexOf(seat)}`, { type: "act", handNumber: t.handNumber, revision: t.revision, action: { type: "bid", seat, bid: "pass" } });
+  }
+  return t;
 }

@@ -1,5 +1,5 @@
 import { SEATS } from "@contractplay/core";
-import type { Deal, Seat } from "@contractplay/core";
+import type { Deal, HandRecord, Seat } from "@contractplay/core";
 import type { PublicGame, SeatInfo, TableSummary, TableView } from "@contractplay/protocol";
 import { sideOf } from "./claim.js";
 import { canDeal } from "./hand.js";
@@ -40,12 +40,22 @@ function publicGame(state: TableState, viewerSeat: Seat): PublicGame | undefined
   };
 }
 
+/** A replayed hand's notice for everyone at the table; earlier results (without the original play) only once it is over. */
+function replayOf(state: TableState): TableView["replay"] {
+  const record = state.replay?.record;
+  if (!record?.replay) return undefined;
+  const { firstPlayedAt, rescored, original } = record.replay;
+  const shown = Object.fromEntries(Object.entries(record).filter(([key]) => key !== "original")) as HandRecord;
+  return { firstPlayedAt, rescored, original, ...(betweenHands(state) ? { record: shown } : {}) };
+}
+
 /** The only function that builds game data for a client. */
 export function viewFor(state: TableState, player: PlayerId | undefined, session?: NonNullable<TableView["session"]>): TableView {
   const yourSeat = seatOf(state, player);
   const hostSeat = seatOf(state, state.host);
   const game = yourSeat ? publicGame(state, yourSeat) : undefined;
   const pending = state.pendingClaim;
+  const replay = replayOf(state);
   const waitingOn = pending ? pending.responders.filter((seat) => !pending.accepted.includes(seat)) : [];
   return {
     ...summaryOf(state),
@@ -58,6 +68,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined, session
     ...(pending ? { claim: { seat: pending.seat, tricks: pending.tricks, waitingOn, madeAt: pending.madeAt } } : {}),
     ...(state.claimRejected ? { claimRejected: { ...state.claimRejected } } : {}),
     ...(session ? { session } : {}),
+    ...(replay ? { replay } : {}),
     ...(yourSeat && state.game && betweenHands(state) ? { revealed: state.game.initialDeal } : {})
   };
 }

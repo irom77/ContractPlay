@@ -1,8 +1,8 @@
 import { applyAction, createDeck, createGameState, deal as dealCards, emptyRubber, nextRubberDeal, playContextFor, recordRubberHand, rewindTo, SEATS, shuffle } from "@contractplay/core";
-import type { GameAction, GameState, Seat, SkillLevel } from "@contractplay/core";
+import type { GameAction, GameState, Seat, SkillLevel, Vulnerability } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
-  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, scoringOf, seatOf, withoutAutoPlay, withoutClaim, withoutGame,
+  BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, scoringOf, seatOf, withoutAutoPlay, withoutClaim, withoutGame, withoutKeys,
   type Outcome, type PlayerId, type TableState
 } from "./state.js";
 
@@ -25,26 +25,39 @@ export function canDeal(state: TableState, player: PlayerId | undefined): boolea
   return seatOf(state, player) !== undefined && tableReady(state) && betweenHands(state);
 }
 
+/** Whether the next hand is a replay: every second hand (2nd, 4th, …) at a table outside a duplicate session. */
+export const isReplayHand = (state: TableState): boolean => !state.sessionId && (state.handNumber + 1) % 2 === 0;
+
+/** The vulnerability a replay must be played at: the rubber's at a rubber table, otherwise the archived deal's own. */
+export function replayVulnerability(state: TableState): Vulnerability | undefined {
+  return scoringOf(state) === "rubber" ? nextRubberDeal(state.rubber ?? emptyRubber(), "north").vulnerability : undefined;
+}
+
 export function dealHand(state: TableState, player: PlayerId, at: number, random: () => number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (!canDeal(state, player)) return refuse(state, "not-ready");
   const handNumber = state.handNumber + 1;
   const sessionBoard = state.sessionBoard?.index === handNumber - 1 ? state.sessionBoard : undefined;
   if (state.sessionId && !sessionBoard) return refuse(state, "not-ready");
-  const deal = sessionBoard?.deal ?? dealCards(shuffle(createDeck(), random));
+  const replayBoard = !state.sessionId && state.replayBoard?.index === handNumber - 1 ? state.replayBoard : undefined;
+  const replay = replayBoard ? { replay: { dealId: replayBoard.dealId, record: replayBoard.record } } : {};
+  // Every deal drops the injected board and the last hand's replay; a replayed hand then gets its own.
+  const base = withoutKeys(state, "replayBoard", "replay");
+  const deal = sessionBoard?.deal ?? replayBoard?.record.deal ?? dealCards(shuffle(createDeck(), random));
   if (scoringOf(state) === "rubber") {
     // Rubber deals rotate the dealer from North and take vulnerability from games won; a won rubber starts a new one.
+    // A replay keeps its own dealer but the rubber's vulnerability, and the rotation carries on as if it had not.
     const next = nextRubberDeal(state.rubber ?? emptyRubber(), "north");
-    const game = createGameState({ deal, dealer: next.dealer, vulnerability: next.vulnerability });
+    const game = createGameState({ deal, dealer: replayBoard?.record.dealer ?? next.dealer, vulnerability: next.vulnerability });
     const rubber = { ...next.rubber, activeHandId: rubberHandId(handNumber) };
-    return accept(state, { handNumber, game, rubber, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+    return accept(base, { handNumber, game, rubber, ...replay, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
   }
   const game = createGameState({
     deal,
-    dealer: sessionBoard?.dealer ?? SEATS[(handNumber - 1) % 4]!,
-    vulnerability: sessionBoard?.vulnerability ?? VULNERABILITY[(handNumber - 1) % 16]!
+    dealer: sessionBoard?.dealer ?? replayBoard?.record.dealer ?? SEATS[(handNumber - 1) % 4]!,
+    vulnerability: sessionBoard?.vulnerability ?? replayBoard?.record.vulnerability ?? VULNERABILITY[(handNumber - 1) % 16]!
   });
-  return accept(state, { handNumber, game, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+  return accept(base, { handNumber, game, ...replay, turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
 /** The seat whose holder decides for `seat`, including a human dummy taking over for a bot declarer. */
@@ -115,11 +128,11 @@ export function takeBack(state: TableState, player: PlayerId, at: number): Outco
   return refuse(state, "not-allowed");
 }
 
-/** The host abandons the hand in progress: it is not scored and the table returns to seating. */
+/** The host abandons the hand in progress: it is not scored, any replay is dropped, and the table returns to seating. */
 export function cancelHand(state: TableState, player: PlayerId, at: number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (state.host !== player || betweenHands(state)) return refuse(state, "not-allowed");
-  return accept(withoutGame(withoutClaim(state)), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
+  return accept(withoutKeys(withoutGame(withoutClaim(state)), "replay"), { seats: withoutAutoPlay(state.seats), turnSince: at, lastHumanAt: at, trickJustCompleted: false });
 }
 
 export function applyBotEvent(state: TableState, revision: number, action: GameAction, at: number): Outcome {

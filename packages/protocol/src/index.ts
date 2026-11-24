@@ -1,5 +1,5 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
-import type { Card, Deal, GameAction, GameState, Rubber, Seat, SkillLevel } from "@contractplay/core";
+import type { Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
 export const PROTOCOL_VERSION = 7;
 export const MAX_MESSAGE_BYTES = 4096;
@@ -43,6 +43,12 @@ export type TableView = TableSummary & {
   session?: { board: number; position: number; boardCount: number; scoring: "matchpoints" | "imps"; completedBoards: number;
     complete: boolean; waitingForTables: boolean; rank: number; tableCount: number;
     matchpoints: { points: number; top: number; percentage: number }; crossImps: number };
+  /**
+   * Present while the hand is a replayed archived deal, for every viewer: when it was first played, its first result,
+   * and whether earlier results were rescored at this table's vulnerability. `record` (earlier results, without the
+   * original play's actions) appears only once the hand is over.
+   */
+  replay?: { firstPlayedAt: number; rescored: boolean; original: TravellerRow; record?: HandRecord };
 };
 
 export type ClientMessage =
