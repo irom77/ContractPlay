@@ -1986,14 +1986,44 @@ describe("solo deal replays", () => {
   });
 });
 
-describe("Play online entry", () => {
-  beforeEach(() => { window.localStorage.clear(); });
-  afterEach(() => { cleanup(); location.hash = ""; });
+describe("Lobby entry", () => {
+  beforeEach(() => { window.localStorage.clear(); vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline"))); });
+  afterEach(() => { cleanup(); location.hash = ""; vi.unstubAllGlobals(); });
 
-  it("offers Play online on the start screen and routes to the lobby", async () => {
+  it("offers Lobby on the start screen and routes to the lobby", async () => {
     render(<App />);
-    await userEvent.setup().click(screen.getByRole("button", { name: "Play online" }));
+    expect(screen.queryByRole("button", { name: "Play online" })).toBeNull();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Lobby" }));
     expect(location.hash).toBe("#/online");
+  });
+
+  it("deals at once when asked to start", async () => {
+    render(<App autoStart />);
+    await waitFor(() => expect(screen.queryByRole("region", { name: "New deal" })).toBeNull());
+    await waitFor(() => expect(loadSoloData(window.localStorage).handsStarted).toBe(1));
+  });
+
+  it("resumes an unfinished hand instead of dealing", async () => {
+    let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
+    const bid = applyAction(game, { type: "bid", seat: "north", bid: "1clubs" });
+    if (!bid.ok) throw new Error(bid.error.message);
+    game = bid.state;
+    saveSoloData(window.localStorage, { ...loadSoloData(window.localStorage), currentGame: game, currentHandId: "solo-resume" });
+    render(<App autoStart />);
+    expect(screen.getByRole("list", { name: "Auction calls" }).querySelectorAll("li")).toHaveLength(1);
+    await act(async () => { await Promise.resolve(); });
+    expect(loadSoloData(window.localStorage).currentHandId).toBe("solo-resume");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("deals once, not on every render", async () => {
+    const { rerender } = render(<App autoStart />);
+    await waitFor(() => expect(loadSoloData(window.localStorage).handsStarted).toBe(1));
+    const id = loadSoloData(window.localStorage).currentHandId;
+    rerender(<App autoStart />);
+    await act(async () => { await Promise.resolve(); });
+    expect(loadSoloData(window.localStorage).handsStarted).toBe(1);
+    expect(loadSoloData(window.localStorage).currentHandId).toBe(id);
   });
 });
 

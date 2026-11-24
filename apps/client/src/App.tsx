@@ -106,8 +106,11 @@ export type MenuDialog = "settings" | "rubber" | "hands" | "about";
 /** Shared with online play, so the Auto play banner stays where the player last put it. */
 const autoPlayBannerKey = "contractplay.resumeBanner";
 
-/** `initialDialog` opens a menu dialog on arrival, as when online play links to Recent hands. */
-export default function App({ solver, preview, initialDialog }: { solver?: Solver; preview?: SoloPreview; initialDialog?: MenuDialog } = {}) {
+/**
+ * `initialDialog` opens a menu dialog on arrival, as when online play links to Recent hands. `autoStart` deals a hand on
+ * arrival (the lobby's Play panel), unless a hand is still being bid or played, which is resumed instead.
+ */
+export default function App({ solver, preview, initialDialog, autoStart }: { solver?: Solver; preview?: SoloPreview; initialDialog?: MenuDialog; autoStart?: boolean } = {}) {
   const frozen = !!preview;
   const persistence = useMemo(() => createClientPersistenceAdapter(preview?.storage ?? window.localStorage), [preview]);
   const [soloData, setSoloData] = useState<SoloData>(() => loadSoloData(persistence.storage));
@@ -452,6 +455,14 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     : shownGame?.currentTrick.length
       ? shownGame.currentTrick
       : lastTrickOpen ? shownGame?.completedTricks.at(-1) ?? [] : [];
+
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || frozen || autoStarted.current) return;
+    autoStarted.current = true;
+    if (game?.phase !== "auction" && game?.phase !== "play") void startHand();
+    // Only on arrival: the hand in progress when solo opened decides.
+  }, []);
 
   async function startHand() {
     if (replayPendingRef.current) return;
@@ -878,7 +889,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
           <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span><span className="table-tools-row">{version}{fullscreenButton}</span></div>
           <div className="setup-controls">{dealSettings}</div>
           <button className="primary-button" disabled={replayPending} onClick={startHand}>Start a new hand</button>
-          {online ? <button className="secondary-button" type="button" onClick={goOnline}>Play online</button> : null}
+          {online ? <button className="secondary-button" type="button" onClick={goOnline}>Lobby</button> : null}
           {soloData.completedHands.length || boardSetLibrary.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
           {pbnImportForm}
         </section>
