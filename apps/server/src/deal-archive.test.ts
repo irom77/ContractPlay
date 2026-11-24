@@ -55,13 +55,27 @@ describe("DealArchive.record", () => {
   it("stores a fresh finished hand and reuses its id for the same cards and dealer", async () => {
     const id = await archive.record(input());
     expect(id).toEqual(expect.any(String));
-    expect(await archive.record(input({ playedAt: 5, source: "online", actions: fourSpades(4) }))).toBe(id);
+    expect(await archive.record(input({ playedAt: 5, actions: fourSpades(4) }))).toBe(id);
     const [deals] = (await env.DB.prepare("SELECT COUNT(*) AS n FROM archived_deals").all()).results;
     expect(deals).toEqual({ n: 1 });
     expect(await results(id!)).toEqual([
       { contract: "4S", declarer: "south", tricks: 10, ns_score: 420, claimed: 1, vulnerability: "None", source: "solo" },
-      { contract: "4S", declarer: "south", tricks: 9, ns_score: -50, claimed: 1, vulnerability: "None", source: "online" }
+      { contract: "4S", declarer: "south", tricks: 9, ns_score: -50, claimed: 1, vulnerability: "None", source: "solo" }
     ]);
+  });
+
+  it("keeps solo and online deals in separate pools", async () => {
+    const solo = await archive.record(input());
+    const online = await archive.record(input({ source: "online", playedAt: 5 }));
+    expect(online).toEqual(expect.any(String));
+    expect(online).not.toBe(solo);
+    expect(await archive.record(input({ source: "online", replayOf: solo! }))).toBeUndefined();
+    expect(await archive.record(input({ source: "solo", replayOf: online! }))).toBeUndefined();
+    expect(await archive.record(input({ source: "online", replayOf: online!, playedAt: 6 }))).toBe(online);
+    expect(await results(solo!)).toHaveLength(1);
+    expect(await results(online!)).toHaveLength(2);
+    expect((await archive.pickReplay(25 * HOUR, "solo"))?.dealId).toBe(solo);
+    expect((await archive.pickReplay(25 * HOUR, "online"))?.dealId).toBe(online);
   });
 
   it("archives the same cards with another dealer as a different deal", async () => {
@@ -100,10 +114,10 @@ describe("DealArchive.record", () => {
 describe("DealArchive.pickReplay", () => {
   it("only offers deals first played at least a day ago", async () => {
     expect(REPLAY_MIN_AGE_MS).toBe(24 * HOUR);
-    expect(await archive.pickReplay(0)).toBeUndefined();
+    expect(await archive.pickReplay(0, "solo")).toBeUndefined();
     const id = await archive.record(input());
-    expect(await archive.pickReplay(23 * HOUR)).toBeUndefined();
-    const replay = await archive.pickReplay(25 * HOUR);
+    expect(await archive.pickReplay(23 * HOUR, "solo")).toBeUndefined();
+    const replay = await archive.pickReplay(25 * HOUR, "solo");
     expect(replay?.dealId).toBe(id);
     expect(replay?.record).toMatchObject({
       deal: sameDeal, dealer: "north", vulnerability: "None", scoring: "IMP", event: "Replay", original: fourSpades(),
@@ -116,18 +130,18 @@ describe("DealArchive.pickReplay", () => {
 
   it("rescores the field to a target vulnerability", async () => {
     await archive.record(input());
-    const vulnerable = await archive.pickReplay(25 * HOUR, "NS");
+    const vulnerable = await archive.pickReplay(25 * HOUR, "solo", "NS");
     expect(vulnerable?.record.vulnerability).toBe("NS");
     expect(vulnerable?.record.field[0]?.nsScore).toBe(620);
     expect(vulnerable?.record.replay).toMatchObject({ rescored: true, original: { nsScore: 620 } });
-    const same = await archive.pickReplay(25 * HOUR, "None");
+    const same = await archive.pickReplay(25 * HOUR, "solo", "None");
     expect(same?.record.field[0]?.nsScore).toBe(420);
     expect(same?.record.replay?.rescored).toBe(false);
   });
 
   it("does not call the field rescored when no score changes", async () => {
     await archive.record(input());
-    const replay = await archive.pickReplay(25 * HOUR, "EW");
+    const replay = await archive.pickReplay(25 * HOUR, "solo", "EW");
     expect(replay?.record.vulnerability).toBe("EW");
     expect(replay?.record.field[0]?.nsScore).toBe(420);
     expect(replay?.record.replay?.rescored).toBe(false);
@@ -136,7 +150,7 @@ describe("DealArchive.pickReplay", () => {
   it("rescores results played at another vulnerability to the deal's own", async () => {
     const id = await archive.record(input());
     await archive.record(input({ replayOf: id!, vulnerability: "Both", playedAt: 1 }));
-    const replay = await archive.pickReplay(25 * HOUR);
+    const replay = await archive.pickReplay(25 * HOUR, "solo");
     expect(replay?.record.vulnerability).toBe("None");
     expect(replay?.record.field).toEqual([expect.objectContaining({ nsScore: 420, multiplicity: 2 })]);
     expect(replay?.record.replay?.rescored).toBe(true);
@@ -146,7 +160,7 @@ describe("DealArchive.pickReplay", () => {
     const id = await archive.record(input({ actions: passedOut }));
     for (let at = 1; at < 10; at += 1) await archive.record(input({ replayOf: id!, playedAt: at, actions: fourSpades(4) }));
     for (let at = 10; at < 60; at += 1) await archive.record(input({ replayOf: id!, playedAt: at, actions: fourSpades(3) }));
-    const replay = await archive.pickReplay(25 * HOUR);
+    const replay = await archive.pickReplay(25 * HOUR, "solo");
     expect(MAX_FIELD_RESULTS).toBe(50);
     expect(replay?.record.field).toEqual([
       { contract: "Pass", nsScore: 0, multiplicity: 1, artificial: false },
@@ -160,7 +174,7 @@ describe("DealArchive.pickReplay", () => {
     await archive.record(input({ replayOf: id!, playedAt: 1, actions: fourSpades(4) }));
     await archive.record(input({ replayOf: id!, playedAt: 2 }));
     await archive.record(input({ replayOf: id!, playedAt: 3 }));
-    expect((await archive.pickReplay(25 * HOUR))?.record.field).toEqual([
+    expect((await archive.pickReplay(25 * HOUR, "solo"))?.record.field).toEqual([
       expect.objectContaining({ tricks: 10, multiplicity: 3 }),
       expect.objectContaining({ tricks: 9, multiplicity: 1 })
     ]);
@@ -171,7 +185,15 @@ describe("DealArchive.pickReplay", () => {
     const second = await archive.record(input({ deal: otherDeal, playedAt: HOUR }));
     await archive.record(input({ dealer: "south", actions: bids("south", "pass", "pass", "pass", "pass"), playedAt: 20 * HOUR }));
     const now = 25.5 * HOUR;
-    expect((await archive.pickReplay(now, undefined, () => 0))?.dealId).toBe(first);
-    expect((await archive.pickReplay(now, undefined, () => 0.99))?.dealId).toBe(second);
+    expect((await archive.pickReplay(now, "solo", undefined, () => 0))?.dealId).toBe(first);
+    expect((await archive.pickReplay(now, "solo", undefined, () => 0.99))?.dealId).toBe(second);
+  });
+
+  it("never offers a deal from the other pool, even when the probe lands on it", async () => {
+    await archive.record(input({ source: "online" }));
+    expect(await archive.pickReplay(25 * HOUR, "solo")).toBeUndefined();
+    const solo = await archive.record(input({ deal: otherDeal, playedAt: HOUR }));
+    expect((await archive.pickReplay(26 * HOUR, "solo", undefined, () => 0))?.dealId).toBe(solo);
+    expect((await archive.pickReplay(26 * HOUR, "online", undefined, () => 0.99))?.dealId).not.toBe(solo);
   });
 });

@@ -9,7 +9,13 @@ export const REPLAY_MIN_AGE_MS = 86_400_000;
 export const MAX_FIELD_RESULTS = 50;
 
 export type ArchiveInput = Readonly<{ deal: Deal; dealer: Seat; vulnerability: Vulnerability; actions: readonly GameAction[];
-  source: "solo" | "online"; playedAt: number; replayOf?: string }>;
+  source: DealPool; playedAt: number; replayOf?: string }>;
+/**
+ * Where a deal was first played. Solo deals can be submitted by anyone and solo replays are served to anyone, so online
+ * tables replay only deals they dealt themselves, and solo never sees those: otherwise a player could collect or plant
+ * the full hands of a deal an online table later replays.
+ */
+export type DealPool = "solo" | "online";
 export type ReplayDeal = Readonly<{ dealId: string; record: HandRecord }>;
 
 const VULNERABILITIES: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
@@ -61,7 +67,10 @@ function grouped(rows: readonly TravellerRow[]): TravellerRow[] {
 export class DealArchive {
   constructor(private readonly db: D1Database) {}
 
-  /** The deal id the result was stored under, or undefined when the actions are not a legal finished hand or `replayOf` names another deal. */
+  /**
+   * The deal id the result was stored under, or undefined when the actions are not a legal finished hand or `replayOf`
+   * names another deal or a deal in the other pool. A fresh deal goes to the pool of `source`.
+   */
   async record(input: ArchiveInput): Promise<string | undefined> {
     const game = finishedGame(input);
     if (!game) return undefined;
@@ -72,29 +81,34 @@ export class DealArchive {
     const insertResult = `INSERT INTO deal_results (deal_id, played_at, source, vulnerability, contract, declarer, tricks, ns_score, claimed)
       SELECT id, ?, ?, ?, ?, ?, ?, ?, ? FROM archived_deals`;
     if (input.replayOf !== undefined) {
-      const stored = await this.db.prepare(`${insertResult} WHERE id = ? AND deal_key = ?`).bind(...result, input.replayOf, key).run();
+      const stored = await this.db.prepare(`${insertResult} WHERE id = ? AND pool = ? AND deal_key = ?`)
+        .bind(...result, input.replayOf, input.source, key).run();
       return stored.meta.changes === 1 ? input.replayOf : undefined;
     }
     const [, , found] = await this.db.batch([
-      this.db.prepare(`INSERT INTO archived_deals (id, deal_key, deal_json, dealer, vulnerability, first_played_at, original_actions_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(deal_key) DO NOTHING`)
-        .bind(crypto.randomUUID(), key, JSON.stringify(input.deal), input.dealer, input.vulnerability, input.playedAt, JSON.stringify(input.actions)),
-      this.db.prepare(`${insertResult} WHERE deal_key = ?`).bind(...result, key),
-      this.db.prepare("SELECT id FROM archived_deals WHERE deal_key = ?").bind(key)
+      this.db.prepare(`INSERT INTO archived_deals (id, pool, deal_key, deal_json, dealer, vulnerability, first_played_at, original_actions_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(pool, deal_key) DO NOTHING`)
+        .bind(crypto.randomUUID(), input.source, key, JSON.stringify(input.deal), input.dealer, input.vulnerability, input.playedAt,
+          JSON.stringify(input.actions)),
+      this.db.prepare(`${insertResult} WHERE pool = ? AND deal_key = ?`).bind(...result, input.source, key),
+      this.db.prepare("SELECT id FROM archived_deals WHERE pool = ? AND deal_key = ?").bind(input.source, key)
     ]);
     return (found!.results[0] as { id: string } | undefined)?.id;
   }
 
-  /** A random deal first played at least REPLAY_MIN_AGE_MS before `now`; its record's field is rescored to `vulnerability` when given, else to the deal's own. */
-  async pickReplay(now: number, vulnerability?: Vulnerability, random: () => number = Math.random): Promise<ReplayDeal | undefined> {
+  /**
+   * A random deal from `pool` first played at least REPLAY_MIN_AGE_MS before `now`; its record's field is rescored to
+   * `vulnerability` when given, else to the deal's own.
+   */
+  async pickReplay(now: number, pool: DealPool, vulnerability?: Vulnerability, random: () => number = Math.random): Promise<ReplayDeal | undefined> {
     const cutoff = now - REPLAY_MIN_AGE_MS;
-    const newest = await this.db.prepare("SELECT rowid FROM archived_deals WHERE first_played_at <= ? ORDER BY first_played_at DESC LIMIT 1")
-      .bind(cutoff).first<{ rowid: number }>();
+    const newest = await this.db.prepare("SELECT rowid FROM archived_deals WHERE pool = ? AND first_played_at <= ? ORDER BY first_played_at DESC LIMIT 1")
+      .bind(pool, cutoff).first<{ rowid: number }>();
     if (!newest) return undefined;
     // The newest eligible row bounds the probe, so a probe from any start at or below it finds a row.
     const probe = 1 + Math.floor(random() * newest.rowid);
-    const deal = await this.db.prepare("SELECT * FROM archived_deals WHERE rowid >= ? AND rowid <= ? AND first_played_at <= ? ORDER BY rowid LIMIT 1")
-      .bind(probe, newest.rowid, cutoff).first<DealRow>();
+    const deal = await this.db.prepare(`SELECT * FROM archived_deals WHERE rowid >= ? AND rowid <= ? AND pool = ? AND first_played_at <= ?
+      ORDER BY rowid LIMIT 1`).bind(probe, newest.rowid, pool, cutoff).first<DealRow>();
     if (!deal) return undefined;
     // The original (earliest) result plus at most the MAX_FIELD_RESULTS most recent others, so reads stay bounded.
     const columns = "SELECT rowid, vulnerability, contract, declarer, tricks, ns_score FROM deal_results WHERE deal_id = ?";

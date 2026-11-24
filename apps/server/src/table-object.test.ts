@@ -284,7 +284,7 @@ describe("deal replays at online tables", () => {
 
   it("deals the second hand from an eligible archived deal and records its result against it", async () => {
     const seeded = deal(createDeck().reverse());
-    const dealId = await new DealArchive(env.DB).record({ deal: seeded, dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    const dealId = await new DealArchive(env.DB).record({ deal: seeded, dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "online", playedAt: 0 });
     const id = await table();
     const clients = await seatedFour(id);
     const first = await playPassedOut(id, clients);
@@ -350,7 +350,7 @@ describe("deal replays at online tables", () => {
   });
 
   it("judges a deal again when the table changed while its replay was being picked", async () => {
-    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "online", playedAt: 0 });
     const id = await table();
     const clients = await seatedFour(id);
     await playPassedOut(id, clients);
@@ -378,7 +378,7 @@ describe("deal replays at online tables", () => {
   });
 
   it("deals a fresh hand after bounded retries when the table keeps changing during the replay pick", async () => {
-    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "online", playedAt: 0 });
     const id = await table();
     const clients = await seatedFour(id);
     await playPassedOut(id, clients);
@@ -402,7 +402,7 @@ describe("deal replays at online tables", () => {
   });
 
   it("keeps a disconnect that lands while a replay is being picked", async () => {
-    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "online", playedAt: 0 });
     const id = await table();
     const clients = await seatedFour(id);
     await playPassedOut(id, clients);

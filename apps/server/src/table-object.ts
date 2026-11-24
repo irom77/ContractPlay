@@ -344,7 +344,7 @@ export class TableObject extends DurableObject<Env> {
 
   /** A replay for the next hand, or undefined when none is eligible or the archive fails; a hand is never blocked on the archive. */
   private async pickReplay(state: TableState) {
-    try { return await new DealArchive(this.env.DB).pickReplay(Date.now(), replayVulnerability(state)); }
+    try { return await new DealArchive(this.env.DB).pickReplay(Date.now(), "online", replayVulnerability(state)); }
     catch (error) { console.warn("table: deal archive unavailable; dealing a fresh hand", error); return undefined; }
   }
 

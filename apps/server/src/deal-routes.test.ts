@@ -44,6 +44,14 @@ describe("POST /api/deals/results", () => {
     expect(rows[0]!.played_at).toBeGreaterThan(1_000_000);
   });
 
+  it("never serves or adds to deals dealt at online tables", async () => {
+    const { DealArchive } = await import("./deal-archive.js");
+    const online = await new DealArchive(env.DB).record({ ...hand(), source: "online", playedAt: 0 } as never);
+    expect((await call("/api/deals/replay")).status).toBe(204);
+    expect((await post(hand({ replayOf: online }))).status).toBe(400);
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM deal_results").first<{ n: number }>())!.n).toBe(1);
+  });
+
   it("rejects malformed or illegal hands with 400", async () => {
     const short = { ...hands, north: hands.north.slice(1) };
     const duplicate = { ...hands, north: [hands.north[1]!, ...hands.north.slice(1)], east: [hands.north[1]!, ...hands.east.slice(1)] };

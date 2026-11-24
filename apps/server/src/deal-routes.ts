@@ -38,7 +38,7 @@ async function replay(request: Request, env: Env): Promise<Response> {
   const vulnerability = new URL(request.url).searchParams.get("vulnerability");
   if (vulnerability !== null && !VULNERABILITIES.includes(vulnerability)) return json({ error: "bad-request" }, 400);
   if (!await rateAllowed(request, env, "replay", REPLAYS_PER_HOUR)) return json({ error: "too-many-requests" }, 429);
-  const picked = await new DealArchive(env.DB).pickReplay(Date.now(), (vulnerability ?? undefined) as Vulnerability | undefined);
+  const picked = await new DealArchive(env.DB).pickReplay(Date.now(), "solo", (vulnerability ?? undefined) as Vulnerability | undefined);
   return picked ? json(picked, 200) : new Response(null, { status: 204 });
 }
 

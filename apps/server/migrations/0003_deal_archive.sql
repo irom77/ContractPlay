@@ -1,13 +1,15 @@
 CREATE TABLE archived_deals (
   id TEXT PRIMARY KEY,                 -- random id
-  deal_key TEXT NOT NULL UNIQUE,       -- canonical cards + dealer, so one deal is archived once
+  pool TEXT NOT NULL CHECK (pool IN ('solo', 'online')), -- where it was first played; replays stay in their pool
+  deal_key TEXT NOT NULL,              -- canonical cards + dealer, so one deal is archived once per pool
   deal_json TEXT NOT NULL,             -- Deal
   dealer TEXT NOT NULL,
   vulnerability TEXT NOT NULL,        -- as first played
   first_played_at INTEGER NOT NULL,
-  original_actions_json TEXT NOT NULL  -- the first play's GameAction[], for "View original"
+  original_actions_json TEXT NOT NULL, -- the first play's GameAction[], for "View original"
+  UNIQUE (pool, deal_key)
 );
-CREATE INDEX archived_deals_age ON archived_deals(first_played_at);
+CREATE INDEX archived_deals_age ON archived_deals(pool, first_played_at);
 CREATE TABLE deal_results (
   deal_id TEXT NOT NULL REFERENCES archived_deals(id) ON DELETE CASCADE,
   played_at INTEGER NOT NULL,

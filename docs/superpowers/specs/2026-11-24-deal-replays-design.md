@@ -145,6 +145,14 @@ The original result is the earliest row for the deal. A passed-out hand is recor
   the README preview table is updated.
 - TODO, CHANGES, README (replays, archive, anonymity), `docs/platform-delivery.md` (the migration step).
 
+## Addendum (2026-11-24, after merge): separate pools
+
+A security review found that a single shared pool let anyone call the public solo routes to collect deals (all four
+hands) that an online table might later replay, or to plant a deal of their own. Owner's decision: separate pools.
+`archived_deals` has `pool` (`solo` | `online`, where the deal was first played) with `UNIQUE (pool, deal_key)`;
+online tables replay only `online` deals, solo routes serve and add to only `solo` deals, and `replayOf` must name a
+deal in the caller's pool. Solo and online results are therefore never compared on the same deal.
+
 ## Left to the builder
 
 - The rowid-probe query and how it retries when it lands on an ineligible row.
