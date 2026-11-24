@@ -1,11 +1,15 @@
 import { env, evictDurableObject, runInDurableObject } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it, onTestFinished } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
 import type { ServerMessage, TableView } from "@contractplay/protocol";
 import type { TableState } from "@contractplay/table";
 import migration from "../migrations/0001_auth.sql?raw";
+import archiveMigration from "../migrations/0003_deal_archive.sql?raw";
 import worker from "./index.js";
 import { AuthStore } from "./auth-store.js";
+import { DealArchive } from "./deal-archive.js";
+import { createDeck, deal } from "@contractplay/core";
+import type { GameAction } from "@contractplay/core";
 
 const origin = "https://bridge.example";
 const config = { ...env, AUTH_PUBLIC_ORIGIN: origin };
@@ -15,9 +19,13 @@ const secretB = "b".repeat(43);
 const hash = async (value: string) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))), (b) => b.toString(16).padStart(2, "0")).join("");
 const stored = (id: string) => runInDurableObject(env.TABLES.get(env.TABLES.idFromName(id)), (_instance, state) => state.storage.get<TableState>("state"));
 
-beforeAll(async () => { await env.DB.exec(migration.replace(/\n/g, " ")); });
+const sql = (text: string) => text.replace(/--[^\n]*/g, "").replace(/\n/g, " ");
+beforeAll(async () => {
+  await env.DB.exec(migration.replace(/\n/g, " "));
+  await env.DB.exec(sql(archiveMigration));
+});
 beforeEach(async () => {
-  await env.DB.batch(["sessions", "account_player_identities", "accounts"].map((name) => env.DB.prepare(`DELETE FROM ${name}`)));
+  await env.DB.batch(["deal_results", "archived_deals", "sessions", "account_player_identities", "accounts"].map((name) => env.DB.prepare(`DELETE FROM ${name}`)));
 });
 
 async function table(): Promise<string> {
@@ -208,5 +216,109 @@ describe("authenticated table identities", () => {
       headers: { Upgrade: "websocket", Cookie: auth.cookie, Origin: "https://evil.example" }
     }), config);
     expect(response.status).toBe(403);
+  });
+});
+
+describe("deal replays at online tables", () => {
+  const passedOut = (dealer: "north" | "east" | "south" | "west"): GameAction[] => {
+    const order = ["north", "east", "south", "west"] as const;
+    const start = order.indexOf(dealer);
+    return [0, 1, 2, 3].map((n) => ({ type: "bid", seat: order[(start + n) % 4]!, bid: "pass" }));
+  };
+  const results = async () => (await env.DB.prepare("SELECT deal_id, source FROM deal_results").all()).results;
+
+  async function seatedFour(id: string) {
+    const clients: Array<{ seat: "north" | "east" | "south" | "west"; client: Awaited<ReturnType<typeof socket>> }> = [];
+    // Closing four seated sockets sets off lobby and alarm work in the table; let it finish before the test environment goes.
+    onTestFinished(async () => {
+      for (const { client } of clients) if (client.ws.readyState === WebSocket.OPEN) client.ws.close();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    });
+    for (const [index, seat] of (["north", "east", "south", "west"] as const).entries()) {
+      const client = await socket(id);
+      client.send({ type: "hello", version: PROTOCOL_VERSION, secret: `${index}`.repeat(43), name: `Player ${seat}` });
+      await client.view();
+      client.send({ type: "sit", seat });
+      await client.view();
+      clients.push({ seat, client });
+    }
+    return clients;
+  }
+  const state = (id: string) => stored(id) as Promise<TableState>;
+  const waitFor = async (id: string, done: (s: TableState) => boolean) => {
+    for (let n = 0; n < 100; n++) { const s = await state(id); if (done(s)) return s; await new Promise((r) => setTimeout(r, 10)); }
+    throw new Error("state not reached");
+  };
+  /** Deals a hand and has everyone pass it out; resolves with the finished state. */
+  async function playPassedOut(id: string, clients: Awaited<ReturnType<typeof seatedFour>>) {
+    const before = await state(id);
+    clients[0]!.client.send({ type: "deal" });
+    let current = await waitFor(id, (s) => s.handNumber === before.handNumber + 1);
+    const dealt = current;
+    for (let n = 0; n < 4; n++) {
+      const game = current.game!;
+      const actor = clients.find((c) => c.seat === game.currentActor)!;
+      actor.client.send({ type: "act", handNumber: current.handNumber, revision: current.revision, action: { type: "bid", seat: actor.seat, bid: "pass" } });
+      const revision = current.revision;
+      current = await waitFor(id, (s) => s.revision > revision);
+    }
+    expect(current.game!.phase).toBe("passed-out");
+    return { dealt, finished: current };
+  }
+
+  it("records a finished online hand once, with its source", async () => {
+    const id = await table();
+    const clients = await seatedFour(id);
+    const { finished } = await playPassedOut(id, clients);
+    expect(await results()).toEqual([{ deal_id: expect.any(String), source: "online" }]);
+    expect(finished.replay).toBeUndefined();
+  });
+
+  it("deals the second hand from an eligible archived deal and records its result against it", async () => {
+    const seeded = deal(createDeck().reverse());
+    const dealId = await new DealArchive(env.DB).record({ deal: seeded, dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    const id = await table();
+    const clients = await seatedFour(id);
+    const first = await playPassedOut(id, clients);
+    expect(first.dealt.replay).toBeUndefined();
+    expect(first.dealt.game!.initialDeal).not.toEqual(seeded);
+    const second = await playPassedOut(id, clients);
+    expect(second.dealt.replay?.dealId).toBe(dealId);
+    expect(second.dealt.game!.initialDeal).toEqual(seeded);
+    expect(second.dealt.game!.dealer).toBe("east");
+    const views: TableView[] = [];
+    try { for (;;) views.push(await clients[0]!.client.view()); } catch { /* drained */ }
+    expect(views.at(-1)!.replay).toMatchObject({ firstPlayedAt: 0, rescored: expect.any(Boolean) });
+    expect((await results()).filter((row) => row.deal_id === dealId)).toHaveLength(2);
+  });
+
+  it("deals and finishes hands normally when the archive tables are missing", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(async () => { warn.mockRestore(); await env.DB.exec(sql(archiveMigration)); });
+    await env.DB.exec("DROP TABLE deal_results; DROP TABLE archived_deals;");
+    const id = await table();
+    const clients = await seatedFour(id);
+    expect((await playPassedOut(id, clients)).finished.game!.phase).toBe("passed-out");
+    const second = await playPassedOut(id, clients);
+    expect(second.dealt.replay).toBeUndefined();
+    expect(second.finished.game!.phase).toBe("passed-out");
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("deal archive"), expect.anything());
+  });
+
+  it("never reads or writes the archive at a duplicate session table", async () => {
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "north", vulnerability: "None", actions: passedOut("north"), source: "solo", playedAt: 0 });
+    const created = await worker.fetch(new Request(`${origin}/api/sessions`, {
+      method: "POST", headers: { "CF-Connecting-IP": crypto.randomUUID(), "content-type": "application/json" },
+      body: JSON.stringify({ name: "Club", style: "SAYC", tableCount: 2, boardCount: 2, scoring: "matchpoints", listed: false })
+    }), config);
+    expect(created.status).toBe(201);
+    const { tableIds } = await created.json<{ tableIds: string[] }>();
+    const id = tableIds[0]!;
+    const clients = await seatedFour(id);
+    const first = await playPassedOut(id, clients);
+    const second = await playPassedOut(id, clients).catch(() => undefined);
+    expect(first.finished.replay).toBeUndefined();
+    expect(second?.dealt.replay).toBeUndefined();
+    expect(await results()).toEqual([{ deal_id: expect.any(String), source: "solo" }]);
   });
 });

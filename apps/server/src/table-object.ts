@@ -1,10 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, parseClientMessage } from "@contractplay/protocol";
 import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
-import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, createTable, nextWake, reduce, summaryOf, viewFor } from "@contractplay/table";
+import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, createTable, isReplayHand, nextWake, reduce, replayVulnerability, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
 import { AuthStore } from "./auth-store.js";
+import { DealArchive } from "./deal-archive.js";
 import type { Account } from "./auth-store.js";
 
 /** Only read on the internal TABLES binding; the Worker always removes public values. */
@@ -12,6 +13,7 @@ export const VERIFIED_ACCOUNT_HEADER = "X-ContractPlay-Account";
 export type VerifiedAccount = Pick<Account, "id" | "primaryPlayerId" | "displayName">;
 
 const STATE_KEY = "state";
+const isFinished = (state: TableState): boolean => state.game?.phase === "complete" || state.game?.phase === "passed-out";
 /** Most open sockets one table accepts that have completed `hello`. */
 export const MAX_SOCKETS_PER_TABLE = 32;
 /** Most open sockets one table holds that have not completed `hello` yet. */
@@ -295,6 +297,9 @@ export class TableObject extends DurableObject<Env> {
       const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, state.handNumber);
       if (!board) return { state, refused: "not-ready" };
       beforeReduce = { ...state, sessionBoard: { ...board, index: state.handNumber } };
+    } else if (event.type === "message" && event.message.type === "deal" && isReplayHand(state)) {
+      const replay = await this.pickReplay(state);
+      if (replay) beforeReduce = { ...state, replayBoard: { ...replay, index: state.handNumber } };
     }
     const out = reduce(beforeReduce, event, secureRandom);
     if (out.expired) {
@@ -304,6 +309,7 @@ export class TableObject extends DurableObject<Env> {
     if (out.state === state) return out;
     await this.save(out.state);
     await this.reportFinishedSessionHand(out.state);
+    if (!isFinished(state) && isFinished(out.state)) await this.archiveFinishedHand(out.state);
     const sessionStatus = await this.sessionStatus(out.state);
     for (const ws of this.ctx.getWebSockets()) {
       const me = identityOf(ws);
@@ -325,6 +331,24 @@ export class TableObject extends DurableObject<Env> {
     if (!state.sessionId) return undefined;
     try { return await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).status(state.id); }
     catch { return undefined; }
+  }
+
+  /** A replay for the next hand, or undefined when none is eligible or the archive fails; a hand is never blocked on the archive. */
+  private async pickReplay(state: TableState) {
+    try { return await new DealArchive(this.env.DB).pickReplay(Date.now(), replayVulnerability(state)); }
+    catch (error) { console.warn("table: deal archive unavailable; dealing a fresh hand", error); return undefined; }
+  }
+
+  /** Stores a just-finished hand's result; duplicate session tables never write to the archive. */
+  private async archiveFinishedHand(state: TableState): Promise<void> {
+    const game = state.game;
+    if (state.sessionId || !game) return;
+    try {
+      await new DealArchive(this.env.DB).record({
+        deal: game.initialDeal, dealer: game.dealer, vulnerability: game.vulnerability, actions: game.history.actions,
+        source: "online", playedAt: Date.now(), ...(state.replay ? { replayOf: state.replay.dealId } : {})
+      });
+    } catch (error) { console.warn("table: deal archive write failed; the hand is unaffected", error); }
   }
 
   private async reportFinishedSessionHand(state: TableState): Promise<void> {
