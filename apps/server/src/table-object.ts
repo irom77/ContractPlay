@@ -290,20 +290,21 @@ export class TableObject extends DurableObject<Env> {
   }
 
   /** Applies an event; on a change stores it, then sends every identified connection its own view. */
-  private async dispatch(event: TableEvent): Promise<Outcome> {
+  private async dispatch(event: TableEvent, retries = 3): Promise<Outcome> {
     const state = (await this.load())!;
     let beforeReduce = state;
     if (state.sessionId && event.type === "message" && event.message.type === "deal") {
       const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, state.handNumber);
       if (!board) return { state, refused: "not-ready" };
       beforeReduce = { ...state, sessionBoard: { ...board, index: state.handNumber } };
-    } else if (event.type === "message" && event.message.type === "deal" && isReplayHand(state) && canDeal(state, event.player)) {
+    } else if (event.type === "message" && event.message.type === "deal" && retries > 0 && isReplayHand(state) && canDeal(state, event.player)) {
       const replay = await this.pickReplay(state);
       // The archive read let other messages in; this event was judged against a state that is gone, so judge it again.
       // Identity, not revision: connect and disconnect change the state without bumping it, and every change goes through save.
       const fresh = await this.load();
       if (!fresh) return { state, expired: true };
-      if (fresh !== state) return this.dispatch(event);
+      // Bounded: a busy table cannot starve the deal; after the last retry it is dealt fresh, without a replay.
+      if (fresh !== state) return this.dispatch(event, retries - 1);
       if (replay) beforeReduce = { ...state, replayBoard: { ...replay, index: state.handNumber } };
     }
     const out = reduce(beforeReduce, event, secureRandom);

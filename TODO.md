@@ -38,3 +38,4 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [ ] Add abuse controls for online tables beyond the per-address limits (for example reporting, blocking, rate limits on table actions, and name moderation).
 - [ ] Add accessibility review, security controls, observability, backups, and release automation.
 - [ ] Complete cross-platform regression checks and release runbooks.
+- [ ] Harden POST /api/deals/results against D1 write abuse (global daily cap on new solo deals, IPv6 /64 rate key, or a lower limit).
