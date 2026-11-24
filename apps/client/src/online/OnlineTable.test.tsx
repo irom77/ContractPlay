@@ -2,7 +2,7 @@
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
+import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type HandRecord, type Seat } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { ClientMessage, PublicGame, RefusalReason, SeatInfo, TableView } from "@contractplay/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -676,6 +676,49 @@ describe("OnlineTable play", () => {
     expect(result.textContent).toContain(finished.score!.undertricks > 0 ? `Down ${finished.score!.undertricks}` : "Made");
     expect(result.textContent).toContain("Table score: NS 0 · EW 50");
     expect((within(result).getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  describe("a replayed deal", () => {
+    const firstPlayedAt = new Date(2026, 10, 12, 14, 32).getTime();
+    const notice = "Replayed deal · first played 12 Nov 2026, 14:32 · some of you may have played it before.";
+    const earlier = { multiplicity: 1, artificial: false, nsScore: 620, contract: "4S", declarer: "south" as const, tricks: 10 };
+    const record = (finished: GameState): HandRecord => ({
+      scoring: "IMP", event: "Replay", dealer: "north", vulnerability: "None", deal: finished.initialDeal, field: [earlier],
+      replay: { dealId: "d1", firstPlayedAt, original: earlier, rescored: false }
+    });
+
+    it("shows the notice during play", () => {
+      const service = setup();
+      const game = oneNoTrump();
+      service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "north", seats: seatedNorth, game: publicGame(game, ["north"]), replay: { firstPlayedAt } }));
+      expect(screen.getByText(notice)).toBeTruthy();
+    });
+
+    it("shows no field panel until the view carries the record", () => {
+      const service = setup();
+      const finished = playCards(oneNoTrump(), 52);
+      service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, game: publicGame(finished, []), revealed: finished.initialDeal, replay: { firstPlayedAt } }));
+      expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
+      expect(screen.queryByText("Against the field")).toBeNull();
+      expect(loadSoloData(service.storage).completedHands[0]!.record).toBeUndefined();
+    });
+
+    it("compares the result with the earlier ones from the viewer's side and saves the record with the hand", () => {
+      const service = setup();
+      const finished = playCards(oneNoTrump(), 52);
+      service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "east", seats: { ...seatedNorth, east: human("Bob") }, game: publicGame(finished, []), revealed: finished.initialDeal, replay: { firstPlayedAt, record: record(finished) } }));
+      const panel = within(screen.getByRole("region", { name: "Result against the field" }));
+      expect(panel.getByText(/IMPs? against a datum of EW/)).toBeTruthy();
+      expect(document.querySelector(".field-original")?.textContent).toBe("Original: 4♠ by S · 10 tricks · NS +620 · 12 Nov 2026");
+      expect(loadSoloData(service.storage).completedHands[0]!.record?.replay?.dealId).toBe("d1");
+    });
+
+    it("compares observers from North-South", () => {
+      const service = setup();
+      const finished = playCards(oneNoTrump(), 52);
+      service.push(tableView({ handNumber: 1, revision: 70, game: publicGame(finished, []), revealed: finished.initialDeal, replay: { firstPlayedAt, record: record(finished) } }));
+      expect(within(screen.getByRole("region", { name: "Result against the field" })).getByText(/against a datum of NS/)).toBeTruthy();
+    });
   });
 
   it("saves no seat for a finished hand watched without a seat", () => {

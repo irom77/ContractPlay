@@ -123,4 +123,38 @@ describe("FieldResult", () => {
     expect(panel().getByText("No field results for this board.")).toBeTruthy();
     expect(panel().getByRole("button", { name: "Next deal" })).toBeTruthy();
   });
+
+  describe("a replayed deal", () => {
+    const firstPlayedAt = Date.UTC(2026, 10, 12, 14, 32);
+    const original = row(620, { contract: "4S", declarer: "south", tricks: 10 });
+    const replayRecord = (rescored: boolean, rows: readonly TravellerRow[] = [original, row(420, { contract: "4S", declarer: "north", tricks: 10 })], first: TravellerRow = original): HandRecord => ({
+      ...record("IMP", rows),
+      event: "Replay",
+      replay: { dealId: "d1", firstPlayedAt, original: first, rescored }
+    });
+
+    it("shows the original result and an IMP headline against the datum", () => {
+      render(<FieldResult record={replayRecord(false)} nsScore={450} side="NS" />);
+      expect(document.querySelector(".field-original")?.textContent).toBe("Original: 4♠ by S · 10 tricks · NS +620 · 12 Nov 2026");
+      expect(panel().getByText(/IMPs? against a datum of NS/)).toBeTruthy();
+      expect(panel().queryByText("Earlier results rescored at your vulnerability")).toBeNull();
+    });
+
+    it("notes when the earlier results were rescored", () => {
+      render(<FieldResult record={replayRecord(true)} nsScore={450} side="NS" />);
+      expect(panel().getByText("Earlier results rescored at your vulnerability")).toBeTruthy();
+    });
+
+    it("says passed out for a passed-out original and still compares a passed-out hand", () => {
+      const passed = row(0, { contract: "Pass" });
+      render(<FieldResult record={replayRecord(false, [passed, original], passed)} nsScore={0} side="NS" showPoints={false} />);
+      expect(panel().getByText("Original: Passed out · 12 Nov 2026")).toBeTruthy();
+      expect(panel().getByText(/IMPs? against a datum of NS/)).toBeTruthy();
+    });
+
+    it("shows no original line for an ordinary board", () => {
+      render(<FieldResult record={record("IMP")} nsScore={420} side="NS" />);
+      expect(panel().queryByText(/^Original:/)).toBeNull();
+    });
+  });
 });

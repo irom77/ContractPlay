@@ -357,6 +357,8 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .field-result { display: grid; justify-items: center; gap: var(--u); width: 100%; }
 .field-result h3 { margin: 0; color: var(--gold); font: 800 var(--text-l)/1.2 system-ui, sans-serif; }
 .score-panel .field-result .field-label { color: var(--muted); font-size: var(--text-s); }
+.field-result .field-original { margin: 0; color: var(--ink); font-size: var(--text-s); font-weight: 600; }
+.replay-notice { margin: 0; color: var(--muted); font-size: var(--text-s); text-align: center; }
 .score-panel .field-result .field-headline { color: var(--ink); font-weight: 700; }
 .field-table { border-collapse: collapse; color: #d6e0d8; font-size: var(--text-s); font-variant-numeric: tabular-nums; }
 .field-table th { border-bottom: 1px solid var(--line); padding: 2px calc(1.2 * var(--u)); color: var(--muted); font-weight: 600; }

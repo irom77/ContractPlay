@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { cardId, emptyRubber, forcedCard, summarizeRubber, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
+import { cardId, emptyRubber, forcedCard, partnership, summarizeRubber, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type SavedHand, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
@@ -20,6 +20,8 @@ import { syncOnlineHands, uploadOnlineHand } from "./handHistory.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
 import { HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.js";
+import { FieldResult } from "../table/FieldResult.js";
+import { replayNotice } from "../replays.js";
 
 /** How long the host waits on a present player's turn before "Hand to a bot" is offered (the service's limit). */
 const IDLE_MS = 120_000;
@@ -126,7 +128,7 @@ function saveToHistory(storage: StorageLike, view: TableViewData, account?: Acco
     if (!hand) return;
     // Named after the viewer's dealt cards (South's for someone not seated).
     const name = createHandName(hand.game.initialDeal[view.yourSeat ?? "south"], new Set(data.completedHands.map(savedHandName)));
-    const saved: SavedHand = { ...hand, name, ...(view.yourSeat ? { playerSeat: view.yourSeat } : {}), ...(account ? { onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } } : {}) };
+    const saved: SavedHand = { ...hand, name, ...(view.yourSeat ? { playerSeat: view.yourSeat } : {}), ...(view.replay?.record ? { record: view.replay.record } : {}), ...(account ? { onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } } : {}) };
     saveSoloData(storage, { ...data, completedHands: retainHandHistory([saved, ...data.completedHands]) });
     return saved;
   } catch {
@@ -424,6 +426,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   }
 
   // A rubber table scores the rubber in play (or the one just won, until the next deal); older tables keep running totals.
+  const replayLine = view.replay ? <p className="replay-notice" role="status">{replayNotice(view.replay.firstPlayedAt, false)}</p> : null;
   const rubberSummary = view.scoring === "rubber" ? summarizeRubber(view.rubber ?? emptyRubber()) : undefined;
   const score = rubberSummary ? { ns: rubberSummary.totals.NS, ew: rubberSummary.totals.EW } : view.totals;
   const totals = `${rubberSummary ? "Rubber: " : ""}NS ${score.ns} · EW ${score.ew}`;
@@ -579,6 +582,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
                 <button className="primary-button" type="button" onClick={() => send({ type: "resume" })}>{mine.autoPlay ? "Stop auto play" : "Take my seat back"}</button>
               </DraggableBanner> : null}
               {view.claimRejected ? <p className="claim-notice" role="status">{claimRejectedText(view.claimRejected)}</p> : null}
+              {replayLine}
               {rubberDialog}
               {statusLine}
             </>}
@@ -629,6 +633,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             overlay={<>
               {resultClosed ? null : <section className={`score-panel result-panel ${rubberSummary ? "scorecard-panel" : ""}`} aria-label="Hand result">
                 <HandResultSummary game={game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />
+                {view.replay?.record ? <FieldResult record={view.replay.record} nsScore={game.score?.score ?? 0} showPoints={game.phase === "complete"} side={partnership(yourSeat ?? "north")} /> : null}
                 {view.session ? <p className="session-result-progress" role="status">{sessionLabel(view.session)}</p> : null}
                 {rubberSummary ? scorecard(resultActions) : <>
                   <p className="result-totals">Table score: {totals}</p>

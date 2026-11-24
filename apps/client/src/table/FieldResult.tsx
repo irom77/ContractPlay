@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { compareWithField, fieldMethod, type FieldComparison, type HandRecord, type TravellerRow } from "@contractplay/core";
+import { compareWithField, fieldMethod, parseContractText, type FieldComparison, type HandRecord, type TravellerRow } from "@contractplay/core";
+import { contractText } from "./labels.js";
 import { calculateDoubleDummyPar, serializeDdsDeal } from "../doubleDummy.js";
 
 export type FieldResultProps = Readonly<{
@@ -24,6 +25,17 @@ function headline(comparison: FieldComparison, side: "NS" | "EW"): string {
   if (comparison.method === "cross") return `${imps(comparison.cross.total)} across the field · ${comparison.cross.perComparison.toFixed(1)} per comparison`;
   const { percentage, points, top } = comparison.matchpoints;
   return `${percentage.toFixed(1)}% · ${comparison.matchpoints.neuberg ? points.toFixed(1) : points} of ${top} matchpoints${comparison.matchpoints.neuberg ? " (Neuberg)" : ""}`;
+}
+
+const originalDate = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+/** The first play of a replayed deal: its contract, declarer, tricks and North-South score, or that it was passed out. */
+function OriginalLine({ original, firstPlayedAt }: { original: TravellerRow; firstPlayedAt: number }) {
+  const contract = original.contract === undefined ? undefined : parseContractText(original.contract, original.declarer);
+  const date = originalDate.format(firstPlayedAt);
+  return <p className="field-original">{contract
+    ? <>Original: {contractText(contract)} by {seatLetter(contract.declarer)}{original.tricks !== undefined ? ` · ${original.tricks} tricks` : ""}{original.nsScore !== undefined ? ` · NS ${signed(original.nsScore)}` : ""} · {date}</>
+    : <>Original: Passed out · {date}</>}</p>;
 }
 
 const seatLetter = (seat: string): string => seat[0]!.toUpperCase();
@@ -65,6 +77,8 @@ export function FieldResult({ record, nsScore, side, label, showPoints = true, a
   return <section className="field-result" aria-label="Result against the field">
     <h3>Against the field</h3>
     {label ? <p className="field-label">{label}</p> : null}
+    {record.replay ? <OriginalLine original={record.replay.original} firstPlayedAt={record.replay.firstPlayedAt} /> : null}
+    {record.replay?.rescored ? <p className="field-label">Earlier results rescored at your vulnerability</p> : null}
     {parScore !== undefined ? <p className="field-par">Double-dummy par: NS {signed(parScore)}</p>
       : parLoading ? <p className="field-par" aria-live="polite">Calculating double-dummy par…</p>
         : parUnavailable ? <p className="field-par">Double-dummy par unavailable.</p> : null}
