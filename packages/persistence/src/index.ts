@@ -99,7 +99,8 @@ function isReplayInfo(value: unknown): boolean {
   return isRecord(value) && typeof value.dealId === "string" && Number.isFinite(value.firstPlayedAt) && typeof value.rescored === "boolean" && isTravellerRow(value.original);
 }
 
-function isHandRecord(value: unknown): value is HandRecord {
+/** Whether `value` is a well-formed hand record with a valid deal. */
+export function isHandRecord(value: unknown): value is HandRecord {
   return isRecord(value) && isSeat(value.dealer) && ["None", "NS", "EW", "Both"].includes(String(value.vulnerability)) && isDeal(value.deal) &&
     (value.board === undefined || typeof value.board === "string") &&
     (value.event === undefined || typeof value.event === "string") &&

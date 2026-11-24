@@ -1766,6 +1766,7 @@ describe("bridge table", () => {
 describe("solo deal replays", () => {
   afterEach(cleanup);
   afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem("contractplay.scoring", "single");
@@ -1912,6 +1913,62 @@ describe("solo deal replays", () => {
     expect(result.getByText(/IMPs? against a datum of/)).toBeTruthy();
     expect(result.getByRole("region", { name: "Scorecard" })).toBeTruthy();
   });
+
+  it("offers nothing for a hand finished at a manual table and then switched to bots", async () => {
+    const fetchMock = stubFetch();
+    storeCurrentGame(gameAfterPlays(51));
+    render(<App />);
+    await waitFor(() => expect(saved().currentGame!.phase).toBe("complete"), { timeout: 5000 });
+
+    setSetting("Opponents", "bots");
+    await act(async () => {});
+    expect(calls(fetchMock, "/api/deals/results")).toHaveLength(0);
+  }, 10_000);
+
+  it("deals a fresh hand when the replay request hangs for three seconds", async () => {
+    vi.useFakeTimers();
+    stubFetch(() => new Promise(() => {}));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
+    const first = saved().currentHandId;
+
+    chooseMenu("Deal a new hand");
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000); });
+    expect(saved().currentHandId).not.toBe(first);
+    expect(menuItem("Deal a new hand")!.disabled).toBe(false);
+    expect(screen.queryByText(notice)).toBeNull();
+  });
+
+  it("deals a fresh hand with no notice when the replay is malformed", async () => {
+    stubFetch(serving({ ...replayRecord(), dealer: "middle" }));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
+    const first = saved().currentHandId;
+
+    chooseMenu("Deal a new hand");
+    await waitFor(() => expect(saved().currentHandId).not.toBe(first));
+    expect(screen.queryByText(notice)).toBeNull();
+    expect(saved().currentRecord).toBeUndefined();
+  });
+
+  it("takes the rubber as it stands once the replay arrives", async () => {
+    window.localStorage.setItem("contractplay.scoring", "rubber");
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: "playing", currentGame: gameAfterPlays(51), completedHands: [], handsStarted: 1,
+      rubber: { hands: [], lastDealer: "west", activeHandId: "playing" }
+    });
+    let answer: (value: unknown) => void = () => {};
+    stubFetch(() => new Promise((resolve) => { answer = resolve; }));
+    render(<App />);
+
+    chooseMenu("Deal a new hand");
+    // The hand on the table finishes while the replay is being fetched, and is scored into the rubber.
+    await waitFor(() => expect(saved().rubber?.hands.map((hand) => hand.handId)).toEqual(["playing"]), { timeout: 5000 });
+    await act(async () => { answer({ status: 200, json: async () => ({ dealId: "deal-7", record: replayRecord() }) }); });
+
+    await waitFor(() => expect(saved().currentHandId).not.toBe("playing"));
+    expect(saved().rubber?.hands.map((hand) => hand.handId)).toEqual(["playing"]);
+  }, 10_000);
 
   it("keeps the notice after a reload in the middle of a replayed hand", () => {
     const record = replayRecord();

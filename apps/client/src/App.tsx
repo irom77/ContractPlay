@@ -146,6 +146,9 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const replayPendingRef = useRef(false);
   const currentHandIdRef = useRef(currentHandId);
   currentHandIdRef.current = currentHandId;
+  // The rubber as it stands, for a new hand dealt once a replay request has been answered.
+  const rubberRef = useRef(rubber);
+  rubberRef.current = rubber;
   // The hand whose end-of-hand scorecard the user closed.
   const [closedScorecard, setClosedScorecard] = useState<string | null>(null);
   const [bidHint, setBidHint] = useState<{ game: GameState; bid: Bid; reason: string }>();
@@ -451,18 +454,22 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     if (replayPendingRef.current) return;
     const count = handsStarted + 1;
     // Rubber deals rotate the dealer and take vulnerability from games won; a finished rubber starts a new one.
-    const next = scoring === "rubber" ? nextRubberDeal(rubber, dealer) : undefined;
+    const rubberDeal = () => scoring === "rubber" ? nextRubberDeal(rubberRef.current, dealer) : undefined;
     let replay: Awaited<ReturnType<typeof fetchReplay>>;
     if (count % 2 === 0) {
       const handBefore = currentHandIdRef.current;
       replayPendingRef.current = true;
       setReplayPending(true);
-      replay = await fetchReplay(next?.vulnerability);
+      const requested = rubberDeal()?.vulnerability;
+      replay = await fetchReplay(requested);
       replayPendingRef.current = false;
       setReplayPending(false);
       // Another hand was started meanwhile (an import, a board set): it stands.
       if (currentHandIdRef.current !== handBefore) return;
+      // A game won meanwhile changed the rubber's vulnerability, which the replay's field was scored at.
+      if (rubberDeal()?.vulnerability !== requested) replay = undefined;
     }
+    const next = rubberDeal();
     const id = createHandId();
     if (next) setRubber({ ...next.rubber, activeHandId: id });
     setHandsStarted(count);
