@@ -147,12 +147,25 @@ async function redeem(request: Request, env: Env): Promise<Response> {
     "Set-Cookie": sessionCookie(env, session, expiresAt), Location: `${publicOrigin(env)!.origin}/#/online` } });
 }
 
+/** Renames the session's own account; seats pick up the new name when the player next connects to a table. */
+async function rename(request: Request, env: Env): Promise<Response> {
+  const account = await authenticatedAccount(request, env);
+  if (!account) return Response.json({ error: "unauthenticated" }, { status: 401, headers: authHeaders });
+  let body: unknown;
+  try { body = await boundedBody(request); } catch { body = undefined; }
+  const displayName = body && typeof body === "object" && !Array.isArray(body)
+    ? cleanName((body as Record<string, unknown>).displayName, MAX_PLAYER_NAME) : undefined;
+  if (displayName === undefined) return Response.json({ error: "invalid-name" }, { status: 400, headers: authHeaders });
+  await new AuthStore(env.DB).updateDisplayName(account.id, displayName);
+  return Response.json({ playerId: account.primaryPlayerId, displayName }, { headers: authHeaders });
+}
+
 export async function authRoute(request: Request, env: Env): Promise<Response> {
   const path = new URL(request.url).pathname;
   if (!authRequestAllowed(request, env, path === "/api/auth/callback")) {
     return Response.json({ error: "forbidden" }, { status: 403, headers: authHeaders });
   }
-  const routes: Record<string, string> = { "/api/auth/magic-link": "POST", "/api/auth/callback": "GET", "/api/auth/me": "GET", "/api/auth/sign-out": "POST" };
+  const routes: Record<string, string> = { "/api/auth/magic-link": "POST", "/api/auth/callback": "GET", "/api/auth/me": "GET", "/api/auth/name": "POST", "/api/auth/sign-out": "POST" };
   if (!routes[path]) return Response.json({ error: "not-found" }, { status: 404, headers: authHeaders });
   if (request.method !== routes[path]) return new Response(null, { status: 405, headers: { ...authHeaders, Allow: routes[path] } });
   try {
@@ -163,6 +176,7 @@ export async function authRoute(request: Request, env: Env): Promise<Response> {
       return account ? Response.json({ playerId: account.primaryPlayerId, displayName: account.displayName }, { headers: authHeaders })
         : Response.json({ error: "unauthenticated" }, { status: 401, headers: authHeaders });
     }
+    if (path === "/api/auth/name") return await rename(request, env);
     const session = sessionCredential(request, env);
     if (session) await new AuthStore(env.DB).revokeSession(await hash(session), Date.now());
     return new Response(null, { status: 204, headers: { ...authHeaders, "Set-Cookie": sessionCookie(env, "", 0) } });

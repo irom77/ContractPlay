@@ -19,6 +19,19 @@ export async function currentAccount(): Promise<AccountSession | null> {
   return { playerId, displayName };
 }
 
+/** Renames the signed-in account and returns the session with the server's cleaned name. */
+export async function updateDisplayName(displayName: string): Promise<AccountSession> {
+  const response = await fetch("/api/auth/name", {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName })
+  });
+  if (!response.ok) throw new Error("Rename failed");
+  const data: unknown = await response.json();
+  const { playerId, displayName: saved } = (data ?? {}) as Record<string, unknown>;
+  if (typeof playerId !== "string" || typeof saved !== "string") throw new Error("Invalid session");
+  return { playerId, displayName: saved };
+}
+
 export async function signOut(): Promise<void> {
   const response = await fetch("/api/auth/sign-out", { method: "POST", credentials: "same-origin" });
   if (!response.ok) throw new Error("Sign-out failed");

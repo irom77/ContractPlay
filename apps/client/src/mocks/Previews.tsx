@@ -11,7 +11,8 @@ import { OnlineTable } from "../online/OnlineTable.js";
 import { previewScreens, type PreviewData } from "./scenarios.js";
 
 const previewAccount: AccountSession = { playerId: "preview-player", displayName: "Alex" };
-const previewAuth = { currentAccount: async () => previewAccount, requestMagicLink: async () => {}, signOut: async () => {}, syncHistory: async () => {} };
+const previewAuth = { currentAccount: async () => previewAccount, requestMagicLink: async () => {}, signOut: async () => {}, syncHistory: async () => {},
+  updateDisplayName: async (displayName: string) => ({ ...previewAccount, displayName }) };
 
 /** Keeps each preview's name, hints setting, and saved hands away from the real device storage. */
 function memoryStorage(entries: Record<string, string> = {}): StorageLike {

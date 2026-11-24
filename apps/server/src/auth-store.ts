@@ -45,6 +45,10 @@ export class AuthStore {
     return (await this.findAccountByEmail(normalized))!;
   }
 
+  async updateDisplayName(accountId: string, displayName: string): Promise<void> {
+    await this.db.prepare("UPDATE accounts SET display_name = ? WHERE id = ?").bind(displayName, accountId).run();
+  }
+
   playerIdsForAccount(accountId: string): Promise<string[]> {
     return this.db.prepare("SELECT player_id FROM account_player_identities WHERE account_id = ? ORDER BY player_id")
       .bind(accountId).all<{ player_id: string }>().then(({ results }) => results.map((row) => row.player_id));

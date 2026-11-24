@@ -42,6 +42,39 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("Lobby", () => {
+  it("changes the account name from the lobby and uses it for new table names", async () => {
+    const updateDisplayName = vi.fn(async (name: string) => ({ playerId: "account-1", displayName: name.trim() }));
+    setup({ auth: { ...signedIn, updateDisplayName } });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Change name" }));
+    const input = screen.getByLabelText("New name") as HTMLInputElement;
+    expect(input.value).toBe("Bob");
+    expect(input.maxLength).toBe(20);
+    await user.clear(input);
+    await user.type(input, " Irek ");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    expect(updateDisplayName).toHaveBeenCalledWith("Irek");
+    expect(await screen.findByText("Signed in as Irek")).toBeTruthy();
+    expect(screen.queryByLabelText("New name")).toBeNull();
+    expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Irek's table");
+  });
+
+  it("keeps the old name and reports a failed rename; Cancel closes the form", async () => {
+    const updateDisplayName = vi.fn(async () => { throw new Error("nope"); });
+    setup({ auth: { ...signedIn, updateDisplayName } });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Change name" }));
+    await user.clear(screen.getByLabelText("New name"));
+    expect((screen.getByRole("button", { name: "Save name" }) as HTMLButtonElement).disabled).toBe(true);
+    await user.type(screen.getByLabelText("New name"), "Irek");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Couldn't change your name. Try again.");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("New name")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Signed in as Bob")).toBeTruthy();
+  });
+
   it("requires sign-in before showing tables or lobby actions", async () => {
     const { storage, listTables } = setup({ named: false, auth: { ...signedIn, currentAccount: async () => null } });
     expect(await screen.findByLabelText("Email sign-in")).toBeTruthy();
@@ -166,7 +199,7 @@ describe("Lobby", () => {
   it("shows the authenticated display name in the lobby", async () => {
     setup();
     expect(await screen.findByText("Signed in as Bob")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Change name" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Change name" })).toBeTruthy();
   });
 
   it("refreshes every five seconds without stacking requests and stops on unmount", async () => {

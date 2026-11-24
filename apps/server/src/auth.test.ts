@@ -127,6 +127,25 @@ describe("authentication routes", () => {
     expect((await me(second)).status).toBe(200);
   });
 
+  it("renames the signed-in account only, validating the name and requiring a same-origin session", async () => {
+    await requestLink(); const session = cookie(await callback());
+    const rename = (body: unknown, headers: Record<string, string> = { Cookie: session, Origin: origin }) =>
+      call("/api/auth/name", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    const response = await rename({ displayName: "  Irek \u0007 R  " });
+    expect(response.status).toBe(200);
+    const account = await store.findAccountByEmail("ann@example.com");
+    expect(await response.json()).toEqual({ playerId: account!.primaryPlayerId, displayName: "Irek R" });
+    expect(account!.displayName).toBe("Irek R");
+    expect(await (await me(session)).json()).toMatchObject({ displayName: "Irek R" });
+    for (const bad of [{ displayName: "" }, { displayName: "x".repeat(21) }, { displayName: 7 }, {}]) {
+      expect((await rename(bad)).status).toBe(400);
+    }
+    expect((await rename({ displayName: "Mallory" }, { Cookie: session })).status).toBe(403);
+    expect((await rename({ displayName: "Mallory" }, { Origin: origin })).status).toBe(401);
+    expect((await call("/api/auth/name", { headers: { Cookie: session } })).status).toBe(405);
+    expect((await store.findAccountByEmail("ann@example.com"))!.displayName).toBe("Irek R");
+  });
+
   it("checks configured origin and CSRF headers but permits email navigation", async () => {
     expect((await call("/api/auth/magic-link", { method: "POST", headers: { Origin: "https://evil.example" }, body: "{}" })).status).toBe(403);
     expect((await call("/api/auth/sign-out", { method: "POST" })).status).toBe(403);

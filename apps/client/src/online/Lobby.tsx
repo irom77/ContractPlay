@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { StorageLike } from "@contractplay/persistence";
-import type { SeatInfo, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
+import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
-import { currentAccount, requestMagicLink, signOut, type AccountSession } from "./auth.js";
+import { currentAccount, requestMagicLink, signOut, updateDisplayName, type AccountSession } from "./auth.js";
 
 import { syncOnlineHands } from "./handHistory.js";
 
@@ -38,7 +38,7 @@ export type LobbyProps = {
   /** Opens the device's recent hands, solo and online alike. */
   onRecentHands(): void;
   api?: LobbyApi;
-  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; syncHistory?: typeof syncOnlineHands };
+  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands };
 };
 
 const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession };
@@ -53,7 +53,7 @@ function seatLabel(seat: SeatInfo): string {
   return seat.kind === "human" ? seat.name : seat.kind === "bot" ? "Bot" : "Open";
 }
 
-const defaultAuth = { currentAccount, requestMagicLink, signOut, syncHistory: syncOnlineHands };
+const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands };
 
 export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, api = defaultApi, auth = defaultAuth }: LobbyProps) {
   const [identity] = useState<Identity | undefined>(() => loadIdentity(storage));
@@ -79,7 +79,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, ap
     {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
     <LobbyTables identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
-      account={account} onSignOut={() => {
+      account={account} onRename={async (name) => setAccount(await (auth.updateDisplayName ?? updateDisplayName)(name))} onSignOut={() => {
         void auth.signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
       }} />
   </>;
@@ -136,9 +136,34 @@ export function NameGate({ storage, initialName = "", onSaved, secondary, onSign
   );
 }
 
-function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, account, onSignOut }: {
+/** The lobby's account name: shown with a Change name button that opens an inline rename form. */
+function AccountName({ name, onRename }: { name: string; onRename(name: string): Promise<void> }) {
+  const [draft, setDraft] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
+  const close = () => { setDraft(undefined); setError(false); };
+  async function save() {
+    const next = draft?.trim() ?? "";
+    if (next === "" || saving) return;
+    setSaving(true); setError(false);
+    try { await onRename(next); close(); }
+    catch { setError(true); }
+    finally { setSaving(false); }
+  }
+  if (draft === undefined) {
+    return <><span>Signed in as {name}</span><button className="secondary-button" type="button" onClick={() => setDraft(name)}>Change name</button></>;
+  }
+  return <form className="table-tools-row" aria-label="Change name" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+    <input aria-label="New name" value={draft} maxLength={MAX_PLAYER_NAME} autoFocus onChange={(event) => setDraft(event.target.value)} />
+    <button className="primary-button" type="submit" disabled={saving || draft.trim() === ""}>Save name</button>
+    <button className="secondary-button" type="button" onClick={close}>Cancel</button>
+    {error ? <span className="error-message" role="alert">Couldn't change your name. Try again.</span> : null}
+  </form>;
+}
+
+function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, account, onRename, onSignOut }: {
   identity: { name: string }; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void;
-  account: AccountSession; onSignOut(): void;
+  account: AccountSession; onRename(name: string): Promise<void>; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
   const [listError, setListError] = useState(false);
@@ -254,7 +279,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
-            <span>Signed in as {account.displayName}</span><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
+            <AccountName name={account.displayName} onRename={onRename} /><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
             <button className="secondary-button" type="button" onClick={onSolo}>Solo play</button>
           </span>

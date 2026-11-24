@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Change your name in the lobby.** Signed-in players can choose **Change name** next to "Signed in as" to rename their account. The new name is used on every device, for new table names, and at a table from the next time you open or rejoin it. Previously an account kept the name it was created with: the browser's saved guest name, or "Player". On narrow screens the lobby's account buttons now wrap above the tables instead of running off the edge.
 - **Open the production site on sign-in.** The bare online deployment URL now opens the account-gated lobby, so signed-out visitors see the email sign-in form instead of a previously saved solo hand. Solo play remains available from the lobby after sign-in.
 - **Configure production email sign-in delivery.** The ContractPlay Worker uses the verified Resend domain `romaniuk.us` and its secret API key to send links from `signin@romaniuk.us`. Live delivery and sign-in have been verified; cross-device recovery still needs verification.
 - **Require an account to browse the online lobby.** Signed-out visitors now see only the email sign-in form; open tables, table creation, recent online hands, and lobby shortcuts appear after the session is restored. Direct table links still allow guest play, and solo play remains account-free.

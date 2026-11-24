@@ -25,6 +25,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [x] Provision the sign-in D1 database and apply production migrations.
 - [x] Verify the Resend sending domain and configure the production Worker with `RESEND_API_KEY` and `signin@romaniuk.us`.
 - [ ] Verify cross-device seat recovery and archive sync. Live email delivery and sign-in have been confirmed. Follow [the deployment runbook](docs/platform-delivery.md#email-sign-in-prerequisites).
+- [x] Let signed-in players change their account name from the lobby.
 - [ ] Add permissions (authorization) beyond the current host and seated-player rules.
 - [ ] Protect `/admin` and its API with authorization before public production use; email sign-in does not restrict them.
 - [ ] Add invitations to a table.
