@@ -48,6 +48,7 @@ import { DraggableBanner } from "./table/DraggableBanner.js";
 import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
+import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands } from "./online/handHistory.js";
@@ -139,6 +140,12 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const [boardSet, setBoardSet] = useState<BoardSet | undefined>(() => soloData.boardSet);
   const [boardSetLibrary, setBoardSetLibrary] = useState<readonly BoardSetLibraryEntry[]>(() => soloData.boardSetLibrary ?? []);
   const [currentRecord, setCurrentRecord] = useState<HandRecord | undefined>(() => soloData.currentRecord);
+  // New hands dealt so far: every second one asks for an archived deal to replay, and New hand waits for the answer.
+  const [handsStarted, setHandsStarted] = useState(() => soloData.handsStarted ?? 0);
+  const [replayPending, setReplayPending] = useState(false);
+  const replayPendingRef = useRef(false);
+  const currentHandIdRef = useRef(currentHandId);
+  currentHandIdRef.current = currentHandId;
   // The hand whose end-of-hand scorecard the user closed.
   const [closedScorecard, setClosedScorecard] = useState<string | null>(null);
   const [bidHint, setBidHint] = useState<{ game: GameState; bid: Bid; reason: string }>();
@@ -251,12 +258,16 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       rubber,
       ...(boardSet ? { boardSet } : {}),
       ...(boardSetLibrary.length ? { boardSetLibrary } : {}),
-      ...(currentRecord ? { currentRecord } : {})
+      ...(currentRecord ? { currentRecord } : {}),
+      ...(handsStarted ? { handsStarted } : {})
     };
     latestSoloData.current = nextData;
     saveSoloData(persistence.storage, nextData);
     setSoloData(nextData);
-  }, [game, currentHandId, currentPbnMetadata, rubber, boardSet, boardSetLibrary, currentRecord]);
+  }, [game, currentHandId, currentPbnMetadata, rubber, boardSet, boardSetLibrary, currentRecord, handsStarted]);
+
+  // Hands played against bots on dealt or replayed deals go to the archive; imported, board-set and repeated ones do not.
+  useSoloResultPost(currentHandId, game, !frozen && playAgainstBots && !currentPbnMetadata && !boardSet && (!currentRecord || !!currentRecord.replay), currentRecord?.replay?.dealId);
 
   // A rubber hand is scored when it ends, and loses its score again if it is taken back from the end.
   useEffect(() => {
@@ -436,22 +447,34 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       ? shownGame.currentTrick
       : lastTrickOpen ? shownGame?.completedTricks.at(-1) ?? [] : [];
 
-  function startHand() {
-    const id = createHandId();
-    let handDealer = dealer;
-    let handVulnerability = vulnerability;
-    if (scoring === "rubber") {
-      // Rubber deals rotate the dealer and take vulnerability from games won; a finished rubber starts a new one.
-      const next = nextRubberDeal(rubber, dealer);
-      setRubber({ ...next.rubber, activeHandId: id });
-      handDealer = next.dealer;
-      handVulnerability = next.vulnerability;
+  async function startHand() {
+    if (replayPendingRef.current) return;
+    const count = handsStarted + 1;
+    // Rubber deals rotate the dealer and take vulnerability from games won; a finished rubber starts a new one.
+    const next = scoring === "rubber" ? nextRubberDeal(rubber, dealer) : undefined;
+    let replay: Awaited<ReturnType<typeof fetchReplay>>;
+    if (count % 2 === 0) {
+      const handBefore = currentHandIdRef.current;
+      replayPendingRef.current = true;
+      setReplayPending(true);
+      replay = await fetchReplay(next?.vulnerability);
+      replayPendingRef.current = false;
+      setReplayPending(false);
+      // Another hand was started meanwhile (an import, a board set): it stands.
+      if (currentHandIdRef.current !== handBefore) return;
     }
+    const id = createHandId();
+    if (next) setRubber({ ...next.rubber, activeHandId: id });
+    setHandsStarted(count);
     setCurrentHandId(id);
-    setGame(createGameState({ deal: deal(), dealer: handDealer, vulnerability: handVulnerability }));
+    setGame(createGameState({
+      deal: replay?.record.deal ?? deal(),
+      dealer: replay?.record.dealer ?? next?.dealer ?? dealer,
+      vulnerability: next?.vulnerability ?? replay?.record.vulnerability ?? vulnerability
+    }));
     setCurrentPbnMetadata(undefined);
     setBoardSet(undefined);
-    setCurrentRecord(undefined);
+    setCurrentRecord(replay?.record);
     setAuctionShown(false);
     setReviewHandId(undefined);
     setOriginal(undefined);
@@ -844,7 +867,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
         <section className="empty-table" aria-label="New deal">
           <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span><span className="table-tools-row">{version}{fullscreenButton}</span></div>
           <div className="setup-controls">{dealSettings}</div>
-          <button className="primary-button" onClick={startHand}>Start a new hand</button>
+          <button className="primary-button" disabled={replayPending} onClick={startHand}>Start a new hand</button>
           {online ? <button className="secondary-button" type="button" onClick={goOnline}>Play online</button> : null}
           {soloData.completedHands.length || boardSetLibrary.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
           {pbnImportForm}
@@ -902,7 +925,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
         ? { id: "deal", label: "Next board", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and play the next" } : {}), onSelect: advanceBoardSet }
         : { id: "deal", label: "Finish board set", title: "End the board set; this hand stays on the table", onSelect: finishBoardSet }
     ] : [
-      { id: "deal", label: "Deal a new hand", ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
+      { id: "deal", label: "Deal a new hand", disabled: replayPending, ...(handLive ? { tone: "danger" as const, title: "Abandon this hand and deal a new one" } : {}), onSelect: startHand }
     ])
   ];
   const tableTools = <>
@@ -914,7 +937,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   // online tables; Close puts it away to look at the cards (Scores in the menu brings it back).
   const scorecardClosed = !!currentHandId && closedScorecard === currentHandId;
   const scorecardActions = <>
-    <button className="primary-button" type="button" autoFocus onClick={startHand}>{rubberSummary.winner ? "Play another rubber" : "Next deal"}</button>
+    <button className="primary-button" type="button" autoFocus disabled={replayPending} onClick={startHand}>{rubberSummary.winner ? "Play another rubber" : "Next deal"}</button>
     {rubberSummary.winner && online ? <button className="secondary-button" type="button" onClick={goOnline}>Online tables</button> : null}
     <button className="secondary-button" type="button" onClick={() => setClosedScorecard(currentHandId)}>Close</button>
   </>;
@@ -926,7 +949,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
     ? boardSet.position + 1 < boardSet.records.length
       ? <button className="primary-button" type="button" onClick={advanceBoardSet}>Next board</button>
       : <button className="primary-button" type="button" onClick={finishBoardSet}>Finish board set</button>
-    : <button className="primary-button" type="button" onClick={startHand}>Next deal</button>;
+    : <button className="primary-button" type="button" disabled={replayPending} onClick={startHand}>Next deal</button>;
   const handOver = phase === "complete" || phase === "passed-out";
   const fieldResult = shownRecord ? <FieldResult
     record={shownRecord}
@@ -938,6 +961,8 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       {handOver && replayOriginal(shownRecord) ? <button className="secondary-button" type="button" onClick={() => viewOriginal(shownRecord)}>View original play</button> : null}
       {nextButton}
     </>} /> : null;
+  // A replayed rubber hand is still set against the deal's earlier results, above the scorecard.
+  const replayResult = inRubber && currentRecord?.replay ? <FieldResult record={currentRecord} nsScore={duplicateScore} showPoints={phase === "complete"} side={partnership(playAgainstBots ? userSeat : "south")} /> : null;
   // The original table's result is marked as such, with the way back to the player's own result on it.
   const originalTag = original ? <p className="original-tag">At the original table</p> : null;
   const backButton = original ? <button className="primary-button" type="button" onClick={backToResult}>{selectedHand ? "Back to the review" : "Back to your result"}</button> : null;
@@ -947,13 +972,13 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       <h2>{contractText(contract)} by {seatNames[contract.declarer]}</h2>
       <ContractOutcome score={shownGame.score} />
       {shownGame.claim ? <p className="claim-line">{claimText(shownGame.claim, contract.declarer, remainingTricks(shownGame))}</p> : null}
-      {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} actions={scorecardActions} /> : fieldResult ?? <>
+      {inRubber ? <>{replayResult}<Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} actions={scorecardActions} /></> : fieldResult ?? <>
         <p className="hand-points-line">{`${duplicateScore >= 0 ? "NS" : "EW"} +${Math.abs(duplicateScore)}`}</p>
         {nextButton}{backButton}
       </>}
     </section> : null}
     {phase === "passed-out" && !(inRubber && scorecardClosed) ? <section className={`score-panel ${inRubber ? "scorecard-panel" : ""}`} aria-label="Hand result">{originalTag}<h2>Passed out</h2>
-      {inRubber ? <Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} passedOut actions={scorecardActions} />
+      {inRubber ? <>{replayResult}<Scorecard summary={rubberSummary} hands={cardHands} names={sideNames} passedOut actions={scorecardActions} /></>
         : fieldResult ?? <>{nextButton}{backButton}</>}
     </section> : null}
 
@@ -980,6 +1005,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       <button className="primary-button" type="button" onClick={() => setBotsFinishHandId(undefined)}>Stop auto play</button>
     </DraggableBanner> : null}
 
+    {!isReviewing && currentRecord?.replay ? <p className="replay-notice" role="status">{replayNotice(currentRecord.replay.firstPlayedAt, true)}</p> : null}
     {message ? <p className="error-message" role="alert">{message}</p> : null}
   </>;
 

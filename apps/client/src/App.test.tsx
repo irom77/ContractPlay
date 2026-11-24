@@ -10,6 +10,7 @@ import { handName } from "./handNames.js";
 import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 import App from "./App.js";
 import { suitSymbols } from "./table/labels.js";
+import { replayNotice } from "./replays.js";
 
 function completedGame() {
   let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
@@ -100,6 +101,8 @@ describe("bridge table", () => {
   afterEach(() => vi.unstubAllGlobals());
   afterEach(() => vi.useRealTimers());
   beforeEach(() => window.localStorage.clear());
+  // No deal archive here: every second new hand's replay request fails at once and a fresh hand is dealt.
+  beforeEach(() => vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline"))));
 
   it("keeps online archives separate from the solo completion limit", () => {
     const game = completedGame();
@@ -1110,6 +1113,8 @@ describe("bridge table", () => {
     fireEvent.click(menuToggle());
     setSetting("Dealer", "west");
     fireEvent.click(screen.getByRole("button", { name: "Deal a new hand" }));
+    // The second new hand first asks for a replay; it is dealt once that request fails.
+    await act(async () => {});
 
     await act(async () => { await vi.runAllTimersAsync(); });
     const saved = JSON.parse(window.localStorage.getItem("contractplay.solo")!);
@@ -1753,6 +1758,169 @@ describe("bridge table", () => {
     expect(saved.currentGame.initialDeal).toEqual(finished.initialDeal);
     expect(saved.currentGame.history.actions).toEqual([]);
     expect(saved.currentRecord).toMatchObject({ scoring: "MP", field: [{ nsScore: finished.score!.score, multiplicity: 1, artificial: false }] });
+    // Playing a saved deal again is not a new hand: it does not count towards replays.
+    expect(saved.handsStarted).toBeUndefined();
+  });
+});
+
+describe("solo deal replays", () => {
+  afterEach(cleanup);
+  afterEach(() => vi.unstubAllGlobals());
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.localStorage.setItem("contractplay.scoring", "single");
+  });
+
+  const firstPlayedAt = new Date(2026, 10, 12, 14, 32).getTime();
+  const notice = replayNotice(firstPlayedAt, true);
+  const replayRecord = () => ({
+    event: "Replay", scoring: "IMP", dealer: "south", vulnerability: "EW", deal: deal(), original: [],
+    field: [{ nsScore: 620, contract: "4S", declarer: "south", tricks: 10, multiplicity: 1, artificial: false }],
+    replay: { dealId: "deal-7", firstPlayedAt, original: { nsScore: 620, contract: "4S", declarer: "south", tricks: 10, multiplicity: 1, artificial: false }, rescored: false }
+  } as const);
+  type Answer = () => Promise<unknown>;
+  /** Stubs fetch: replay requests get `replay` (none when undefined), result posts succeed. */
+  function stubFetch(replay: Answer = async () => ({ status: 204 })) {
+    const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>((url) => url.startsWith("/api/deals/replay") ? replay() : Promise.resolve({ status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+  const serving = (record: object) => async () => ({ status: 200, json: async () => ({ dealId: "deal-7", record }) });
+  const calls = (fetchMock: ReturnType<typeof stubFetch>, path: string) => fetchMock.mock.calls.filter(([url]) => url.startsWith(path));
+  const saved = () => loadSoloData(window.localStorage);
+
+  it("replays an archived deal on every second new hand and shows the notice for that hand", async () => {
+    const record = replayRecord();
+    const fetchMock = stubFetch(serving(record));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
+    expect(calls(fetchMock, "/api/deals/replay")).toHaveLength(0);
+    expect(screen.queryByText(notice)).toBeNull();
+
+    chooseMenu("Deal a new hand");
+    expect(await screen.findByText(notice)).toBeTruthy();
+    expect(calls(fetchMock, "/api/deals/replay").map(([url]) => url)).toEqual(["/api/deals/replay"]);
+    expect(saved().currentGame).toMatchObject({ initialDeal: record.deal, dealer: "south", vulnerability: "EW" });
+    expect(saved().currentRecord?.replay?.dealId).toBe("deal-7");
+
+    chooseMenu("Deal a new hand");
+    expect(calls(fetchMock, "/api/deals/replay")).toHaveLength(1);
+    expect(screen.queryByText(notice)).toBeNull();
+    expect(saved().currentRecord).toBeUndefined();
+    expect(saved().handsStarted).toBe(3);
+  });
+
+  it("deals a fresh hand with no notice or error when the replay request fails", async () => {
+    const fetchMock = stubFetch(() => Promise.reject(new TypeError("Failed to fetch")));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
+    const first = saved().currentHandId;
+
+    chooseMenu("Deal a new hand");
+    await waitFor(() => expect(saved().currentHandId).not.toBe(first));
+    expect(calls(fetchMock, "/api/deals/replay")).toHaveLength(1);
+    expect(screen.queryByText(notice)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(saved().currentRecord).toBeUndefined();
+  });
+
+  it("starts one hand when New hand is pressed twice while the replay is being fetched", async () => {
+    let answer: (value: unknown) => void = () => {};
+    const fetchMock = stubFetch(() => new Promise((resolve) => { answer = resolve; }));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
+
+    chooseMenu("Deal a new hand");
+    await waitFor(() => expect(menuItem("Deal a new hand")!.disabled).toBe(true));
+    chooseMenu("Deal a new hand");
+    await act(async () => { answer({ status: 200, json: async () => ({ dealId: "deal-7", record: replayRecord() }) }); });
+
+    expect(await screen.findByText(notice)).toBeTruthy();
+    expect(calls(fetchMock, "/api/deals/replay")).toHaveLength(1);
+    expect(saved().handsStarted).toBe(2);
+    expect(menuItem("Deal a new hand")!.disabled).toBe(false);
+  });
+
+  it("asks for a replay at the rubber's vulnerability in rubber scoring and keeps it", async () => {
+    window.localStorage.setItem("contractplay.scoring", "rubber");
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: null, currentGame: null, completedHands: [], handsStarted: 1,
+      rubber: { hands: [{ handId: "h1", below: { NS: 120, EW: 0 }, above: { NS: 0, EW: 0 } }], lastDealer: "north" }
+    });
+    const record = replayRecord();
+    const fetchMock = stubFetch(serving(record));
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
+    expect(await screen.findByText(notice)).toBeTruthy();
+    expect(calls(fetchMock, "/api/deals/replay").map(([url]) => url)).toEqual(["/api/deals/replay?vulnerability=NS"]);
+    expect(saved().currentGame).toMatchObject({ initialDeal: record.deal, dealer: "south", vulnerability: "NS" });
+    expect(saved().rubber?.activeHandId).toBe(saved().currentHandId);
+  });
+
+  it("offers a hand finished against bots to the archive once", async () => {
+    const fetchMock = stubFetch();
+    const game = gameAfterPlays(51);
+    storeCurrentGame(game);
+    render(<App />);
+    setSetting("Opponents", "bots");
+
+    await waitFor(() => expect(calls(fetchMock, "/api/deals/results")).toHaveLength(1), { timeout: 5000 });
+    const finished = saved().currentGame!;
+    expect(finished.phase).toBe("complete");
+    setSetting("Your seat", "east");
+    await act(async () => {});
+    const posts = calls(fetchMock, "/api/deals/results");
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(String(posts[0]![1]!.body))).toEqual({
+      deal: game.initialDeal, dealer: "north", vulnerability: "None", actions: JSON.parse(JSON.stringify(finished.history.actions))
+    });
+  }, 10_000);
+
+  it("names the replayed deal when it offers a finished replay", async () => {
+    const fetchMock = stubFetch();
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: "replay-hand", currentGame: gameAfterPlays(51), completedHands: [], currentRecord: replayRecord()
+    });
+    render(<App />);
+    setSetting("Opponents", "bots");
+
+    await waitFor(() => expect(calls(fetchMock, "/api/deals/results")).toHaveLength(1), { timeout: 5000 });
+    expect(JSON.parse(String(calls(fetchMock, "/api/deals/results")[0]![1]!.body)).replayOf).toBe("deal-7");
+  }, 10_000);
+
+  it("offers nothing from a manual table", async () => {
+    const fetchMock = stubFetch();
+    storeCurrentGame(gameAfterPlays(51));
+    render(<App />);
+
+    await waitFor(() => expect(saved().currentGame!.phase).toBe("complete"), { timeout: 5000 });
+    await act(async () => {});
+    expect(calls(fetchMock, "/api/deals/results")).toHaveLength(0);
+  }, 10_000);
+
+  it("sets a finished replayed rubber hand against the deal's earlier results above the scorecard", () => {
+    window.localStorage.setItem("contractplay.scoring", "rubber");
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: "replay-hand", currentGame: completedGame(), completedHands: [], currentRecord: replayRecord(),
+      rubber: { hands: [], lastDealer: "north", activeHandId: "replay-hand" }
+    });
+    render(<App />);
+    const result = within(screen.getByRole("region", { name: "Hand result" }));
+    expect(result.getByText(/^Original: /)).toBeTruthy();
+    expect(result.getByText(/IMPs? against a datum of/)).toBeTruthy();
+    expect(result.getByRole("region", { name: "Scorecard" })).toBeTruthy();
+  });
+
+  it("keeps the notice after a reload in the middle of a replayed hand", () => {
+    const record = replayRecord();
+    saveSoloData(window.localStorage, {
+      version: 1, currentHandId: "replay-hand", currentGame: createGameState({ deal: record.deal, dealer: "south", vulnerability: "EW" }),
+      completedHands: [], currentRecord: record, handsStarted: 2
+    });
+    render(<App />);
+    expect(screen.getByText(notice)).toBeTruthy();
   });
 });
 

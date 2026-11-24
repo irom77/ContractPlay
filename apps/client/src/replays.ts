@@ -1,4 +1,5 @@
-import type { Deal, GameAction, HandRecord, Seat, Vulnerability } from "@contractplay/core";
+import { useEffect, useRef } from "react";
+import type { Deal, GameAction, GameState, HandRecord, Seat, Vulnerability } from "@contractplay/core";
 
 /** A replayable archived deal: its archive id and the record of how it was played before. */
 export type ReplayDeal = { dealId: string; record: HandRecord };
@@ -33,4 +34,22 @@ export async function postResult(input: { deal: Deal; dealer: Seat; vulnerabilit
   } catch {
     // Not archived.
   }
+}
+
+const isOver = (game: GameState | undefined): game is GameState => game?.phase === "complete" || game?.phase === "passed-out";
+
+/**
+ * Offers each eligible solo hand to the archive once it ends, at most once per hand id. A hand already over when the
+ * app opens was offered before the reload, so it is not offered again.
+ */
+export function useSoloResultPost(handId: string, game: GameState | undefined, eligible: boolean, replayOf: string | undefined): void {
+  const posted = useRef(isOver(game) ? handId : undefined);
+  useEffect(() => {
+    if (!eligible || !handId || !isOver(game) || posted.current === handId) return;
+    posted.current = handId;
+    void postResult({
+      deal: game.initialDeal, dealer: game.dealer, vulnerability: game.vulnerability,
+      actions: game.history.actions.slice(0, game.history.cursor), ...(replayOf ? { replayOf } : {})
+    });
+  }, [handId, game, eligible, replayOf]);
 }

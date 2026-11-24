@@ -96,6 +96,17 @@ describe("local solo store", () => {
     expect(loadSoloData(storage).completedHands[0]?.playerSeat).toBe("east");
   });
 
+  it("keeps the count of new solo hands started and drops a negative or fractional one", () => {
+    const storage = new MemoryStorage();
+    saveSoloData(storage, { ...emptyData, handsStarted: 3 });
+    expect(loadSoloData(storage).handsStarted).toBe(3);
+
+    for (const handsStarted of [-1, 1.5, "2"]) {
+      storage.setItem("contractplay.solo", JSON.stringify({ ...emptyData, handsStarted }));
+      expect(loadSoloData(storage)).not.toHaveProperty("handsStarted");
+    }
+  });
+
   it("keeps the rubber in progress and drops a malformed one", () => {
     const storage = new MemoryStorage();
     const rubber = { hands: [{ handId: "h1", below: { NS: 60, EW: 0 }, above: { NS: 30, EW: 0 } }], lastDealer: "east" as const, activeHandId: "h2" };

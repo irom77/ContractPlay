@@ -43,6 +43,8 @@ export type SoloData = Readonly<{
   boardSet?: BoardSet;
   boardSetLibrary?: readonly BoardSetLibraryEntry[];
   currentRecord?: HandRecord;
+  /** New solo hands dealt so far; every second one may replay an archived deal. */
+  handsStarted?: number;
 }>;
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -228,7 +230,8 @@ function normalize(value: unknown): SoloData {
     ...(isRubber(value.rubber) ? { rubber: cleanRubber(value.rubber) } : {}),
     ...(isBoardSet(value.boardSet) ? { boardSet: value.boardSet } : {}),
     ...(Array.isArray(value.boardSetLibrary) ? { boardSetLibrary: withinBoardSetLibraryLimits(value.boardSetLibrary.filter(isBoardSetLibraryEntry)) } : {}),
-    ...(isHandRecord(value.currentRecord) ? { currentRecord: value.currentRecord } : {})
+    ...(isHandRecord(value.currentRecord) ? { currentRecord: value.currentRecord } : {}),
+    ...(Number.isInteger(value.handsStarted) && Number(value.handsStarted) >= 0 ? { handsStarted: Number(value.handsStarted) } : {})
   };
 }
 
