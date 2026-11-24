@@ -73,13 +73,25 @@ describe("AuthStore", () => {
     expect(await store.findSession("other", now)).toEqual(account);
   });
 
-  it("rolls back token consumption when a guest already belongs to another account", async () => {
+  it("signs a new account in without the guest that already belongs to another account", async () => {
     const owner = await store.getOrCreateAccount("owner@example.com", "Owner", now, "guest");
     await link("conflict", "guest");
-    await expect(redeem("conflict", "conflict-session")).rejects.toThrow();
-    expect(await store.findAccountByEmail("test@example.com")).toBeNull();
+    const account = await redeem("conflict", "conflict-session");
+    expect(account).toMatchObject({ email: "test@example.com" });
+    expect(account!.primaryPlayerId).not.toBe("guest");
+    expect(await store.playerIdsForAccount(account!.id)).toEqual([account!.primaryPlayerId]);
     expect(await store.playerIdsForAccount(owner.id)).toEqual(["guest"]);
-    expect((await env.DB.prepare("SELECT consumed_at FROM magic_links WHERE token_hash = ?").bind("conflict").first())?.consumed_at).toBeNull();
+    expect(await store.findSession("conflict-session", now)).toEqual(account);
+  });
+
+  it("leaves another account's guest where it is when an existing account signs in", async () => {
+    const owner = await store.getOrCreateAccount("owner@example.com", "Owner", now, "guest");
+    await link("first");
+    const existing = await redeem("first", "first-session");
+    await link("second", "guest");
+    expect(await redeem("second", "second-session")).toEqual(existing);
+    expect(await store.playerIdsForAccount(existing!.id)).toEqual([existing!.primaryPlayerId]);
+    expect(await store.playerIdsForAccount(owner.id)).toEqual(["guest"]);
   });
 
   it("upserts hands idempotently, bounds retention to 25, and isolates accounts", async () => {

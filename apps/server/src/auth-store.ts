@@ -103,13 +103,14 @@ export class AuthStore {
     const results = await this.db.batch([
       this.db.prepare("UPDATE magic_links SET consumed_at = ?, redemption_id = ? WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?")
         .bind(now, redemptionId, tokenHash, now),
-      this.db.prepare(`INSERT INTO accounts (id, email, display_name, primary_player_id, created_at) SELECT ?, m.email, m.display_name, COALESCE(m.guest_player_id, ?), ? FROM magic_links m WHERE ${guard} ON CONFLICT(email) DO NOTHING`)
+      this.db.prepare(`INSERT INTO accounts (id, email, display_name, primary_player_id, created_at) SELECT ?, m.email, m.display_name, CASE WHEN m.guest_player_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM account_player_identities i WHERE i.player_id = m.guest_player_id) THEN m.guest_player_id ELSE ? END, ? FROM magic_links m WHERE ${guard} ON CONFLICT(email) DO NOTHING`)
         .bind(crypto.randomUUID(), crypto.randomUUID(), now, tokenHash, redemptionId),
       this.db.prepare(`INSERT INTO account_player_identities (player_id, account_id) SELECT a.primary_player_id, a.id FROM accounts a JOIN magic_links m ON m.email = a.email WHERE ${guard} ON CONFLICT(player_id) DO UPDATE SET account_id = excluded.account_id WHERE account_player_identities.account_id = excluded.account_id`)
         .bind(tokenHash, redemptionId),
-      // Repeated linking to the same account is harmless; a different owner violates the PK,
-      // rolling back the token, account and session writes rather than moving that identity.
-      this.db.prepare(`INSERT INTO account_player_identities (player_id, account_id) SELECT m.guest_player_id, a.id FROM magic_links m JOIN accounts a ON a.email = m.email WHERE ${guard} AND m.guest_player_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM account_player_identities i WHERE i.player_id = m.guest_player_id AND i.account_id = a.id)`)
+      // A guest already linked stays with its account: linking it again is skipped, and a guest that belongs to
+      // another account is never moved. Signing in still succeeds, as a browser can keep the guest of an account it
+      // signed out of; a new account then gets a fresh primary player ID (above).
+      this.db.prepare(`INSERT INTO account_player_identities (player_id, account_id) SELECT m.guest_player_id, a.id FROM magic_links m JOIN accounts a ON a.email = m.email WHERE ${guard} AND m.guest_player_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM account_player_identities i WHERE i.player_id = m.guest_player_id)`)
         .bind(tokenHash, redemptionId),
       this.db.prepare(`INSERT INTO sessions (session_hash, account_id, expires_at) SELECT ?, a.id, ? FROM accounts a JOIN magic_links m ON a.email = m.email WHERE ${guard}`)
         .bind(sessionHash, sessionExpiresAt, tokenHash, redemptionId)
