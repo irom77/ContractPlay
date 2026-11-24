@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, parseClientMessage } from "@contractplay/protocol";
 import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
-import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, createTable, isReplayHand, nextWake, reduce, replayVulnerability, summaryOf, viewFor } from "@contractplay/table";
+import { BOT_PAUSE_MS, botToAct, botWake, canDeal, chooseBotAction, createTable, isReplayHand, nextWake, reduce, replayVulnerability, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
 import { AuthStore } from "./auth-store.js";
@@ -297,8 +297,10 @@ export class TableObject extends DurableObject<Env> {
       const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, state.handNumber);
       if (!board) return { state, refused: "not-ready" };
       beforeReduce = { ...state, sessionBoard: { ...board, index: state.handNumber } };
-    } else if (event.type === "message" && event.message.type === "deal" && isReplayHand(state)) {
+    } else if (event.type === "message" && event.message.type === "deal" && isReplayHand(state) && canDeal(state, event.player)) {
       const replay = await this.pickReplay(state);
+      // The archive read let other messages in; this event was judged against a state that is gone, so judge it again.
+      if ((await this.load())?.revision !== state.revision) return this.dispatch(event);
       if (replay) beforeReduce = { ...state, replayBoard: { ...replay, index: state.handNumber } };
     }
     const out = reduce(beforeReduce, event, secureRandom);
@@ -307,9 +309,10 @@ export class TableObject extends DurableObject<Env> {
       return out;
     }
     if (out.state === state) return out;
+    // A refusal hands back the state it was given, replay board included; nothing changed, so nothing is stored.
+    if (out.state === beforeReduce) return { ...out, state };
     await this.save(out.state);
     await this.reportFinishedSessionHand(out.state);
-    if (!isFinished(state) && isFinished(out.state)) await this.archiveFinishedHand(out.state);
     const sessionStatus = await this.sessionStatus(out.state);
     for (const ws of this.ctx.getWebSockets()) {
       const me = identityOf(ws);
@@ -324,6 +327,8 @@ export class TableObject extends DurableObject<Env> {
         console.warn("table: lobby update failed; a later seat or score change will repair it");
       }
     }
+    // after the broadcast, so archive latency never delays the result
+    if (!isFinished(state) && isFinished(out.state)) await this.archiveFinishedHand(out.state);
     return out;
   }
 

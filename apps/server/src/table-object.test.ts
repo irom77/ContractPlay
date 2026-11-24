@@ -225,7 +225,15 @@ describe("deal replays at online tables", () => {
     const start = order.indexOf(dealer);
     return [0, 1, 2, 3].map((n) => ({ type: "bid", seat: order[(start + n) % 4]!, bid: "pass" }));
   };
-  const results = async () => (await env.DB.prepare("SELECT deal_id, source FROM deal_results").all()).results;
+  /** The stored results; the table writes them just after it broadcasts a finished hand, so wait for `count` of them. */
+  const results = async (count = 0) => {
+    for (let n = 0; n < 100; n++) {
+      const rows = (await env.DB.prepare("SELECT deal_id, source FROM deal_results").all()).results;
+      if (rows.length >= count) return rows;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error("results not written");
+  };
 
   async function seatedFour(id: string) {
     const clients: Array<{ seat: "north" | "east" | "south" | "west"; client: Awaited<ReturnType<typeof socket>> }> = [];
@@ -270,7 +278,7 @@ describe("deal replays at online tables", () => {
     const id = await table();
     const clients = await seatedFour(id);
     const { finished } = await playPassedOut(id, clients);
-    expect(await results()).toEqual([{ deal_id: expect.any(String), source: "online" }]);
+    expect(await results(1)).toEqual([{ deal_id: expect.any(String), source: "online" }]);
     expect(finished.replay).toBeUndefined();
   });
 
@@ -289,7 +297,7 @@ describe("deal replays at online tables", () => {
     const views: TableView[] = [];
     try { for (;;) views.push(await clients[0]!.client.view()); } catch { /* drained */ }
     expect(views.at(-1)!.replay).toMatchObject({ firstPlayedAt: 0, rescored: expect.any(Boolean) });
-    expect((await results()).filter((row) => row.deal_id === dealId)).toHaveLength(2);
+    expect((await results(3)).filter((row) => row.deal_id === dealId)).toHaveLength(2);
   });
 
   it("deals and finishes hands normally when the archive tables are missing", async () => {
@@ -306,6 +314,8 @@ describe("deal replays at online tables", () => {
   });
 
   it("never reads or writes the archive at a duplicate session table", async () => {
+    const pick = vi.spyOn(DealArchive.prototype, "pickReplay");
+    onTestFinished(() => { pick.mockRestore(); });
     await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "north", vulnerability: "None", actions: passedOut("north"), source: "solo", playedAt: 0 });
     const created = await worker.fetch(new Request(`${origin}/api/sessions`, {
       method: "POST", headers: { "CF-Connecting-IP": crypto.randomUUID(), "content-type": "application/json" },
@@ -315,10 +325,55 @@ describe("deal replays at online tables", () => {
     const { tableIds } = await created.json<{ tableIds: string[] }>();
     const id = tableIds[0]!;
     const clients = await seatedFour(id);
-    const first = await playPassedOut(id, clients);
-    const second = await playPassedOut(id, clients).catch(() => undefined);
-    expect(first.finished.replay).toBeUndefined();
-    expect(second?.dealt.replay).toBeUndefined();
-    expect(await results()).toEqual([{ deal_id: expect.any(String), source: "solo" }]);
+    const { finished } = await playPassedOut(id, clients);
+    expect(finished.sessionId).toBeDefined();
+    expect(pick).not.toHaveBeenCalled();
+    expect(await results(1)).toEqual([{ deal_id: expect.any(String), source: "solo" }]);
+  });
+
+  it("neither queries nor stores anything when a refused deal would have been a replay", async () => {
+    const id = await table();
+    const clients = await seatedFour(id);
+    await playPassedOut(id, clients);
+    const pick = vi.spyOn(DealArchive.prototype, "pickReplay");
+    onTestFinished(() => { pick.mockRestore(); });
+    const spectator = await socket(id);
+    spectator.send({ type: "hello", version: PROTOCOL_VERSION, secret: "9".repeat(43), name: "Watcher" });
+    await spectator.view();
+    const before = await state(id);
+    spectator.send({ type: "deal" });
+    expect((await spectator.next()).type).toBe("refused");
+    expect(pick).not.toHaveBeenCalled();
+    const after = await state(id);
+    expect(after.revision).toBe(before.revision);
+    expect(after.replayBoard).toBeUndefined();
+  });
+
+  it("judges a deal again when the table changed while its replay was being picked", async () => {
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    const id = await table();
+    const clients = await seatedFour(id);
+    await playPassedOut(id, clients);
+    const real = DealArchive.prototype.pickReplay;
+    const tableObject = await runInDurableObject(env.TABLES.get(env.TABLES.idFromName(id)), (instance) => instance as unknown as { dispatch(event: unknown): Promise<unknown> });
+    const west = (await state(id)).seats.west;
+    if (west.kind !== "human") throw new Error("west should be seated");
+    let calls = 0;
+    const pick = vi.spyOn(DealArchive.prototype, "pickReplay").mockImplementation(async function (this: DealArchive, ...args) {
+      calls += 1;
+      const found = await real.apply(this, args);
+      // another message lands while the pick is pending (production lets it in at the D1 await): West leaves
+      await tableObject.dispatch({ type: "message", player: west.player, message: { type: "leave" }, at: Date.now() });
+      return found;
+    });
+    onTestFinished(() => { pick.mockRestore(); });
+    clients[0]!.client.send({ type: "deal" });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(calls).toBe(1);
+    const settled = await state(id);
+    // the deal was judged against the table as it now is (a seat empty), so it is refused and nothing stale is stored
+    expect(settled.handNumber).toBe(1);
+    expect(settled.seats.west.kind).toBe("empty");
+    expect(settled.replayBoard).toBeUndefined();
   });
 });
