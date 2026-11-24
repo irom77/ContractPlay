@@ -668,6 +668,7 @@ describe("OnlineTable play", () => {
     expect(hands[0]!.id).toBe("online-ABC234-1");
     // Named after the viewer's (North's) dealt cards.
     expect(hands[0]!.name).toBe(handName(finished.initialDeal.north));
+    expect(hands[0]!.playerSeat).toBe("north");
     expect(hands[0]!.game.completedTricks).toEqual(finished.completedTricks);
     const result = screen.getByRole("region", { name: "Hand result" });
     expect(result.textContent).toContain("by North");
@@ -675,6 +676,16 @@ describe("OnlineTable play", () => {
     expect(result.textContent).toContain(finished.score!.undertricks > 0 ? `Down ${finished.score!.undertricks}` : "Made");
     expect(result.textContent).toContain("Table score: NS 0 · EW 50");
     expect((within(result).getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("saves no seat for a finished hand watched without a seat", () => {
+    const service = setup();
+    const finished = playCards(oneNoTrump(), 52);
+    service.push(tableView({ handNumber: 1, revision: 70, game: publicGame(finished, []), revealed: finished.initialDeal }));
+    const hands = loadSoloData(service.storage).completedHands;
+    expect(hands).toHaveLength(1);
+    expect(hands[0]!.name).toBe(handName(finished.initialDeal.south));
+    expect(hands[0]!.playerSeat).toBeUndefined();
   });
 
   it("keeps solo hands and another account's cache when a guest hand finishes", () => {

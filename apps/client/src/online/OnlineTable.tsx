@@ -126,7 +126,7 @@ function saveToHistory(storage: StorageLike, view: TableViewData, account?: Acco
     if (!hand) return;
     // Named after the viewer's dealt cards (South's for someone not seated).
     const name = createHandName(hand.game.initialDeal[view.yourSeat ?? "south"], new Set(data.completedHands.map(savedHandName)));
-    const saved: SavedHand = { ...hand, name, ...(account ? { onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } } : {}) };
+    const saved: SavedHand = { ...hand, name, ...(view.yourSeat ? { playerSeat: view.yourSeat } : {}), ...(account ? { onlineHistory: { source: "user-imported", competitive: false, ownerPlayerId: account.playerId } } : {}) };
     saveSoloData(storage, { ...data, completedHands: retainHandHistory([saved, ...data.completedHands]) });
     return saved;
   } catch {
