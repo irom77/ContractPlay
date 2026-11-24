@@ -62,6 +62,12 @@ describe("account online hand history", () => {
     expect(await store.listHands(other.id)).toEqual([]);
     expect(await store.listHands(accountId)).toHaveLength(1);
   });
+  it("keeps the player's seat in the archive and rejects an invalid one", async () => {
+    expect((await call("/import", "POST", { hands: [{ ...hand(), playerSeat: "west" }] })).status).toBe(200);
+    expect((await list()).hands[0]).toMatchObject({ id: "online-ABC234-1", playerSeat: "west" });
+    expect((await call("/import", "POST", { hands: [{ ...hand("online-ABC234-2"), playerSeat: "middle" }] })).status).toBe(400);
+  });
+
   it("rejects malformed hands, wrong ids, excessive batches, and oversized serialized bodies", async () => {
     for (const invalid of [{}, { ...hand(), savedAt: "invalid" }, { ...hand(), id: "solo-1" }, { ...hand(), game: { ...hand().game, phase: "play" } }, { ...hand(), name: "x".repeat(70_000) }]) {
       expect((await call("/import", "POST", { hands: [invalid] })).status).toBe(400);
