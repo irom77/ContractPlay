@@ -11,6 +11,9 @@ import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 import App from "./App.js";
 import { suitSymbols } from "./table/labels.js";
 import { replayNotice } from "./replays.js";
+import { defaultSoloSetup, saveSoloSetup } from "./soloSetup.js";
+
+const seedManualTable = () => saveSoloSetup(window.localStorage, { ...defaultSoloSetup, opponents: "manual" });
 
 function completedGame() {
   let game = createGameState({ deal: deal(), dealer: "north", vulnerability: "None" });
@@ -100,7 +103,8 @@ describe("bridge table", () => {
   afterEach(() => vi.restoreAllMocks());
   afterEach(() => vi.unstubAllGlobals());
   afterEach(() => vi.useRealTimers());
-  beforeEach(() => window.localStorage.clear());
+  // These tests were written for a manual table, solo's default before it remembered its setup and defaulted to bots.
+  beforeEach(() => { window.localStorage.clear(); seedManualTable(); });
   // No deal archive here: every second new hand's replay request fails at once and a fresh hand is dealt.
   beforeEach(() => vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline"))));
 
@@ -1769,6 +1773,7 @@ describe("solo deal replays", () => {
   afterEach(() => vi.useRealTimers());
   beforeEach(() => {
     window.localStorage.clear();
+    seedManualTable();
     window.localStorage.setItem("contractplay.scoring", "single");
   });
 
@@ -1989,5 +1994,41 @@ describe("Play online entry", () => {
     render(<App />);
     await userEvent.setup().click(screen.getByRole("button", { name: "Play online" }));
     expect(location.hash).toBe("#/online");
+  });
+});
+
+describe("Remembered solo setup", () => {
+  beforeEach(() => { window.localStorage.clear(); });
+  afterEach(cleanup);
+
+  it("opens against bots by default", () => {
+    render(<App />);
+    expect((screen.getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
+  });
+
+  it("remembers opponents, seat, bot skill and bidding style", async () => {
+    render(<App />);
+    const user = userEvent.setup();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Your seat" }), "west");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Bot skill" }), "expert");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Bot bidding style" }), "2/1");
+    cleanup();
+    render(<App />);
+    expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("west");
+    expect((screen.getByRole("combobox", { name: "Bot skill" }) as HTMLSelectElement).value).toBe("expert");
+    expect((screen.getByRole("combobox", { name: "Bot bidding style" }) as HTMLSelectElement).value).toBe("2/1");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Opponents" }), "manual");
+    cleanup();
+    render(<App />);
+    expect((screen.getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("manual");
+  });
+
+  it("keeps preview values and does not write storage in a preview", () => {
+    const stored = new Map<string, string>([["contractplay.soloSetup", JSON.stringify({ opponents: "bots", seat: "west" })]]);
+    const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); }, removeItem: (key: string) => { stored.delete(key); } };
+    render(<App preview={{ storage, userSeat: "south" }} />);
+    expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("south");
+    expect(stored.get("contractplay.soloSetup")).toBe(JSON.stringify({ opponents: "bots", seat: "west" }));
+    expect(window.localStorage.getItem("contractplay.soloSetup")).toBeNull();
   });
 });

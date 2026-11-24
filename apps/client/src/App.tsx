@@ -49,6 +49,7 @@ import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
+import { loadSoloSetup, saveSoloSetup, type SoloScoring } from "./soloSetup.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands } from "./online/handHistory.js";
@@ -56,10 +57,9 @@ import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
 const hintsStorageKey = "contractplay.hints";
-const scoringStorageKey = "contractplay.scoring";
 /** How long the robots seem to think about a claim, so the player sees it being checked. */
 const CLAIM_CHECK_MS = 800;
-type ScoringFormat = "rubber" | "single";
+type ScoringFormat = SoloScoring;
 
 function createHandId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -118,10 +118,13 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const [currentHandId, setCurrentHandId] = useState(() => soloData.currentHandId ?? (soloData.currentGame ? createHandId() : ""));
   const [dealer, setDealer] = useState<Seat>(() => soloData.currentGame?.dealer ?? "north");
   const [vulnerability, setVulnerability] = useState<Vulnerability>(() => soloData.currentGame?.vulnerability ?? "None");
-  const [playAgainstBots, setPlayAgainstBots] = useState(preview?.userSeat !== undefined);
-  const [userSeat, setUserSeat] = useState<Seat>(preview?.userSeat ?? "north");
-  const [botSkill, setBotSkill] = useState<SkillLevel>("beginner");
-  const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">("SAYC");
+  // Previews fix their own table; otherwise solo opens with the setup the player (or the lobby's Play panel) last chose.
+  const [initialSetup] = useState(() => preview ? { ...loadSoloSetup(persistence.storage),
+    opponents: preview.userSeat !== undefined ? "bots" as const : "manual" as const, seat: preview.userSeat ?? "north" } : loadSoloSetup(persistence.storage));
+  const [playAgainstBots, setPlayAgainstBots] = useState(initialSetup.opponents === "bots");
+  const [userSeat, setUserSeat] = useState<Seat>(initialSetup.seat);
+  const [botSkill, setBotSkill] = useState<SkillLevel>(initialSetup.botSkill);
+  const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">(initialSetup.biddingStyle);
   const [auctionShown, setAuctionShown] = useState(false);
   const [fullscreen, setFullscreenState] = useState(false);
   const [pbnInput, setPbnInput] = useState("");
@@ -133,9 +136,10 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
   const [forcedPlayOn, setForcedPlayOn] = useState(() => forcedPlayEnabled(persistence.storage));
   // The position a take-back returned to: a forced card there waits for the player instead of replaying at once.
   const [takenBackTo, setTakenBackTo] = useState<GameState>();
-  const [scoring, setScoring] = useState<ScoringFormat>(() => {
-    try { return persistence.storage.getItem(scoringStorageKey) === "single" ? "single" : "rubber"; } catch { return "rubber"; }
-  });
+  const [scoring, setScoring] = useState<ScoringFormat>(initialSetup.scoring);
+  useEffect(() => {
+    if (!frozen) saveSoloSetup(persistence.storage, { opponents: playAgainstBots ? "bots" : "manual", seat: userSeat, botSkill, biddingStyle, scoring });
+  }, [frozen, persistence, playAgainstBots, userSeat, botSkill, biddingStyle, scoring]);
   const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
   const [boardSet, setBoardSet] = useState<BoardSet | undefined>(() => soloData.boardSet);
   const [boardSetLibrary, setBoardSetLibrary] = useState<readonly BoardSetLibraryEntry[]>(() => soloData.boardSetLibrary ?? []);
@@ -441,7 +445,6 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
 
   function chooseScoring(next: ScoringFormat) {
     setScoring(next);
-    try { persistence.storage.setItem(scoringStorageKey, next); } catch { /* the choice just won't be remembered */ }
   }
   const phaseLabel = shownGame?.phase === "complete" ? "Hand complete" : "Passed out";
   const displayedTrick = !isReviewing && temporaryTrick?.handId === currentHandId
