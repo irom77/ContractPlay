@@ -93,6 +93,10 @@ function isTravellerRow(value: unknown): value is TravellerRow {
     (value.tricks === undefined || (Number.isInteger(value.tricks) && Number(value.tricks) >= 0 && Number(value.tricks) <= 13));
 }
 
+function isReplayInfo(value: unknown): boolean {
+  return isRecord(value) && typeof value.dealId === "string" && Number.isFinite(value.firstPlayedAt) && typeof value.rescored === "boolean" && isTravellerRow(value.original);
+}
+
 function isHandRecord(value: unknown): value is HandRecord {
   return isRecord(value) && isSeat(value.dealer) && ["None", "NS", "EW", "Both"].includes(String(value.vulnerability)) && isDeal(value.deal) &&
     (value.board === undefined || typeof value.board === "string") &&
@@ -101,6 +105,7 @@ function isHandRecord(value: unknown): value is HandRecord {
     (value.expectedFieldCount === undefined || (Number.isInteger(value.expectedFieldCount) && Number(value.expectedFieldCount) >= 0)) &&
     (value.doubleDummyPar === undefined || Number.isInteger(value.doubleDummyPar)) &&
     (value.original === undefined || (Array.isArray(value.original) && value.original.every(isAction))) &&
+    (value.replay === undefined || isReplayInfo(value.replay)) &&
     Array.isArray(value.field) && value.field.every(isTravellerRow);
 }
 

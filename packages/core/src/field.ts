@@ -1,6 +1,7 @@
 import type { Deal, Seat } from "./cards.js";
-import { applyAction, createGameState, type GameState } from "./game.js";
+import { applyAction, createGameState, type Contract, type GameState } from "./game.js";
 import type { GameAction } from "./history.js";
+import { scoreContract } from "./scoring.js";
 import type { Vulnerability } from "./types.js";
 
 /** The largest Multiplicity a traveller row may carry; anything larger is treated as invalid. */
@@ -16,6 +17,9 @@ export type TravellerRow = Readonly<{
   artificial: boolean;
 }>;
 
+/** Where a replayed deal came from: the first play, and the result the field row was first recorded with. */
+export type ReplayInfo = Readonly<{ dealId: string; firstPlayedAt: number; original: TravellerRow; rescored: boolean }>;
+
 /** A board as played elsewhere: the deal, how the original table played it, and the field's results. */
 export type HandRecord = Readonly<{
   board?: string;
@@ -30,7 +34,33 @@ export type HandRecord = Readonly<{
   doubleDummyPar?: number;
   original?: readonly GameAction[];
   field: readonly TravellerRow[];
+  replay?: ReplayInfo;
 }>;
+
+const STRAIN_LETTERS = { clubs: "C", diamonds: "D", hearts: "H", spades: "S", notrump: "NT" } as const;
+
+/** PBN-style contract text such as "4S", "3NTX" or "6HXX"; "Pass" when nothing was bid. */
+export function contractText(contract: Contract | undefined): string {
+  if (!contract) return "Pass";
+  return `${contract.level}${STRAIN_LETTERS[contract.strain]}${["", "X", "XX"][contract.doubled]}`;
+}
+
+/** The contract for PBN-style text and its declarer; undefined for "Pass" or text that is not a contract. */
+export function parseContractText(text: string, declarer: Seat | undefined): Contract | undefined {
+  const match = /^([1-7])(NT|[CDHS])(XX|X)?$/i.exec(text.trim());
+  if (!match || !declarer) return undefined;
+  const letter = match[2]!.toUpperCase();
+  const strain = (Object.keys(STRAIN_LETTERS) as (keyof typeof STRAIN_LETTERS)[]).find((key) => STRAIN_LETTERS[key] === letter)!;
+  return { level: Number(match[1]) as Contract["level"], strain, declarer, doubled: (match[3]?.length ?? 0) as Contract["doubled"] };
+}
+
+/** The row with its North-South score recomputed for a vulnerability; unchanged for passed-out, artificial or incomplete rows. */
+export function rescoreRow(row: TravellerRow, vulnerability: Vulnerability): TravellerRow {
+  if (row.artificial || row.tricks === undefined) return row;
+  const contract = row.contract === undefined ? undefined : parseContractText(row.contract, row.declarer);
+  if (!contract) return row;
+  return { ...row, nsScore: scoreContract(contract, row.tricks, vulnerability).score };
+}
 
 export type FieldMethod = "matchpoints" | "butler" | "butler-2" | "cross";
 

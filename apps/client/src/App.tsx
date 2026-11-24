@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   applyAction,
   cardId,
+  contractText as contractPbnText,
   claimSeatFor,
   createGameState,
   deal,
@@ -665,7 +666,7 @@ export default function App({ solver, preview, initialDialog }: { solver?: Solve
       deal: hand.game.initialDeal,
       field: attempts.map(({ game: previous }) => ({
         nsScore: previous.score!.score,
-        contract: previous.contract ? `${previous.contract.level}${({ clubs: "C", diamonds: "D", hearts: "H", spades: "S", notrump: "NT" } as const)[previous.contract.strain]}${["", "X", "XX"][previous.contract.doubled]}` : "Pass",
+        contract: contractPbnText(previous.contract),
         ...(previous.contract ? { declarer: previous.contract.declarer } : {}),
         tricks: previous.score!.tricksTaken,
         multiplicity: 1,

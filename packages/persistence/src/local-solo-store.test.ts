@@ -225,6 +225,17 @@ describe("local solo store", () => {
       expect(loaded.completedHands).toEqual([record]);
     });
 
+    it("keeps replay info on a saved hand record and drops a malformed one", () => {
+      const replay = { dealId: "abc", firstPlayedAt: 1_700_000_000_000, original: handRecord.field[0]!, rescored: true };
+      const storage = new MemoryStorage();
+      const withReplay = { ...handRecord, replay };
+      saveSoloData(storage, { ...emptyData, completedHands: [{ ...record, record: withReplay }] });
+      expect(loadSoloData(storage).completedHands).toEqual([{ ...record, record: withReplay }]);
+      const bad = { ...handRecord, replay: { dealId: 5 } } as unknown as HandRecord;
+      saveSoloData(storage, { ...emptyData, completedHands: [{ ...record, record: bad }] });
+      expect(loadSoloData(storage).completedHands).toEqual([record]);
+    });
+
     it("drops a record whose traveller row has an out-of-range multiplicity", () => {
       const storage = new MemoryStorage();
       const bad = { ...handRecord, field: [{ nsScore: 90, multiplicity: 1001, artificial: false }] } as HandRecord;

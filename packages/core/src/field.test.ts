@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal } from "./cards.js";
-import { compareWithField, fieldMethod, fieldScores, impsFor, replayOriginal, type HandRecord, type TravellerRow } from "./field.js";
+import { compareWithField, contractText, fieldMethod, fieldScores, impsFor, parseContractText, replayOriginal, rescoreRow, type HandRecord, type TravellerRow } from "./field.js";
 import type { GameAction } from "./history.js";
 
 const row = (nsScore?: number, extra: Partial<TravellerRow> = {}): TravellerRow => ({ ...(nsScore === undefined ? {} : { nsScore }), multiplicity: 1, artificial: false, ...extra });
@@ -94,5 +94,32 @@ describe("replayOriginal", () => {
   it("has nothing to replay without original actions", () => {
     expect(replayOriginal(record())).toBeUndefined();
     expect(replayOriginal(record([]))).toBeUndefined();
+  });
+});
+
+describe("contract text and rescoring", () => {
+  it("round-trips contract text", () => {
+    for (const [text, declarer] of [["4S", "south"], ["3NTX", "east"], ["6HXX", "north"]] as const) {
+      const contract = parseContractText(text, declarer);
+      expect(contract).toBeDefined();
+      expect(contractText(contract)).toBe(text);
+    }
+    expect(parseContractText("3NTX", "east")).toEqual({ level: 3, strain: "notrump", declarer: "east", doubled: 1 });
+    expect(contractText(undefined)).toBe("Pass");
+    expect(parseContractText("Pass", undefined)).toBeUndefined();
+  });
+
+  it("rescores a row for a different vulnerability", () => {
+    const base = { contract: "4S", declarer: "south", tricks: 10, nsScore: 420, multiplicity: 1, artificial: false } as const;
+    expect(rescoreRow(base, "NS").nsScore).toBe(620);
+    expect(rescoreRow(base, "EW").nsScore).toBe(420);
+    expect(rescoreRow({ ...base, declarer: "east", tricks: 8 }, "EW").nsScore).toBe(200);
+  });
+
+  it("leaves rows that cannot be rescored unchanged", () => {
+    const pass: TravellerRow = { contract: "Pass", nsScore: 0, multiplicity: 1, artificial: false };
+    expect(rescoreRow(pass, "Both")).toBe(pass);
+    const artificial: TravellerRow = { contract: "4S", declarer: "south", tricks: 10, nsScore: 100, multiplicity: 1, artificial: true };
+    expect(rescoreRow(artificial, "Both")).toBe(artificial);
   });
 });
