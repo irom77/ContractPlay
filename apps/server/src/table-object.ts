@@ -300,7 +300,10 @@ export class TableObject extends DurableObject<Env> {
     } else if (event.type === "message" && event.message.type === "deal" && isReplayHand(state) && canDeal(state, event.player)) {
       const replay = await this.pickReplay(state);
       // The archive read let other messages in; this event was judged against a state that is gone, so judge it again.
-      if ((await this.load())?.revision !== state.revision) return this.dispatch(event);
+      // Identity, not revision: connect and disconnect change the state without bumping it, and every change goes through save.
+      const fresh = await this.load();
+      if (!fresh) return { state, expired: true };
+      if (fresh !== state) return this.dispatch(event);
       if (replay) beforeReduce = { ...state, replayBoard: { ...replay, index: state.handNumber } };
     }
     const out = reduce(beforeReduce, event, secureRandom);

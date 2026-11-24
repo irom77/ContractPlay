@@ -376,4 +376,27 @@ describe("deal replays at online tables", () => {
     expect(settled.seats.west.kind).toBe("empty");
     expect(settled.replayBoard).toBeUndefined();
   });
+
+  it("keeps a disconnect that lands while a replay is being picked", async () => {
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "solo", playedAt: 0 });
+    const id = await table();
+    const clients = await seatedFour(id);
+    await playPassedOut(id, clients);
+    const real = DealArchive.prototype.pickReplay;
+    const tableObject = await runInDurableObject(env.TABLES.get(env.TABLES.idFromName(id)), (instance) => instance as unknown as { dispatch(event: unknown): Promise<unknown> });
+    const west = (await state(id)).seats.west;
+    if (west.kind !== "human") throw new Error("west should be seated");
+    const pick = vi.spyOn(DealArchive.prototype, "pickReplay").mockImplementation(async function (this: DealArchive, ...args) {
+      const found = await real.apply(this, args);
+      // a disconnect changes the state without bumping its revision
+      await tableObject.dispatch({ type: "disconnect", player: west.player, at: Date.now() });
+      return found;
+    });
+    onTestFinished(() => { pick.mockRestore(); });
+    const before = await state(id);
+    clients[0]!.client.send({ type: "deal" });
+    const settled = await waitFor(id, (s) => s.handNumber === 2);
+    expect(settled.replay).toBeDefined();
+    expect(settled.connections[west.player]).not.toEqual(before.connections[west.player]);
+  });
 });
