@@ -175,3 +175,5 @@ The separate `/admin` authorization roadmap item remains a release-readiness iss
 ## Follow-up: account-gated lobby
 
 The product owner changed lobby access after reviewing the deployed screen: visitors without a restored account session should see only email sign-in, not open tables or lobby actions. Keep direct table-link guest play and solo play available. The Lobby waits for `/api/auth/me`, does not mount `LobbyTables` or fetch listings while signed out, and removes the lobby back action from the unauthenticated email gate. The lobby preview uses a fixed mock account and no history network call. Focused coverage verifies signed-out users cannot see tables or lobby shortcuts and the table API is not called.
+
+After live magic-link sign-in was verified, the product owner noticed that the bare production URL still opened a saved solo hand after sign-out. On the online deployment, the bare URL now opens the account-gated lobby; signed-in players can still enter solo play from its lobby control. The solo route is explicit (`#/solo`) so navigation to Solo play remains stable.

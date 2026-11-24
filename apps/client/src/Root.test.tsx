@@ -26,9 +26,9 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); history.replaceState(null, "
 const soloVisible = () => screen.queryByRole("button", { name: "Start a new hand" }) !== null;
 
 describe("Root", () => {
-  it("renders the solo app without a hash", () => {
+  it("renders the online lobby at the bare deployment URL", async () => {
     render(<Root />);
-    expect(soloVisible()).toBe(true);
+    expect(await screen.findByText("Open tables")).toBeTruthy();
   });
 
   it("renders the lobby for #/online and returns to solo from it", async () => {
@@ -37,7 +37,7 @@ describe("Root", () => {
     expect(await screen.findByText("Open tables")).toBeTruthy();
     await userEvent.setup().click(screen.getByRole("button", { name: "Solo play" }));
     expect(soloVisible()).toBe(true);
-    expect(location.hash).toBe("");
+    expect(location.hash).toBe("#/solo");
   });
 
   it("opens the solo app's Recent hands dialog from the lobby, listing saved online hands", async () => {
@@ -56,7 +56,7 @@ describe("Root", () => {
     await userEvent.setup().click(await screen.findByRole("button", { name: "Recent hands" }));
     const dialog = await screen.findByRole("dialog", { name: "Recent hands" });
     expect(dialog.textContent).toContain("Online hand");
-    expect(location.hash).toBe("");
+    expect(location.hash).toBe("#/solo");
   });
 
   it("follows hashchange", async () => {

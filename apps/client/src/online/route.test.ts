@@ -3,9 +3,10 @@ import { parseRoute, routeHash } from "./route.js";
 
 describe("online routes", () => {
   it("parses the known hashes", () => {
-    expect(parseRoute("")).toEqual({ screen: "solo" });
+    expect(parseRoute("")).toEqual({ screen: "lobby" });
     expect(parseRoute("#/")).toEqual({ screen: "solo" });
     expect(parseRoute("#/online")).toEqual({ screen: "lobby" });
+    expect(parseRoute("#/solo")).toEqual({ screen: "solo" });
     expect(parseRoute("#/table/ABC234")).toEqual({ screen: "table", id: "ABC234" });
   });
 
@@ -31,7 +32,7 @@ describe("online routes", () => {
   });
 
   it("round-trips through routeHash", () => {
-    expect(routeHash({ screen: "solo" })).toBe("");
+    expect(routeHash({ screen: "solo" })).toBe("#/solo");
     expect(routeHash({ screen: "lobby" })).toBe("#/online");
     expect(routeHash({ screen: "table", id: "ABC234" })).toBe("#/table/ABC234");
     expect(parseRoute(routeHash({ screen: "table", id: "ABC234" }))).toEqual({ screen: "table", id: "ABC234" });
