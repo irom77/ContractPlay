@@ -96,13 +96,19 @@ export class DealArchive {
     const deal = await this.db.prepare("SELECT * FROM archived_deals WHERE rowid >= ? AND rowid <= ? AND first_played_at <= ? ORDER BY rowid LIMIT 1")
       .bind(probe, newest.rowid, cutoff).first<DealRow>();
     if (!deal) return undefined;
-    const { results } = await this.db.prepare(
-      "SELECT vulnerability, contract, declarer, tricks, ns_score FROM deal_results WHERE deal_id = ? ORDER BY played_at, rowid"
-    ).bind(deal.id).all<ResultRow>();
-    if (results.length === 0) return undefined;
+    // The original (earliest) result plus at most the MAX_FIELD_RESULTS most recent others, so reads stay bounded.
+    const columns = "SELECT rowid, vulnerability, contract, declarer, tricks, ns_score FROM deal_results WHERE deal_id = ?";
+    const [first, recent] = await this.db.batch<ResultRow & { rowid: number }>([
+      this.db.prepare(`${columns} ORDER BY played_at, rowid LIMIT 1`).bind(deal.id),
+      this.db.prepare(`${columns} AND rowid != (SELECT rowid FROM deal_results WHERE deal_id = ? ORDER BY played_at, rowid LIMIT 1)
+        ORDER BY played_at DESC, rowid DESC LIMIT ?`).bind(deal.id, deal.id, MAX_FIELD_RESULTS)
+    ]);
+    const original = first!.results[0];
+    if (!original) return undefined;
     const target = vulnerability ?? deal.vulnerability;
-    const held = [results[0]!, ...results.slice(1).slice(-MAX_FIELD_RESULTS)];
+    const held = [original, ...recent!.results.reverse()];
     const rows = held.map((row) => row.vulnerability === target ? travellerRow(row) : rescoreRow(travellerRow(row), target));
+    const rescored = rows.some((row, index) => row.nsScore !== held[index]!.ns_score);
     return {
       dealId: deal.id,
       record: {
@@ -113,7 +119,7 @@ export class DealArchive {
         event: "Replay",
         original: JSON.parse(deal.original_actions_json) as GameAction[],
         field: grouped(rows),
-        replay: { dealId: deal.id, firstPlayedAt: deal.first_played_at, original: rows[0]!, rescored: held.some((row) => row.vulnerability !== target) }
+        replay: { dealId: deal.id, firstPlayedAt: deal.first_played_at, original: rows[0]!, rescored }
       }
     };
   }

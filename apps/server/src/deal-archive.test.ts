@@ -125,6 +125,14 @@ describe("DealArchive.pickReplay", () => {
     expect(same?.record.replay?.rescored).toBe(false);
   });
 
+  it("does not call the field rescored when no score changes", async () => {
+    await archive.record(input());
+    const replay = await archive.pickReplay(25 * HOUR, "EW");
+    expect(replay?.record.vulnerability).toBe("EW");
+    expect(replay?.record.field[0]?.nsScore).toBe(420);
+    expect(replay?.record.replay?.rescored).toBe(false);
+  });
+
   it("rescores results played at another vulnerability to the deal's own", async () => {
     const id = await archive.record(input());
     await archive.record(input({ replayOf: id!, vulnerability: "Both", playedAt: 1 }));
