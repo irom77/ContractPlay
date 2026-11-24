@@ -17,7 +17,7 @@ function setup(named = false, account = false) {
     throw new Error(`Unexpected request ${url} ${init?.method}`);
   });
   vi.stubGlobal("fetch", fetcher);
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: async () => [], createTable: vi.fn(), createSession: vi.fn() }} />);
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={vi.fn()} onPlaySolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: async () => [], createTable: vi.fn(), createSession: vi.fn() }} />);
   return { storage, data, fetcher };
 }
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -50,10 +50,11 @@ it("restores the account after callback and returns to the sign-in gate on sign-
   const { fetcher } = setup(true, true);
   const user = userEvent.setup();
   expect(await screen.findByText("Signed in as Account")).toBeTruthy();
+  await user.click(screen.getByRole("radio", { name: "With other people" }));
   expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Account's table");
   await user.click(screen.getByRole("button", { name: "Sign out" }));
   expect(await screen.findByLabelText("Email sign-in")).toBeTruthy();
-  expect(screen.queryByLabelText("Table name")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
   expect(fetcher.mock.calls.find(([url]) => url === "/api/auth/sign-out")?.[1]?.credentials).toBe("same-origin");
 });
 

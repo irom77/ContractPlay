@@ -3,6 +3,7 @@ import type { StorageLike } from "@contractplay/persistence";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
+import { loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
@@ -34,7 +35,8 @@ export type LobbyProps = {
   baseUrl: string;
   storage: StorageLike;
   onOpenTable(id: string): void;
-  onSolo(): void;
+  /** Opens solo play and deals at once, with the setup the Play panel just saved. */
+  onPlaySolo(): void;
   /** Opens the device's recent hands, solo and online alike. */
   onRecentHands(): void;
   api?: LobbyApi;
@@ -55,7 +57,7 @@ function seatLabel(seat: SeatInfo): string {
 
 const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands };
 
-export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, api = defaultApi, auth = defaultAuth }: LobbyProps) {
+export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands, api = defaultApi, auth = defaultAuth }: LobbyProps) {
   const [identity] = useState<Identity | undefined>(() => loadIdentity(storage));
   const [account, setAccount] = useState<AccountSession | null>(null);
   const [accountResolved, setAccountResolved] = useState(false);
@@ -78,7 +80,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onSolo, onRecentHands, ap
   return <>
     {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
-    <LobbyTables identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands}
+    <LobbyTables identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands}
       account={account} onRename={async (name) => setAccount(await (auth.updateDisplayName ?? updateDisplayName)(name))} onSignOut={() => {
         void auth.signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
       }} />
@@ -161,8 +163,8 @@ function AccountName({ name, onRename }: { name: string; onRename(name: string):
   </form>;
 }
 
-function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHands, account, onRename, onSignOut }: {
-  identity: { name: string }; baseUrl: string; api: LobbyApi; onOpenTable(id: string): void; onSolo(): void; onRecentHands(): void;
+function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
+  identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string): void; onPlaySolo(): void; onRecentHands(): void;
   account: AccountSession; onRename(name: string): Promise<void>; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
@@ -172,6 +174,10 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
   const [style, setStyle] = useState<TableStyle>("SAYC");
   const [scoring, setScoring] = useState<TableScoring>("rubber");
   const [listed, setListed] = useState(true);
+  const [mode, setMode] = useState<"bots" | "people">("bots");
+  // The Play panel always starts solo against bots, whatever solo was last left at.
+  const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
+  const [sessionStyle, setSessionStyle] = useState<TableStyle>("SAYC");
   const [sessionTables, setSessionTables] = useState(2);
   const [sessionBoards, setSessionBoards] = useState(8);
   const [sessionScoring, setSessionScoring] = useState<"matchpoints" | "imps">("matchpoints");
@@ -224,6 +230,17 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
     else { setListError(false); setCreateError(createErrorText(result.error)); }
   }
 
+  function chooseSolo(change: Partial<SoloSetup>) {
+    setSoloSetup((current) => ({ ...current, ...change }));
+  }
+
+  // Me and bots never reaches the table server: solo deals on this device with the setup saved here.
+  function play() {
+    if (mode === "people") { void create(); return; }
+    saveSoloSetup(storage, soloSetup);
+    onPlaySolo();
+  }
+
   async function createDuplicateSession() {
     const name = `${identity.name}'s duplicate`.slice(0, 40);
     if (creatingNow.current) return;
@@ -231,7 +248,7 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
     setCreating(true);
     setCreateError(undefined);
     let result: Awaited<ReturnType<typeof defaultCreateSession>>;
-    try { result = await api.createSession(baseUrl, { name, style, tableCount: sessionTables, boardCount: importedBoards?.boards.length ?? sessionBoards,
+    try { result = await api.createSession(baseUrl, { name, style: sessionStyle, tableCount: sessionTables, boardCount: importedBoards?.boards.length ?? sessionBoards,
       scoring: sessionScoring, listed: true, ...(importedBoards ? { boards: importedBoards.boards } : {}) }); }
     catch { result = { error: "failed" }; }
     creatingNow.current = false;
@@ -281,9 +298,27 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
           <span className="table-tools-row">
             <AccountName name={account.displayName} onRename={onRename} /><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
-            <button className="secondary-button" type="button" onClick={onSolo}>Solo play</button>
           </span>
         </div>
+        <form className="lobby-panel" aria-label="Play" onSubmit={(event) => { event.preventDefault(); play(); }}>
+          <h2>Play</h2>
+          <div className="lobby-choice" role="radiogroup" aria-label="Who's playing">
+            <label className="lobby-check"><input type="radio" name="play-mode" checked={mode === "bots"} onChange={() => { setCreateError(undefined); setMode("bots"); }} />Me and bots</label>
+            <label className="lobby-check"><input type="radio" name="play-mode" checked={mode === "people"} onChange={() => { setCreateError(undefined); setMode("people"); }} />With other people</label>
+          </div>
+          {mode === "bots" ? <>
+            <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
+            <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
+            <label>Bidding style<select aria-label="Bidding style" value={soloSetup.biddingStyle} onChange={(event) => chooseSolo({ biddingStyle: event.target.value as SoloSetup["biddingStyle"] })}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            <label>Scoring<select aria-label="Scoring" value={soloSetup.scoring} onChange={(event) => chooseSolo({ scoring: event.target.value as SoloSetup["scoring"] })}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
+          </> : <>
+            <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
+            <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
+            <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
+          </>}
+          <button className="primary-button" type="submit" disabled={mode === "people" && (creating || effectiveName.trim() === "")}>Play</button>
+        </form>
         <div className="lobby-panel">
           <div className="section-heading">
             <h2>Open tables</h2>
@@ -308,19 +343,13 @@ function LobbyTables({ identity, baseUrl, api, onOpenTable, onSolo, onRecentHand
             ))}
           </ul>
         </div>
-        <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); void create(); }}>
-          <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
-          <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
-          <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
-          <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
-          <button className="primary-button" type="submit" disabled={creating || effectiveName.trim() === ""}>New table</button>
-        </form>
+
         <form className="lobby-panel" aria-label="New duplicate session" onSubmit={(event) => { event.preventDefault(); void createDuplicateSession(); }}>
           <h2>New duplicate session</h2>
           <label>Tables<select aria-label="Session tables" value={sessionTables} onChange={(event) => setSessionTables(Number(event.target.value))}>{[2, 3, 4, 6, 8].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           <label>Boards<select aria-label="Session boards" disabled={!!importedBoards} value={sessionBoards} onChange={(event) => setSessionBoards(Number(event.target.value))}>{[4, 8, 12, 16, 24, 32].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           <label>Scoring method<select aria-label="Session scoring" value={sessionScoring} onChange={(event) => setSessionScoring(event.target.value as "matchpoints" | "imps")}><option value="matchpoints">Matchpoints</option><option value="imps">Cross-IMPs</option></select></label>
-          <label>Session bidding style<select aria-label="Session bidding style" value={style} onChange={(event) => setStyle(event.target.value as TableStyle)}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+          <label>Session bidding style<select aria-label="Session bidding style" value={sessionStyle} onChange={(event) => setSessionStyle(event.target.value as TableStyle)}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
           <label>PBN board set<input aria-label="PBN board set" type="file" accept=".pbn,text/plain" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void loadSessionPbn(file); }} /></label>
           {importedBoards ? <p className="quiet-copy">Loaded {importedBoards.boards.length} board{importedBoards.boards.length === 1 ? "" : "s"} from {importedBoards.fileName}{importedBoards.skipped ? ` · skipped ${importedBoards.skipped} unreadable` : ""}. Only deal and board details are sent. <button className="secondary-button" type="button" onClick={() => setImportedBoards(undefined)}>Remove PBN set</button></p> : null}
           <p className="quiet-copy">Session tables appear in the open lobby so players can join different tables.</p>

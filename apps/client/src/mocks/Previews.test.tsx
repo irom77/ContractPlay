@@ -17,6 +17,10 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByRole("button", { name: "Recent hands" })).toBeTruthy();
     expect(screen.getByText("Signed in as Alex")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Change name" })).toBeTruthy();
+    const play = screen.getByRole("form", { name: "Play" });
+    expect(within(play).getByRole("radio", { name: "Me and bots" })).toBeTruthy();
+    expect(within(play).getByRole("radio", { name: "With other people" })).toBeTruthy();
+    expect(within(play).getByRole("button", { name: "Play" })).toBeTruthy();
   },
   seating: () => {
     expect(within(screen.getByRole("group", { name: "West seat" })).getByRole("button", { name: "Add bot" })).toBeTruthy();

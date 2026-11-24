@@ -9,6 +9,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadIdentity, saveIdentity } from "./identity.js";
 import { Lobby, type LobbyApi, type LobbyProps } from "./Lobby.js";
 import { boardSetFromPbn } from "../boardSet.js";
+import { defaultSoloSetup, loadSoloSetup, saveSoloSetup } from "../soloSetup.js";
+
+type User = ReturnType<typeof userEvent.setup>;
+/** Switches the Play panel to an online table for other people. */
+const withPeople = async (user: User) => user.click(await screen.findByRole("radio", { name: "With other people" }));
 
 function memoryStorage(): StorageLike {
   const data = new Map<string, string>();
@@ -22,21 +27,21 @@ const summaries: TableSummary[] = [
 
 const signedIn = { currentAccount: async () => ({ playerId: "account-1", displayName: "Bob" }), requestMagicLink: async () => {}, signOut: async () => {} };
 
-function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"] } = {}) {
-  const storage = memoryStorage();
+function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"]; storage?: StorageLike } = {}) {
+  const storage = options.storage ?? memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const listTables = vi.fn(options.list ?? (() => Promise.resolve(summaries)));
   const createTable = vi.fn(options.create ?? (() => Promise.resolve({ id: "NEW123" })));
   const onOpenTable = vi.fn();
-  const onSolo = vi.fn();
+  const onPlaySolo = vi.fn();
   const onRecentHands = vi.fn();
   const createSession = vi.fn(async (baseUrl: string, input: Parameters<LobbyApi["createSession"]>[1]) => {
     void baseUrl;
     void input;
     return { sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] };
   });
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onSolo={onSolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} auth={options.auth ?? signedIn} />);
-  return { storage, listTables, createTable, createSession, onOpenTable, onSolo, onRecentHands };
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} auth={options.auth ?? signedIn} />);
+  return { storage, listTables, createTable, createSession, onOpenTable, onPlaySolo, onRecentHands };
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -56,6 +61,7 @@ describe("Lobby", () => {
     expect(updateDisplayName).toHaveBeenCalledWith("Irek");
     expect(await screen.findByText("Signed in as Irek")).toBeTruthy();
     expect(screen.queryByLabelText("New name")).toBeNull();
+    await withPeople(user);
     expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Irek's table");
   });
 
@@ -81,7 +87,7 @@ describe("Lobby", () => {
     expect(screen.getByRole("button", { name: "Send sign-in link" })).toBeTruthy();
     expect(screen.queryByText("Open tables")).toBeNull();
     expect(screen.queryByRole("button", { name: "Solo play" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "New table" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
     expect(loadIdentity(storage)).toBeUndefined();
     expect(listTables).not.toHaveBeenCalled();
   });
@@ -111,16 +117,18 @@ describe("Lobby", () => {
 
   it("creates a table from the form and opens it", async () => {
     const user = userEvent.setup();
-    const { createTable, onOpenTable } = setup({ list: () => Promise.resolve([]) });
+    const { createTable, onOpenTable, onPlaySolo } = setup({ list: () => Promise.resolve([]) });
+    await withPeople(user);
     const name = await screen.findByLabelText("Table name");
     expect((name as HTMLInputElement).value).toBe("Bob's table");
     await user.clear(name);
     await user.type(name, "Evening");
     await user.selectOptions(screen.getByLabelText("Bidding style"), "2/1");
     await user.click(screen.getByLabelText("Show in lobby"));
-    await user.click(screen.getByRole("button", { name: "New table" }));
+    await user.click(screen.getByRole("button", { name: "Play" }));
     expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Evening", style: "2/1", scoring: "rubber", listed: false });
     await waitFor(() => expect(onOpenTable).toHaveBeenCalledWith("NEW123"));
+    expect(onPlaySolo).not.toHaveBeenCalled();
   });
 
   it("creates a multi-table duplicate session and opens its first table", async () => {
@@ -155,9 +163,10 @@ describe("Lobby", () => {
   it("offers rubber scoring by default and running totals as a choice", async () => {
     const user = userEvent.setup();
     const { createTable } = setup({ list: () => Promise.resolve([]) });
+    await withPeople(user);
     expect(((await screen.findByLabelText("Scoring")) as HTMLSelectElement).value).toBe("rubber");
     await user.selectOptions(screen.getByLabelText("Scoring"), "duplicate");
-    await user.click(screen.getByRole("button", { name: "New table" }));
+    await user.click(screen.getByRole("button", { name: "Play" }));
     expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Bob's table", style: "SAYC", scoring: "duplicate", listed: true });
   });
 
@@ -176,17 +185,17 @@ describe("Lobby", () => {
   it("shows a creation error in an alert", async () => {
     const user = userEvent.setup();
     setup({ create: () => Promise.resolve({ error: "too-many-tables" }) });
-    await user.click(await screen.findByRole("button", { name: "New table" }));
+    await withPeople(user);
+    await user.click(await screen.findByRole("button", { name: "Play" }));
     expect((await screen.findByRole("alert")).textContent).toBe("There are too many open tables right now. Try again later.");
   });
 
   it("keeps the page usable when listing fails", async () => {
     const user = userEvent.setup();
-    const { onSolo } = setup({ list: () => Promise.reject(new Error("offline")) });
+    const { onPlaySolo } = setup({ list: () => Promise.reject(new Error("offline")) });
     expect((await screen.findByRole("alert")).textContent).toBe("Can't reach the tables right now.");
-    await user.click(screen.getByRole("button", { name: "Solo play" }));
-    expect(onSolo).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "New table" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(onPlaySolo).toHaveBeenCalled();
   });
 
   it("opens recent hands", async () => {
@@ -194,6 +203,7 @@ describe("Lobby", () => {
     const { onRecentHands } = setup();
     await user.click(await screen.findByRole("button", { name: "Recent hands" }));
     expect(onRecentHands).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Solo play" })).toBeNull();
   });
 
   it("shows the authenticated display name in the lobby", async () => {
@@ -208,7 +218,7 @@ describe("Lobby", () => {
     const list = vi.fn(() => new Promise<TableSummary[]>((r) => { resolve = r; }));
     const storage = memoryStorage();
     saveIdentity(storage, "Bob");
-    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onSolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn(), createSession: vi.fn() }} auth={signedIn} />);
+    const { unmount } = render(<Lobby baseUrl="x" storage={storage} onOpenTable={vi.fn()} onPlaySolo={vi.fn()} onRecentHands={vi.fn()} api={{ listTables: list, createTable: vi.fn(), createSession: vi.fn() }} auth={signedIn} />);
     await act(async () => {});
     expect(list).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(15000); });
@@ -236,22 +246,25 @@ describe("Lobby", () => {
   ])("shows copy for the %s creation error", async (error, copy) => {
     const user = userEvent.setup();
     setup({ create: () => Promise.resolve({ error }) });
-    await user.click(await screen.findByRole("button", { name: "New table" }));
+    await withPeople(user);
+    await user.click(await screen.findByRole("button", { name: "Play" }));
     expect((await screen.findByRole("alert")).textContent).toBe(copy);
   });
 
   it("shows the generic error when createTable rejects and re-enables the form", async () => {
     const user = userEvent.setup();
     setup({ create: () => Promise.reject(new Error("boom")) });
-    await user.click(await screen.findByRole("button", { name: "New table" }));
+    await withPeople(user);
+    await user.click(await screen.findByRole("button", { name: "Play" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Couldn't create the table. Try again.");
-    expect((screen.getByRole("button", { name: "New table" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: "Play" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("clears a creation error when the form is edited", async () => {
     const user = userEvent.setup();
     setup({ create: () => Promise.resolve({ error: "too-many-tables" }) });
-    await user.click(await screen.findByRole("button", { name: "New table" }));
+    await withPeople(user);
+    await user.click(await screen.findByRole("button", { name: "Play" }));
     await screen.findByRole("alert");
     await user.type(screen.getByLabelText("Table name"), "!");
     expect(screen.queryByRole("alert")).toBeNull();
@@ -260,8 +273,50 @@ describe("Lobby", () => {
   it("creates only one table on a double submit", async () => {
     const user = userEvent.setup();
     const { createTable } = setup({ create: () => new Promise(() => {}) });
+    await withPeople(user);
     const name = await screen.findByLabelText("Table name");
     await user.type(name, "{Enter}{Enter}");
     expect(createTable).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts solo against bots with the chosen settings, without creating a table", async () => {
+    const user = userEvent.setup();
+    const { storage, createTable, onPlaySolo } = setup({ list: () => Promise.resolve([]) });
+    expect(((await screen.findByRole("radio", { name: "Me and bots" })) as HTMLInputElement).checked).toBe(true);
+    await user.selectOptions(screen.getByLabelText("Your seat"), "west");
+    await user.selectOptions(screen.getByLabelText("Bot skill"), "expert");
+    await user.selectOptions(screen.getByLabelText("Bidding style"), "2/1");
+    await user.selectOptions(screen.getByLabelText("Scoring"), "single");
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(onPlaySolo).toHaveBeenCalledTimes(1);
+    expect(createTable).not.toHaveBeenCalled();
+    expect(loadSoloSetup(storage)).toEqual({ opponents: "bots", seat: "west", botSkill: "expert", biddingStyle: "2/1", scoring: "single" });
+  });
+
+  it("plays against bots even when solo was last left at a manual table", async () => {
+    const user = userEvent.setup();
+    const storage = memoryStorage();
+    saveSoloSetup(storage, { ...defaultSoloSetup, opponents: "manual" });
+    setup({ storage, list: () => Promise.resolve([]) });
+    await user.click(await screen.findByRole("button", { name: "Play" }));
+    expect(loadSoloSetup(storage).opponents).toBe("bots");
+  });
+
+  it("fills Me and bots from the remembered solo setup", async () => {
+    const storage = memoryStorage();
+    saveSoloSetup(storage, { ...defaultSoloSetup, seat: "east", botSkill: "advanced" });
+    setup({ storage, list: () => Promise.resolve([]) });
+    expect(((await screen.findByLabelText("Your seat")) as HTMLSelectElement).value).toBe("east");
+    expect((screen.getByLabelText("Bot skill") as HTMLSelectElement).value).toBe("advanced");
+  });
+
+  it("keeps the session's bidding style separate from the Play panel's", async () => {
+    const user = userEvent.setup();
+    const { createSession } = setup({ list: () => Promise.resolve([]) });
+    await withPeople(user);
+    await user.selectOptions(screen.getByLabelText("Bidding style"), "2/1");
+    expect((screen.getByLabelText("Session bidding style") as HTMLSelectElement).value).toBe("SAYC");
+    await user.click(screen.getByRole("button", { name: "Create session" }));
+    expect(createSession.mock.calls[0]![1].style).toBe("SAYC");
   });
 });

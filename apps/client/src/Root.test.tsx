@@ -31,13 +31,33 @@ describe("Root", () => {
     expect(await screen.findByText("Open tables")).toBeTruthy();
   });
 
-  it("renders the lobby for #/online and returns to solo from it", async () => {
+  it("renders the lobby for #/online and starts solo from Play", async () => {
+    const { loadSoloData } = await import("@contractplay/persistence");
     location.hash = "#/online";
     render(<Root />);
     expect(await screen.findByText("Open tables")).toBeTruthy();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Solo play" }));
-    expect(soloVisible()).toBe(true);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Play" }));
     expect(location.hash).toBe("#/solo");
+    await vi.waitFor(() => expect(loadSoloData(window.localStorage).handsStarted).toBe(1));
+    expect(soloVisible()).toBe(false);
+  });
+
+  it("does not deal again when solo is reopened later", async () => {
+    const { loadSoloData, saveSoloData } = await import("@contractplay/persistence");
+    location.hash = "#/online";
+    render(<Root />);
+    await userEvent.setup().click(await screen.findByRole("button", { name: "Play" }));
+    await vi.waitFor(() => expect(loadSoloData(window.localStorage).handsStarted).toBe(1));
+    await act(async () => { location.hash = "#/online"; });
+    expect(await screen.findByText("Open tables")).toBeTruthy();
+    // The hand is gone (as if finished), so a start-now still pending would deal again.
+    saveSoloData(window.localStorage, { ...loadSoloData(window.localStorage), currentGame: null });
+    await act(async () => { location.hash = "#/solo"; });
+    expect(await screen.findByRole("button", { name: "Start a new hand" })).toBeTruthy();
+    // Long enough for a stray start-now to fetch a replay and deal.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(soloVisible()).toBe(true);
+    expect(loadSoloData(window.localStorage).handsStarted).toBe(1);
   });
 
   it("opens the solo app's Recent hands dialog from the lobby, listing saved online hands", async () => {

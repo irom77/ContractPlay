@@ -142,7 +142,7 @@ const others = (seat: Seat) => SEATS.filter((s) => s !== seat);
 
 const onlineScreens: readonly PreviewScreen[] = [
   {
-    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name, open tables (one mid-hand, one with open seats), and the new-table form. Renaming here changes only the preview.",
+    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name, the Play panel (Me and bots, or With other people), and open tables (one mid-hand, one with open seats). Renaming here changes only the preview.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
       const open = table("Beginners welcome", { west: "Chris" }, ["east"]);
