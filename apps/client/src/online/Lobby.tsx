@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { StorageLike } from "@contractplay/persistence";
+import { loadSoloData, type StorageLike } from "@contractplay/persistence";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
@@ -177,6 +177,8 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
   const [mode, setMode] = useState<"bots" | "people">("bots");
   // The Play panel always starts solo against bots, whatever solo was last left at.
   const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
+  // An unfinished solo hand resumes as it was set up; the panel's choices then wait for the next deal.
+  const [soloResumes] = useState(() => { const phase = loadSoloData(storage).currentGame?.phase; return phase === "auction" || phase === "play"; });
   const [sessionStyle, setSessionStyle] = useState<TableStyle>("SAYC");
   const [sessionTables, setSessionTables] = useState(2);
   const [sessionBoards, setSessionBoards] = useState(8);
@@ -237,7 +239,8 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
   // Me and bots never reaches the table server: solo deals on this device with the setup saved here.
   function play() {
     if (mode === "people") { void create(); return; }
-    saveSoloSetup(storage, soloSetup);
+    if (creatingNow.current) return;
+    if (!soloResumes) saveSoloSetup(storage, soloSetup);
     onPlaySolo();
   }
 
@@ -310,6 +313,7 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
             <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
             <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
             <label>Bidding style<select aria-label="Bidding style" value={soloSetup.biddingStyle} onChange={(event) => chooseSolo({ biddingStyle: event.target.value as SoloSetup["biddingStyle"] })}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            {soloResumes ? <p className="quiet-copy">Your unfinished solo hand will resume; these settings apply from the next deal.</p> : null}
             <label>Scoring<select aria-label="Scoring" value={soloSetup.scoring} onChange={(event) => chooseSolo({ scoring: event.target.value as SoloSetup["scoring"] })}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
           </> : <>
             <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
@@ -317,7 +321,7 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
             <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
             <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
           </>}
-          <button className="primary-button" type="submit" disabled={mode === "people" && (creating || effectiveName.trim() === "")}>Play</button>
+          <button className="primary-button" type="submit" disabled={creating || (mode === "people" && effectiveName.trim() === "")}>Play</button>
         </form>
         <div className="lobby-panel">
           <div className="section-heading">

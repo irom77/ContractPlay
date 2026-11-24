@@ -6,6 +6,8 @@ import type { TableSummary } from "@contractplay/protocol";
 import { createDeck, deal } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { applyAction, createGameState } from "@contractplay/core";
+import { loadSoloData, saveSoloData } from "@contractplay/persistence";
 import { loadIdentity, saveIdentity } from "./identity.js";
 import { Lobby, type LobbyApi, type LobbyProps } from "./Lobby.js";
 import { boardSetFromPbn } from "../boardSet.js";
@@ -318,5 +320,30 @@ describe("Lobby", () => {
     expect((screen.getByLabelText("Session bidding style") as HTMLSelectElement).value).toBe("SAYC");
     await user.click(screen.getByRole("button", { name: "Create session" }));
     expect(createSession.mock.calls[0]![1].style).toBe("SAYC");
+  });
+
+  it("leaves an unfinished solo hand's setup alone and says Play resumes it", async () => {
+    const user = userEvent.setup();
+    const storage = memoryStorage();
+    saveSoloSetup(storage, { ...defaultSoloSetup, opponents: "manual" });
+    const started = applyAction(createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" }), { type: "bid", seat: "north", bid: "1clubs" });
+    if (!started.ok) throw new Error(started.error.message);
+    saveSoloData(storage, { ...loadSoloData(storage), currentGame: started.state });
+    const { onPlaySolo } = setup({ storage, list: () => Promise.resolve([]) });
+    expect(await screen.findByText("Your unfinished solo hand will resume; these settings apply from the next deal.")).toBeTruthy();
+    await user.selectOptions(screen.getByLabelText("Your seat"), "west");
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(onPlaySolo).toHaveBeenCalledTimes(1);
+    expect(loadSoloSetup(storage)).toEqual({ ...defaultSoloSetup, opponents: "manual" });
+  });
+
+  it("does not start solo while a table is being created", async () => {
+    const user = userEvent.setup();
+    const { onPlaySolo } = setup({ create: () => new Promise(() => {}), list: () => Promise.resolve([]) });
+    await withPeople(user);
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    await user.click(screen.getByRole("radio", { name: "Me and bots" }));
+    expect((screen.getByRole("button", { name: "Play" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onPlaySolo).not.toHaveBeenCalled();
   });
 });

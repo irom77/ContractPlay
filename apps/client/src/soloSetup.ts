@@ -37,6 +37,11 @@ export function loadSoloSetup(storage: Pick<Storage, "getItem">): SoloSetup {
   };
 }
 
+/** Whether any setup has been remembered yet (it has not for hands started before setups were remembered). */
+export function soloSetupStored(storage: Pick<Storage, "getItem">): boolean {
+  return read(storage, setupKey) !== null;
+}
+
 export function saveSoloSetup(storage: Pick<Storage, "setItem">, setup: SoloSetup): void {
   const { scoring, ...rest } = setup;
   try {

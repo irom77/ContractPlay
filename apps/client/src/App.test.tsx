@@ -2061,4 +2061,12 @@ describe("Remembered solo setup", () => {
     expect(stored.get("contractplay.soloSetup")).toBe(JSON.stringify({ opponents: "bots", seat: "west" }));
     expect(window.localStorage.getItem("contractplay.soloSetup")).toBeNull();
   });
+
+  it("keeps an unfinished hand from before remembered setups at a manual table", async () => {
+    const started = applyAction(createGameState({ deal: deal(), dealer: "north", vulnerability: "None" }), { type: "bid", seat: "north", bid: "1clubs" });
+    if (!started.ok) throw new Error(started.error.message);
+    saveSoloData(window.localStorage, { ...loadSoloData(window.localStorage), currentGame: started.state, currentHandId: "solo-old" });
+    render(<App />);
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.soloSetup")!).opponents).toBe("manual"));
+  });
 });

@@ -49,7 +49,7 @@ import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
-import { loadSoloSetup, saveSoloSetup, type SoloScoring } from "./soloSetup.js";
+import { loadSoloSetup, saveSoloSetup, soloSetupStored, type SoloScoring } from "./soloSetup.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands } from "./online/handHistory.js";
@@ -123,7 +123,11 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [vulnerability, setVulnerability] = useState<Vulnerability>(() => soloData.currentGame?.vulnerability ?? "None");
   // Previews fix their own table; otherwise solo opens with the setup the player (or the lobby's Play panel) last chose.
   const [initialSetup] = useState(() => preview ? { ...loadSoloSetup(persistence.storage),
-    opponents: preview.userSeat !== undefined ? "bots" as const : "manual" as const, seat: preview.userSeat ?? "north" } : loadSoloSetup(persistence.storage));
+    opponents: preview.userSeat !== undefined ? "bots" as const : "manual" as const, seat: preview.userSeat ?? "north" }
+    // A hand left unfinished before setups were remembered was at a manual table, solo's old default: keep it there.
+    : !soloSetupStored(persistence.storage) && (soloData.currentGame?.phase === "auction" || soloData.currentGame?.phase === "play")
+      ? { ...loadSoloSetup(persistence.storage), opponents: "manual" as const }
+      : loadSoloSetup(persistence.storage));
   const [playAgainstBots, setPlayAgainstBots] = useState(initialSetup.opponents === "bots");
   const [userSeat, setUserSeat] = useState<Seat>(initialSetup.seat);
   const [botSkill, setBotSkill] = useState<SkillLevel>(initialSetup.botSkill);
