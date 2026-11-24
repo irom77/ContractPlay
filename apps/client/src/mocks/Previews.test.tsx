@@ -207,6 +207,33 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(screen.getByRole("group", { name: "Review controls" })).getByRole("button", { name: "Back to your result" })).toBeTruthy();
     expect(document.querySelector(".board-label")).toBeNull();
   },
+  "solo-replayed-deal": () => {
+    expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
+    const notice = screen.getByRole("status", { name: "" });
+    expect(notice.classList.contains("replay-notice")).toBe(true);
+    expect(notice.textContent).toBe("Replayed deal · first played 12 Nov 2026, 14:32 · you may have played it before.");
+  },
+  "solo-replay-result": () => {
+    const result = screen.getByRole("region", { name: "Hand result" });
+    const field = within(result).getByRole("region", { name: "Result against the field" });
+    expect(field.textContent).toContain("Original: 4♠ by N · 10 tricks · NS +420 · 12 Nov 2026");
+    expect(field.textContent).toMatch(/[+-]\d+ IMPs? against a datum of NS/);
+    expect(field.textContent).toContain("Earlier results rescored at your vulnerability");
+    // In a rubber the comparison sits above the scorecard, and there is no View original.
+    expect(within(result).getByRole("region", { name: "Scorecard" })).toBeTruthy();
+    expect(within(result).queryByRole("button", { name: "View original play" })).toBeNull();
+    expect(screen.getByText(/^Replayed deal · first played 12 Nov 2026, 14:32/)).toBeTruthy();
+  },
+  "online-replay-result": () => {
+    const result = screen.getByRole("region", { name: "Hand result" });
+    const field = screen.getByRole("region", { name: "Result against the field" });
+    expect(field.textContent).toContain("Original: 4♠ by N · 10 tricks · NS +420 · 12 Nov 2026");
+    expect(field.textContent).toMatch(/[+-]\d+ IMPs? against a datum of NS/);
+    expect(field.textContent).toContain("Earlier results rescored at your vulnerability");
+    expect(within(result).getByRole("button", { name: "Deal" })).toBeTruthy();
+    // The start notice is for the hand in play; once it is over the comparison replaces it.
+    expect(screen.queryByText(/^Replayed deal/)).toBeNull();
+  },
   "email-sign-in": async () => {
     expect(screen.getByRole("region", { name: "Email sign-in" })).toBeTruthy();
     expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("alex@example.com");

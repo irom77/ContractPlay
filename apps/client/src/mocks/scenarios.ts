@@ -1,4 +1,4 @@
-import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type HandRecord, type GameState, type Rank, type Rubber, type Seat } from "@contractplay/core";
+import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type HandRecord, type GameState, type Rank, type Rubber, type Seat, type TravellerRow } from "@contractplay/core";
 import type { SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
@@ -313,6 +313,34 @@ function boardSetExtra(): Partial<SoloData> {
   return { boardSet: { name: "Club Pairs", records: [record, record2, record3], position: 0 }, currentRecord: record, rubber: { hands: [] } };
 }
 
+/** An archived deal first played on 12 Nov 2026 (local time, so the shown date never depends on the time zone). */
+const FIRST_PLAYED = new Date(2026, 10, 12, 14, 32).getTime();
+const ORIGINAL_ROW: TravellerRow = { nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false };
+
+/** This preview's deal as an archived replay, with the earlier results (the first play among them) scored at its vulnerability. */
+function replayRecord(rescored: boolean): HandRecord {
+  return {
+    event: "Replay", scoring: "IMP", dealer: "north", vulnerability: "None", deal: DEAL, field: [
+      ORIGINAL_ROW,
+      { nsScore: 450, contract: "4S", declarer: "north", tricks: 11, multiplicity: 1, artificial: false },
+      { nsScore: 170, contract: "3S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false },
+      { nsScore: -100, contract: "4HX", declarer: "east", tricks: 6, multiplicity: 1, artificial: false }
+    ],
+    replay: { dealId: "preview-deal", firstPlayedAt: FIRST_PLAYED, original: ORIGINAL_ROW, rescored }
+  };
+}
+
+/** An online table after a replayed hand: the server adds the replay record to the view once the hand is over. */
+const onlineReplayResult: PreviewScreen = {
+  id: "online-replay-result", title: "Online: replay result", detail: "A replayed hand at an online table has ended: every player sees the original result and, in IMPs, how the table's result compares with the deal's earlier results, from their own side.",
+  build: () => {
+    const data = playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete");
+    if (data.kind !== "table") throw new Error("Expected a table preview.");
+    const record = replayRecord(true);
+    return { ...data, view: { ...data.view, replay: { firstPlayedAt: FIRST_PLAYED, rescored: true, original: ORIGINAL_ROW, record } } };
+  }
+};
+
 export const soloScreens: readonly PreviewScreen[] = [
   {
     id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, bot skill, and bidding style.",
@@ -369,7 +397,16 @@ export const soloScreens: readonly PreviewScreen[] = [
   {
     id: "solo-original-play", title: "Solo: viewing the original play", detail: "The same board as it was really bid and played, stepped through with Previous and Next; Back to your result returns to the comparison.",
     build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north", viewOriginal: 8 }, boardSetExtra())
-  }
+  },
+  {
+    id: "solo-replayed-deal", title: "Solo: replayed deal", detail: "Every second new hand may replay a deal first played at least a day ago: the notice under the status card says when it was first played and that you may have played it before. The deal looks like any other until the hand ends.",
+    build: () => solo(soloGame(2), { userSeat: "south" }, { currentRecord: replayRecord(false) })
+  },
+  {
+    id: "solo-replay-result", title: "Solo: replay result", detail: "4♠ made on a replayed deal: above the rubber scorecard, the original result (4♠ by N, 10 tricks, NS +420, 12 Nov 2026), your result in IMPs against the earlier results, and the note that they were rescored at your vulnerability.",
+    build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north" }, { currentRecord: replayRecord(true) })
+  },
+  onlineReplayResult
 ];
 
 const authScreens: readonly PreviewScreen[] = [

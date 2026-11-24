@@ -19,13 +19,14 @@
 > | 13 | Hand result | 27 | Solo: reviewing a saved hand |
 > | 14 | Scores | 28 | Solo: result against the field |
 > |  |  | 29 | Solo: viewing the original play |
-> | 30 | Email sign-in |  |  |
-> | 31 | Email link sent |  |  |
+> | 30 | Solo: replayed deal | 33 | Email sign-in |
+> | 31 | Solo: replay result | 34 | Email link sent |
+> | 32 | Online: replay result |  |  |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/31` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/34` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** table and lobby clicks do not contact the server, and preview names, hints, and hand history stay out of browser storage. The email form advances only to its mock confirmation; it never sends a message.
-> - **Always current:** each online table and lobby screen is built from a real table state and drawn by the real `Lobby` and `OnlineTable` components; screens 30–31 use the real email sign-in form with a mock request, and the solo screens (17–29) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Always current:** each online table and lobby screen is built from a real table state and drawn by the real `Lobby` and `OnlineTable` components; screens 33–34 use the real email sign-in form with a mock request, and the solo screens (17–31) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still; screen 32 is the online table after a replayed hand. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
 
 <p align="center">
@@ -49,6 +50,8 @@
 ## Status
 
 Recent hands can start another attempt on the same random deal; the new result compares against earlier attempts.
+
+Deal replays: every second new hand (the 2nd, 4th, 6th and so on) may be an archived deal that someone first played at least 24 hours earlier, in solo play against bots and at online tables outside duplicate sessions. A replayed hand shows a notice with when the deal was first played and that you may have played it before; once the hand ends, the result is set against the deal's earlier results, with Butler IMPs from your side, an `Original:` line (contract, declarer, tricks, North-South score and date), and a note when earlier results were rescored at the rubber's vulnerability. When no replay is available, or the archive cannot be reached, a fresh hand is dealt as usual. The archive is anonymous: it keeps only the deal, its auction and play, and the result, with no names, account or player ids, or table ids, and it holds finished hands only (solo hands against bots, never ones played at a manual table, imported, or replayed from Recent hands). It needs the `0003_deal_archive.sql` D1 migration; see [the deployment runbook](docs/platform-delivery.md).
 
 Email magic-link sign-in, account seat recovery, and account-owned online hand history are implemented and tested. Live magic-link delivery has been verified. The online deployment opens on the account-gated lobby; solo play is available from there after sign-in. Cross-device seat recovery and archive sync still need live verification. See the [deployment runbook](docs/platform-delivery.md#email-sign-in-prerequisites). `/admin` is still open without sign-in; authorization and invitations remain planned.
 
