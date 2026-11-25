@@ -41,6 +41,7 @@ import { isFullscreen, setFullscreen } from "./nativeWindow.js";
 import { createHandName, savedHandName } from "./handNames.js";
 import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
+import { bottomSeatFor } from "./table/bottomSeat.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard.js";
 import { ClaimPanel } from "./table/ClaimPanel.js";
@@ -924,8 +925,9 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const phase = shownGame.phase;
   const contract = shownGame.contract;
   const liveTurn = phase === "auction" || phase === "play";
-  // The seat drawn at the bottom edge: the user against bots, otherwise declarer (so dummy faces them) or South.
-  const bottomSeat: Seat = playAgainstBots ? userSeat : contract ? contract.declarer : "south";
+  // The seat drawn at the bottom edge: the user against bots (or, once dummy is down, the bot partner's declaring hand
+  // they play), otherwise declarer (so dummy faces them) or South.
+  const bottomSeat: Seat = playAgainstBots ? bottomSeatFor(shownGame, userSeat, true) : contract ? contract.declarer : "south";
   const canAct = canShowHand && !!game && !!actor;
   const showBottomHand = playAgainstBots || isReviewing || botsFinishing;
   // The hand whose points the hints show during the auction: the one the hand zone shows.

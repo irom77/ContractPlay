@@ -4,30 +4,30 @@
 >
 > | # | Screen | # | Screen |
 > |---|---|---|---|
-> | 1 | Lobby | 15 | Rubber won |
-> | 2 | Seating | 16 | Online: duplicate session progress |
-> | 3 | Auction: your call | 17 | Solo: new deal |
-> | 4 | Auction with hints | 18 | Solo: your call against bots |
-> | 5 | Declaring 4♠ with dummy | 19 | Solo: declaring against bots |
-> | 6 | Dummy playing for a bot declarer | 20 | Solo: auto play |
-> | 7 | Defending, dummy on your left | 21 | Solo: claiming |
-> | 8 | Defending, dummy on your right | 22 | Solo: game menu |
-> | 9 | Card queued | 23 | Solo: settings |
-> | 10 | Game menu | 24 | Solo: recent hands |
-> | 11 | Auto play | 25 | Solo: hand result with scorecard |
-> | 12 | Claim waiting on you | 26 | Solo: rubber won |
-> | 13 | Hand result | 27 | Solo: reviewing a saved hand |
-> | 14 | Scores | 28 | Solo: result against the field |
-> |  |  | 29 | Solo: viewing the original play |
-> | 30 | Solo: replayed deal | 33 | Email sign-in |
-> | 31 | Solo: replay result | 34 | Email link sent |
-> | 32 | Online: replay result |  |  |
+> | 1 | Lobby | 19 | Solo: declaring against bots |
+> | 2 | Seating | 20 | Solo: dummy playing for a bot declarer |
+> | 3 | Auction: your call | 21 | Solo: auto play |
+> | 4 | Auction with hints | 22 | Solo: claiming |
+> | 5 | Declaring 4♠ with dummy | 23 | Solo: game menu |
+> | 6 | Dummy playing for a bot declarer | 24 | Solo: settings |
+> | 7 | Defending, dummy on your left | 25 | Solo: recent hands |
+> | 8 | Defending, dummy on your right | 26 | Solo: hand result with scorecard |
+> | 9 | Card queued | 27 | Solo: rubber won |
+> | 10 | Game menu | 28 | Solo: reviewing a saved hand |
+> | 11 | Auto play | 29 | Solo: result against the field |
+> | 12 | Claim waiting on you | 30 | Solo: viewing the original play |
+> | 13 | Hand result | 31 | Solo: replayed deal |
+> | 14 | Scores | 32 | Solo: replay result |
+> | 15 | Rubber won | 33 | Online: replay result |
+> | 16 | Online: duplicate session progress | 34 | Email sign-in |
+> | 17 | Solo: new deal | 35 | Email link sent |
+> | 18 | Solo: your call against bots |  |  |
 >
 > - **Step through:** the ‹ and › buttons in the bar at the bottom, the ← and → keys, or Space (Shift+Space goes back).
 > - **Jump to a screen:** the picker in the bar groups the screens by what they show: lobby, seating and sign-in; bidding; card play; menus, claims and auto play; results and scoring; and reviewing hands. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
-> - **Inspect without the bar:** × hides it; the small `N/34` button brings it back. **Exit** returns to the app.
+> - **Inspect without the bar:** × hides it; the small `N/35` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** table and lobby clicks do not contact the server, and preview names, hints, and hand history stay out of browser storage. The email form advances only to its mock confirmation; it never sends a message.
-> - **Always current:** each online table and lobby screen is built from a real table state and drawn by the real `Lobby` and `OnlineTable` components; screens 33–34 use the real email sign-in form with a mock request, and the solo screens (17–31) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still; screen 32 is the online table after a replayed hand. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
+> - **Always current:** each online table and lobby screen is built from a real table state and drawn by the real `Lobby` and `OnlineTable` components; screens 34–35 use the real email sign-in form with a mock request, and the solo screens (17–32) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still; screen 33 is the online table after a replayed hand. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
 > - **Adding a screen:** add an entry to `previewScreens` in [`apps/client/src/mocks/scenarios.ts`](apps/client/src/mocks/scenarios.ts) and its expectation in `Previews.test.tsx`.
 
 <p align="center">

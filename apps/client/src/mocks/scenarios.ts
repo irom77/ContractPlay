@@ -172,7 +172,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "bot-declares", title: "Dummy playing for a bot declarer", detail: "Your bot partner declares; as dummy you see and play both North and South.",
+    id: "bot-declares", title: "Dummy playing for a bot declarer", detail: "Your bot partner declares; as dummy you see and play both hands, with North's declaring hand turned to the bottom and your South hand across the table.",
     build: () => playUntilView(you, "south", moment(["north", "south"], 1))
   },
   {
@@ -355,6 +355,10 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north" })
   },
   {
+    id: "solo-bot-declares", title: "Solo: dummy playing for a bot declarer", detail: "You are South and your bot partner declares 4♠; once dummy is down the table turns, so North's hand that you play sits at the bottom and your own lies across the table as dummy.",
+    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "south" })
+  },
+  {
     id: "solo-auto-play", title: "Solo: auto play", detail: "You are East and chose Auto play this hand from the menu: a bot plays your cards until this hand ends. Drag the banner anywhere; Stop auto play takes your cards back.",
     build: () => solo(soloGame(8, moment(["east"], 2)), { userSeat: "east", autoPlay: true })
   },
@@ -430,7 +434,7 @@ export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...so
 export const previewCategories: readonly { name: string; ids: readonly string[] }[] = [
   { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "email-sign-in", "email-link-sent"] },
   { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction"] },
-  { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-replayed-deal"] },
+  { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-bot-declares", "solo-replayed-deal"] },
   { name: "Menus, claims & auto play", ids: ["game-menu", "auto-play", "claim-answer", "solo-auto-play", "solo-claim", "solo-menu", "solo-settings", "solo-hands"] },
   { name: "Results & scoring", ids: ["result", "rubber-score", "rubber-won", "duplicate-session", "solo-result", "solo-rubber-won", "solo-field-result", "solo-replay-result", "online-replay-result"] },
   { name: "Reviewing hands", ids: ["solo-review", "solo-original-play"] }

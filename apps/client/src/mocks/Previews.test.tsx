@@ -48,8 +48,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getAllByRole("button", { name: /^Play / }).some((card) => !(card as HTMLButtonElement).disabled)).toBe(true);
   },
   "bot-declares": () => {
-    expect(screen.getByRole("region", { name: "North's hand" })).toBeTruthy();
-    expect(screen.getByRole("region", { name: "South's dummy hand" })).toBeTruthy();
+    // The table turns so the declaring hand the human dummy plays sits at the bottom, their own across the table.
+    expect(screen.getByRole("region", { name: "North's hand" }).closest(".pos-bottom")).toBeTruthy();
+    expect(screen.getByRole("region", { name: "South's dummy hand" }).closest(".pos-top")).toBeTruthy();
   },
   "defending-left": () => {
     expect(surface()!.classList.contains("dummy-on-left")).toBe(true);
@@ -139,6 +140,13 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   "solo-declaring": () => {
     expect(screen.getByRole("region", { name: "South's dummy hand" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Play / }).some((card) => !(card as HTMLButtonElement).disabled)).toBe(true);
+    expect(document.querySelector(".status-pill")!.textContent).not.toMatch(/^Bot/);
+  },
+  "solo-bot-declares": () => {
+    // South plays for their bot partner: North's declaring hand at the bottom, South's own across the table as dummy.
+    expect(document.querySelector(".seat-north")!.classList.contains("pos-bottom")).toBe(true);
+    expect(screen.getByRole("region", { name: "South's dummy hand" }).closest(".pos-top")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^Play / }).some((card) => !(card as HTMLButtonElement).disabled)).toBe(true);
     expect(document.querySelector(".status-pill")!.textContent).not.toMatch(/^Bot/);
   },

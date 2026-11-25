@@ -1079,7 +1079,22 @@ describe("bridge table", () => {
     await playAsSouthAgainstBots();
 
     await waitFor(() => expect(screen.getByText("Your play")).toBeTruthy());
-    expect(within(screen.getByRole("region", { name: "South's hand" })).getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
+    // Once dummy is down the table turns: North's declaring hand at the bottom, the user's South cards across as dummy.
+    const ownCards = screen.getByRole("region", { name: "South's dummy hand" });
+    expect(ownCards.closest(".pos-top")).toBeTruthy();
+    expect(document.querySelector(".seat-north")!.classList.contains("pos-bottom")).toBe(true);
+    expect(within(ownCards).getAllByRole("button", { name: /^Play / }).length).toBeGreaterThan(0);
+  });
+
+  it("keeps the user's own hand at the bottom until the opening lead when the bot partner declares", async () => {
+    storeCurrentGame(gameWithContract(["1notrump", "pass", "pass", "pass"]));
+    // Fake timers hold East's opening lead back.
+    vi.useFakeTimers();
+    render(<App />);
+    setSetting("Opponents", "bots");
+    setSetting("Your seat", "south");
+    expect(document.querySelector(".seat-south")!.classList.contains("pos-bottom")).toBe(true);
+    vi.useRealTimers();
   });
 
   it("lets the human dummy control the bot declarer's hand", async () => {

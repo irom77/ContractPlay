@@ -8,6 +8,7 @@ import { retainHandHistory } from "../handHistoryRetention.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
+import { bottomSeatFor } from "../table/bottomSeat.js";
 import { TableView } from "../table/TableView.js";
 import { ClaimPanel } from "../table/ClaimPanel.js";
 import { DraggableBanner } from "../table/DraggableBanner.js";
@@ -532,7 +533,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
         <div className={`game-layout online-table ${game.phase === "auction" ? "auction-layout" : "play-layout"}`}>
           <TableView
             game={game}
-            bottomSeat={yourSeat}
+            bottomSeat={bottomSeatFor(game, yourSeat, !!game.contract && cardDecider(game, view.seats, game.contract.declarer) === yourSeat)}
             actingSeat={actingSeat}
             displayedTrick={displayedTrick}
             showCalls={game.phase !== "play" || auctionShown}
@@ -616,7 +617,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
         <div className="game-layout online-table play-layout result-layout">
           <TableView
             game={game}
-            bottomSeat={yourSeat ?? "south"}
+            bottomSeat={yourSeat ? bottomSeatFor(game, yourSeat, !!game.contract && cardDecider(game, view.seats, game.contract.declarer) === yourSeat) : "south"}
             displayedTrick={[]}
             showCalls={false}
             onToggleCalls={() => undefined}
