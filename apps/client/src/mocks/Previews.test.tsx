@@ -17,6 +17,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const tables = await screen.findByRole("button", { name: /^Open tables/, expanded: false });
     const playToggle = screen.getByRole("button", { name: /^Play/, expanded: false });
     expect(tables.compareDocumentPosition(playToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The duplicate session form is collapsed too, marked Experimental.
+    const session = screen.getByRole("button", { name: /^New duplicate session/, expanded: false });
+    expect(within(session).getByRole("img", { name: "Experimental" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Recent hands" })).toBeTruthy();
     expect(screen.getByText("Signed in as Alex")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Change name" })).toBeTruthy();

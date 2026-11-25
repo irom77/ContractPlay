@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import type { StorageLike } from "@contractplay/persistence";
 import type { TableSummary } from "@contractplay/protocol";
@@ -55,7 +55,13 @@ describe("Lobby", () => {
     const user = userEvent.setup();
     const tablesToggle = await screen.findByRole("button", { name: /^Open tables/ });
     const playToggle = screen.getByRole("button", { name: /^Play/ });
-    // Open tables comes first on the page.
+    const sessionToggle = screen.getByRole("button", { name: /^New duplicate session/ });
+    // Open tables comes first on the page, then Play, then the duplicate session form.
+    expect(playToggle.compareDocumentPosition(sessionToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sessionToggle.getAttribute("aria-expanded")).toBe("false");
+    // The duplicate session header carries an Experimental mark.
+    expect(within(sessionToggle).getByRole("img", { name: "Experimental" })).toBeTruthy();
+    expect(screen.queryByLabelText("Session tables")).toBeNull();
     expect(tablesToggle.compareDocumentPosition(playToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(tablesToggle.getAttribute("aria-expanded")).toBe("false");
     expect(playToggle.getAttribute("aria-expanded")).toBe("false");
@@ -71,6 +77,8 @@ describe("Lobby", () => {
     expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
     await user.click(playToggle);
     await user.click(screen.getByRole("button", { name: "Play" }));
+    await user.click(sessionToggle);
+    expect(screen.getByLabelText("Session tables")).toBeTruthy();
     expect(onPlaySolo).toHaveBeenCalledTimes(1);
     await user.click(tablesToggle);
     expect(screen.queryByText("Friday club")).toBeNull();
@@ -163,7 +171,7 @@ describe("Lobby", () => {
   it("creates a multi-table duplicate session and opens its first table", async () => {
     const user = userEvent.setup();
     const { createSession, onOpenTable } = setup({ list: () => Promise.resolve([]) });
-    await screen.findByRole("heading", { name: "New duplicate session" });
+    await screen.findByRole("heading", { name: /^New duplicate session/ });
     await user.selectOptions(screen.getByLabelText("Session tables"), "4");
     await user.selectOptions(screen.getByLabelText("Session boards"), "12");
     await user.selectOptions(screen.getByLabelText("Session scoring"), "imps");

@@ -42,7 +42,7 @@ export type LobbyProps = {
   onRecentHands(): void;
   api?: LobbyApi;
   auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands };
-  /** Opens Open tables and Play from the start; both are collapsed to their headers otherwise. */
+  /** Opens Open tables, Play and New duplicate session from the start; they are collapsed to their headers otherwise. */
   expandedPanels?: boolean;
 };
 
@@ -207,9 +207,10 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
   // The Play panel always starts solo against bots, whatever solo was last left at.
   const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
   // An unfinished solo hand resumes as it was set up; the panel's choices then wait for the next deal.
-  // Open tables and Play start collapsed to their headers; a click on a header opens its list or form.
+  // Open tables, Play and New duplicate session start collapsed to their headers; a click on a header opens its list or form.
   const [tablesOpen, setTablesOpen] = useState(expandedPanels);
   const [playOpen, setPlayOpen] = useState(expandedPanels);
+  const [sessionOpen, setSessionOpen] = useState(expandedPanels);
   const [soloResumes] = useState(() => { const phase = loadSoloData(storage).currentGame?.phase; return phase === "auction" || phase === "play"; });
   const [sessionStyle, setSessionStyle] = useState<TableStyle>("SAYC");
   const [sessionTables, setSessionTables] = useState(2);
@@ -388,8 +389,14 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
           </div> : null}
         </form>
 
-        <form className="lobby-panel" aria-label="New duplicate session" onSubmit={(event) => { event.preventDefault(); void createDuplicateSession(); }}>
-          <h2>New duplicate session</h2>
+        <form className={`lobby-panel collapsible-panel${sessionOpen ? " open" : ""}`} aria-label="New duplicate session" onSubmit={(event) => { event.preventDefault(); void createDuplicateSession(); }}>
+          <div className="section-heading">
+            <PanelToggle title="New duplicate session" open={sessionOpen} controls="lobby-session" onToggle={() => setSessionOpen((open) => !open)}
+              badge={<span className="experimental-badge" role="img" aria-label="Experimental" title="Experimental: duplicate sessions haven't been tried in a real game yet">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v6.5L4.6 18.4A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.4-2.6L14 9.5V3" /><path d="M7.2 15h9.6" /></svg>
+              </span>} />
+          </div>
+          {sessionOpen ? <div id="lobby-session" className="collapsible-body">
           <label>Tables<select aria-label="Session tables" value={sessionTables} onChange={(event) => setSessionTables(Number(event.target.value))}>{[2, 3, 4, 6, 8].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           <label>Boards<select aria-label="Session boards" disabled={!!importedBoards} value={sessionBoards} onChange={(event) => setSessionBoards(Number(event.target.value))}>{[4, 8, 12, 16, 24, 32].map((count) => <option key={count} value={count}>{count}</option>)}</select></label>
           <label>Scoring method<select aria-label="Session scoring" value={sessionScoring} onChange={(event) => setSessionScoring(event.target.value as "matchpoints" | "imps")}><option value="matchpoints">Matchpoints</option><option value="imps">Cross-IMPs</option></select></label>
@@ -398,6 +405,7 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
           {importedBoards ? <p className="quiet-copy">Loaded {importedBoards.boards.length} board{importedBoards.boards.length === 1 ? "" : "s"} from {importedBoards.fileName}{importedBoards.skipped ? ` · skipped ${importedBoards.skipped} unreadable` : ""}. Only deal and board details are sent. <button className="secondary-button" type="button" onClick={() => setImportedBoards(undefined)}>Remove PBN set</button></p> : null}
           <p className="quiet-copy">Session tables appear in the open lobby so players can join different tables.</p>
           <button className="primary-button" type="submit" disabled={creating}>Create session</button>
+          </div> : null}
         </form>
         {alert ? <p className="error-message" role="alert">{alert}</p> : null}
       </section>

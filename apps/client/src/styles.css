@@ -506,6 +506,9 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .panel-toggle[aria-expanded="true"] .panel-chevron { transform: rotate(90deg); }
 .panel-count { min-width: 24px; border-radius: 999px; padding: 2px 8px; background: var(--gold); color: var(--deep); font: 800 13px/1.3 system-ui, sans-serif; text-align: center; }
 .panel-hint { color: var(--muted); font: 600 13px/1.3 system-ui, sans-serif; }
+/* A small flask beside a panel still being tried out (duplicate sessions). */
+.experimental-badge { display: grid; flex: none; width: 24px; height: 24px; place-items: center; border: 1px solid rgba(243, 194, 79, .55); border-radius: 50%; color: var(--gold); }
+.experimental-badge svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (prefers-reduced-motion: reduce) { .panel-chevron { transition: none; } }
 .lobby-panel label { display: grid; gap: 5px; color: #cfdbd1; font-size: 12px; font-weight: 600; }
 .lobby-panel input:not([type="checkbox"]), .lobby-panel select { min-width: 0; height: 38px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 10px; background: #21483e; color: var(--ink); font-size: 14px; }
