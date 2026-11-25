@@ -52,7 +52,8 @@ import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
-import { loadSoloSetup, saveSoloSetup, soloSetupStored, type SoloScoring } from "./soloSetup.js";
+import { botSettingsAt, castCharacterAt, castHasCustom, loadSoloSetup, saveSoloSetup, soloSetupStored, type BotCast, type SoloScoring } from "./soloSetup.js";
+import { BotCastFields } from "./table/BotCastFields.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands, uploadSoloHand } from "./online/handHistory.js";
@@ -96,6 +97,8 @@ export type SoloPreview = Readonly<{
   /** The claim picker is open. */
   claiming?: boolean;
   menuOpen?: boolean;
+  /** The named bots around the player; without it the preview keeps the stored (default) cast. */
+  cast?: BotCast;
   /** One of the game menu's dialogs is open. */
   dialog?: MenuDialog;
   /** Review this saved hand at this action. */
@@ -126,7 +129,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [vulnerability, setVulnerability] = useState<Vulnerability>(() => soloData.currentGame?.vulnerability ?? "None");
   // Previews fix their own table; otherwise solo opens with the setup the player (or the lobby's Play panel) last chose.
   const [initialSetup] = useState(() => preview ? { ...loadSoloSetup(persistence.storage),
-    opponents: preview.userSeat !== undefined ? "bots" as const : "manual" as const, seat: preview.userSeat ?? "north" }
+    opponents: preview.userSeat !== undefined ? "bots" as const : "manual" as const, seat: preview.userSeat ?? "north", ...(preview.cast ? { cast: preview.cast } : {}) }
     // A hand left unfinished before setups were remembered was at a manual table, solo's old default: keep it there.
     : !soloSetupStored(persistence.storage) && (soloData.currentGame?.phase === "auction" || soloData.currentGame?.phase === "play")
       ? { ...loadSoloSetup(persistence.storage), opponents: "manual" as const }
@@ -136,6 +139,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [botSkill, setBotSkill] = useState<SkillLevel>(initialSetup.botSkill);
   const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">(initialSetup.biddingStyle);
   const [botAggression, setBotAggression] = useState<Aggression>(initialSetup.botAggression);
+  const [cast, setCast] = useState<BotCast>(initialSetup.cast);
   const [auctionShown, setAuctionShown] = useState(false);
   const [fullscreen, toggleFullscreen] = useFullscreen(() => setMessage("Full screen is not available here."));
   const [pbnInput, setPbnInput] = useState("");
@@ -149,8 +153,8 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [takenBackTo, setTakenBackTo] = useState<GameState>();
   const [scoring, setScoring] = useState<ScoringFormat>(initialSetup.scoring);
   useEffect(() => {
-    if (!frozen) saveSoloSetup(persistence.storage, { opponents: playAgainstBots ? "bots" : "manual", seat: userSeat, botSkill, biddingStyle, botAggression, scoring });
-  }, [frozen, persistence, playAgainstBots, userSeat, botSkill, biddingStyle, botAggression, scoring]);
+    if (!frozen) saveSoloSetup(persistence.storage, { opponents: playAgainstBots ? "bots" : "manual", seat: userSeat, botSkill, biddingStyle, botAggression, cast, scoring });
+  }, [frozen, persistence, playAgainstBots, userSeat, botSkill, biddingStyle, botAggression, cast, scoring]);
   const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
   const [boardSet, setBoardSet] = useState<BoardSet | undefined>(() => soloData.boardSet);
   const [boardSetLibrary, setBoardSetLibrary] = useState<readonly BoardSetLibraryEntry[]>(() => soloData.boardSetLibrary ?? []);
@@ -321,11 +325,13 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     if (!botsFinishing && (!playAgainstBots || game.currentActor === userSeat || declaringSideIsHumanControlled)) return;
     let cancelled = false;
     const turnState = game;
-    const bot = createBot({ skill: botSkill, biddingStyle, aggression: botAggression });
     const decide = async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       if (cancelled) return;
       const actorSeat = turnState.currentActor;
+      // Each seat's bot is its cast character, or the custom bot (as is the bot playing for the player on auto play).
+      const settings = botSettingsAt({ cast, botSkill, botAggression }, actorSeat, userSeat);
+      const bot = createBot({ skill: settings.skill, biddingStyle, aggression: settings.aggression });
       const action = turnState.phase === "auction"
         ? { type: "bid" as const, seat: actorSeat, bid: await bot.chooseBid(turnState.hands[actorSeat], turnState.auction, actorSeat) }
         : { type: "play" as const, seat: actorSeat, card: await bot.chooseCard(playContextFor(turnState, actorSeat)) };
@@ -335,7 +341,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     };
     void decide();
     return () => { cancelled = true; };
-  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill, botAggression]);
+  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill, botAggression, cast]);
 
   const actor = game?.currentActor;
   const selectedHand = reviewHandId ? newestHands(soloData.completedHands).find((hand) => hand.id === reviewHandId) : undefined;
@@ -824,7 +830,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     {scoring === "single" || !rubberUnderway ? <label>{scoring === "rubber" ? "First dealer" : "Dealer"}<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label> : null}
     {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}
+    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} />{castHasCustom(cast) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
@@ -917,7 +923,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     : liveTurn && activeQueued && !canAct ? `Queued: ${cardLabel(activeQueued.card)}`
     // Against bots, your own turns read as they do online.
     : liveTurn && playAgainstBots && canAct ? (phase === "auction" ? "Your call" : actor === userSeat ? "Your play" : actor === contract?.declarer ? "Play declarer's hand" : "Play from dummy")
-    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? "Bot · " : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
+    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? `${castCharacterAt(cast, shownActor!, userSeat)?.name ?? "Bot"} · ` : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
   // The same game menu as at an online table: the hand's actions first, then this device's settings and hands, and
   // dealing again (which abandons a hand in progress) set apart at the end.
@@ -1037,6 +1043,10 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
           game={shownGame}
           bottomSeat={bottomSeat}
           botSeats={playAgainstBots ? seats.filter((seat) => seat !== userSeat) : undefined}
+          seatLabel={(seat) => {
+            const character = playAgainstBots ? castCharacterAt(cast, seat, userSeat) : undefined;
+            return character ? <span className="online-seat-label bot-name-tag" title={`${character.name}: ${character.blurb}`}><span className="online-seat-name">{character.name}</span></span> : null;
+          }}
           actingSeat={canAct ? actor : undefined}
           displayedTrick={displayedTrick}
           showCalls={showCalls}
@@ -1063,7 +1073,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
             onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { key: callsKey, index }),
             text: (index) => {
               const seat = shownGame.auction[index]!.seat;
-              return explainBid(shownGame.auction, index, biddingStyle, playAgainstBots && seat !== userSeat ? botSkill : "expert");
+              return explainBid(shownGame.auction, index, biddingStyle, playAgainstBots && seat !== userSeat ? botSettingsAt({ cast, botSkill, botAggression }, seat, userSeat).skill : "expert");
             }
           }}
           tools={tableTools}

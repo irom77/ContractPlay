@@ -16,7 +16,8 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 ## Bots
 
 - [x] Allow players to configure bot aggressiveness levels (Conservative, Normal, Aggressive), alongside skill and bidding style, in solo settings and when creating an online table. Plan: `docs/superpowers/plans/2026-11-25-bot-aggressiveness.md`.
-- [ ] Let players save named bot presets (skill, bidding style, aggressiveness) and pick one next time: in the browser for solo first, then on the account so presets follow a player across devices and to online tables.
+- [x] A cast of twelve named solo bots (one per skill level and temperament) to pick as partner and each opponent, named at their seats. Plan: `docs/superpowers/plans/2026-11-25-named-bots.md`.
+- [ ] Named bots next: results with each partner (hands played, average score) to help pick favourites; named bots at online tables (per-seat aggressiveness on the service); players' own saved custom characters, on the account so they follow a player across devices.
 
 ## Online multiplayer
 

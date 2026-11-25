@@ -148,6 +148,10 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((screen.getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
     expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("south");
     expect((screen.getByRole("combobox", { name: "Bot aggressiveness" }) as HTMLSelectElement).value).toBe("normal");
+    expect((screen.getByRole("combobox", { name: "Partner" }) as HTMLSelectElement).value).toBe("bea");
+    expect((screen.getByRole("combobox", { name: "Left opponent" }) as HTMLSelectElement).value).toBe("cora");
+    expect((screen.getByRole("combobox", { name: "Right opponent" }) as HTMLSelectElement).value).toBe("custom");
+    expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Bold Bea (Advanced): Competes on every hand.");
   },
   "solo-auction": () => {
     expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
@@ -167,6 +171,10 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByRole("region", { name: "South's dummy hand" }).closest(".pos-top")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: /^Play / }).some((card) => !(card as HTMLButtonElement).disabled)).toBe(true);
     expect(document.querySelector(".status-pill")!.textContent).not.toMatch(/^Bot/);
+    expect(document.querySelector(".seat-north .bot-name-tag")?.textContent).toBe("Bold Bea");
+    expect(document.querySelector(".seat-west .bot-name-tag")?.textContent).toBe("Careful Cora");
+    expect(document.querySelector(".seat-east .bot-name-tag")?.textContent).toBe("Wild Wes");
+    expect(document.querySelector(".seat-south .bot-name-tag")).toBeNull();
   },
   "solo-auto-play": () => {
     // The same floating, draggable banner as online.

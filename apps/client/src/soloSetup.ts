@@ -1,11 +1,19 @@
 import { AGGRESSIONS, type Aggression, type Seat, type SkillLevel } from "@contractplay/core";
+import { BOT_CHARACTERS, botCharacter, type BotCharacter } from "@contractplay/bots";
 
 export type SoloOpponents = "bots" | "manual";
 export type SoloScoring = "rubber" | "single";
+/** A bot character's id, or "custom" for a bot that takes the setup's own skill and aggressiveness. */
+export type CastChoice = string;
+/** Who sits where around the player: partner, left-hand opponent (next to call) and right-hand opponent. */
+export type BotCast = Readonly<{ partner: CastChoice; left: CastChoice; right: CastChoice }>;
+export const CAST_ROLES = ["partner", "left", "right"] as const;
+export type CastRole = typeof CAST_ROLES[number];
 /** How the next solo hand is set up; the lobby's Play panel writes it and solo reads it. */
-export type SoloSetup = Readonly<{ opponents: SoloOpponents; seat: Seat; botSkill: SkillLevel; biddingStyle: "SAYC" | "2/1"; botAggression: Aggression; scoring: SoloScoring }>;
+export type SoloSetup = Readonly<{ opponents: SoloOpponents; seat: Seat; botSkill: SkillLevel; biddingStyle: "SAYC" | "2/1"; botAggression: Aggression; cast: BotCast; scoring: SoloScoring }>;
 
-export const defaultSoloSetup: SoloSetup = { opponents: "bots", seat: "north", botSkill: "beginner", biddingStyle: "SAYC", botAggression: "normal", scoring: "rubber" };
+export const customCast: BotCast = { partner: "custom", left: "custom", right: "custom" };
+export const defaultSoloSetup: SoloSetup = { opponents: "bots", seat: "north", botSkill: "beginner", biddingStyle: "SAYC", botAggression: "normal", cast: customCast, scoring: "rubber" };
 
 const setupKey = "contractplay.soloSetup";
 /** Scoring keeps the key it had before the rest of the setup was remembered. */
@@ -16,6 +24,34 @@ const skills: readonly SkillLevel[] = ["beginner", "intermediate", "advanced", "
 function read(storage: Pick<Storage, "getItem">, key: string): string | null {
   try { return storage.getItem(key); } catch { return null; }
 }
+
+const castChoices: readonly CastChoice[] = ["custom", ...BOT_CHARACTERS.map((character) => character.id)];
+
+function readCast(value: unknown): BotCast {
+  const stored = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return { partner: pick(stored.partner, castChoices, "custom"), left: pick(stored.left, castChoices, "custom"), right: pick(stored.right, castChoices, "custom") };
+}
+
+/** Where each cast role sits for a player in this seat. */
+export function castRoleOf(seat: Seat, userSeat: Seat): CastRole | undefined {
+  const turn = (seats.indexOf(seat) - seats.indexOf(userSeat) + 4) % 4;
+  return turn === 1 ? "left" : turn === 2 ? "partner" : turn === 3 ? "right" : undefined;
+}
+
+/** The character sitting in this seat, if it is a cast character rather than a custom bot (or the player). */
+export function castCharacterAt(cast: BotCast, seat: Seat, userSeat: Seat): BotCharacter | undefined {
+  const role = castRoleOf(seat, userSeat);
+  return role ? botCharacter(cast[role]) : undefined;
+}
+
+/** The skill and aggressiveness of the bot in this seat: its character's, or the setup's own for a custom bot. */
+export function botSettingsAt(setup: Pick<SoloSetup, "cast" | "botSkill" | "botAggression">, seat: Seat, userSeat: Seat): { skill: SkillLevel; aggression: Aggression } {
+  const character = castCharacterAt(setup.cast, seat, userSeat);
+  return character ? { skill: character.skill, aggression: character.aggression } : { skill: setup.botSkill, aggression: setup.botAggression };
+}
+
+/** Whether any seat is a custom bot, so the setup's own skill and aggressiveness still matter. */
+export const castHasCustom = (cast: BotCast): boolean => CAST_ROLES.some((role) => !botCharacter(cast[role]));
 
 function pick<T>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? value as T : fallback;
@@ -34,6 +70,7 @@ export function loadSoloSetup(storage: Pick<Storage, "getItem">): SoloSetup {
     botSkill: pick(stored.botSkill, skills, defaultSoloSetup.botSkill),
     biddingStyle: pick<"SAYC" | "2/1">(stored.biddingStyle, ["SAYC", "2/1"], defaultSoloSetup.biddingStyle),
     botAggression: pick(stored.botAggression, AGGRESSIONS, defaultSoloSetup.botAggression),
+    cast: readCast(stored.cast),
     scoring: read(storage, scoringKey) === "single" ? "single" : "rubber"
   };
 }

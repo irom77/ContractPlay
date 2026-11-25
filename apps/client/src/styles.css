@@ -679,3 +679,6 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
   .table-panel.dealing :is(.hand-zone, .hidden-hand, .dummy-table-hand, .seat-auction-calls, .bid-picker) { animation: none; }
   .tour-slide { transition: none; }
 }
+/* Named bots: their blurbs under the seat picks, and their name tag beside the seat badge at a solo table. */
+.bot-cast-blurbs { display: grid; gap: 3px; grid-column: 1 / -1; flex: 1 0 100%; margin: 0; padding-left: 1.1em; line-height: 1.35; }
+.bot-cast-blurbs strong { color: inherit; }

@@ -4,7 +4,8 @@ import type { Aggression } from "@contractplay/core";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
 import { aggressionNames, aggressionOptions, seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
-import { loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
+import { castHasCustom, loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
+import { BotCastFields } from "../table/BotCastFields.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
@@ -377,9 +378,12 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
           </div>
           {mode === "bots" ? <>
             <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-            <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
+            <BotCastFields cast={soloSetup.cast} onChange={(cast) => chooseSolo({ cast })} />
+            {castHasCustom(soloSetup.cast) ? <>
+              <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
+              <label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={soloSetup.botAggression} onChange={(event) => chooseSolo({ botAggression: event.target.value as Aggression })}>{aggressionOptions}</select></label>
+            </> : null}
             <label>Bidding style<select aria-label="Bidding style" value={soloSetup.biddingStyle} onChange={(event) => chooseSolo({ biddingStyle: event.target.value as SoloSetup["biddingStyle"] })}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
-            <label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={soloSetup.botAggression} onChange={(event) => chooseSolo({ botAggression: event.target.value as Aggression })}>{aggressionOptions}</select></label>
             {soloResumes ? <p className="quiet-copy">Your unfinished solo hand will resume; these settings apply from the next deal.</p> : null}
             <label>Scoring<select aria-label="Scoring" value={soloSetup.scoring} onChange={(event) => chooseSolo({ scoring: event.target.value as SoloSetup["scoring"] })}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
           </> : <>

@@ -343,8 +343,8 @@ const onlineReplayResult: PreviewScreen = {
 
 export const soloScreens: readonly PreviewScreen[] = [
   {
-    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, bot skill, bidding style, and bot aggressiveness.",
-    build: () => solo(null, { userSeat: "south" }, { completedHands: [], rubber: { hands: [] } })
+    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner, Careful Cora on your left, and a custom bot on your right with its own skill and aggressiveness.",
+    build: () => solo(null, { userSeat: "south", cast: { partner: "bea", left: "cora", right: "custom" } }, { completedHands: [], rubber: { hands: [] } })
   },
   {
     id: "solo-auction", title: "Solo: your call against bots", detail: "You are South against bots; partner opened 1♠ and East passed.",
@@ -355,8 +355,8 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north" })
   },
   {
-    id: "solo-bot-declares", title: "Solo: dummy playing for a bot declarer", detail: "You are South and your bot partner declares 4♠; once dummy is down the table turns, so North's hand that you play sits at the bottom and your own lies across the table as dummy.",
-    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "south" })
+    id: "solo-bot-declares", title: "Solo: dummy playing for a bot declarer", detail: "You are South and your bot partner Bold Bea declares 4♠ against Careful Cora and Wild Wes, each named at their seat; once dummy is down the table turns, so North's hand that you play sits at the bottom and your own lies across the table as dummy.",
+    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "south", cast: { partner: "bea", left: "cora", right: "wes" } })
   },
   {
     id: "solo-auto-play", title: "Solo: auto play", detail: "You are East and chose Auto play this hand from the menu: a bot plays your cards until this hand ends. Drag the banner anywhere; Stop auto play takes your cards back.",

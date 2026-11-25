@@ -339,7 +339,22 @@ describe("Lobby", () => {
     await user.click(screen.getByRole("button", { name: "Play" }));
     expect(onPlaySolo).toHaveBeenCalledTimes(1);
     expect(createTable).not.toHaveBeenCalled();
-    expect(loadSoloSetup(storage)).toEqual({ opponents: "bots", seat: "west", botSkill: "expert", biddingStyle: "2/1", botAggression: "aggressive", scoring: "single" });
+    expect(loadSoloSetup(storage)).toEqual({ opponents: "bots", seat: "west", botSkill: "expert", biddingStyle: "2/1", botAggression: "aggressive", cast: { partner: "custom", left: "custom", right: "custom" }, scoring: "single" });
+  });
+
+  it("seats named bots and hides the custom bot settings once no seat is custom", async () => {
+    const user = userEvent.setup();
+    const { storage } = setup({ list: () => Promise.resolve([]) });
+    await screen.findByRole("radio", { name: "Me and bots" });
+    await user.selectOptions(screen.getByLabelText("Partner"), "bea");
+    await user.selectOptions(screen.getByLabelText("Left opponent"), "cora");
+    expect(screen.getByLabelText("Bot skill")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Careful Cora (Intermediate): Won't bid without the goods.");
+    await user.selectOptions(screen.getByLabelText("Right opponent"), "dex");
+    expect(screen.queryByLabelText("Bot skill")).toBeNull();
+    expect(screen.queryByLabelText("Bot aggressiveness")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(loadSoloSetup(storage).cast).toEqual({ partner: "bea", left: "cora", right: "dex" });
   });
 
   it("plays against bots even when solo was last left at a manual table", async () => {

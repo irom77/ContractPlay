@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSoloSetup, loadSoloSetup, saveSoloSetup } from "./soloSetup.js";
+import { botSettingsAt, castCharacterAt, castHasCustom, castRoleOf, customCast, defaultSoloSetup, loadSoloSetup, saveSoloSetup } from "./soloSetup.js";
 
 const memory = (entries: Record<string, string> = {}) => {
   const map = new Map(Object.entries(entries));
@@ -9,13 +9,13 @@ const broken = { getItem: (): string | null => { throw new Error("blocked"); }, 
 
 describe("solo setup storage", () => {
   it("defaults to bots, North, Beginner, SAYC, Normal, rubber", () => {
-    expect(loadSoloSetup(memory())).toEqual({ opponents: "bots", seat: "north", botSkill: "beginner", biddingStyle: "SAYC", botAggression: "normal", scoring: "rubber" });
+    expect(loadSoloSetup(memory())).toEqual({ opponents: "bots", seat: "north", botSkill: "beginner", biddingStyle: "SAYC", botAggression: "normal", cast: customCast, scoring: "rubber" });
     expect(defaultSoloSetup).toEqual(loadSoloSetup(memory()));
   });
 
   it("round-trips every field", () => {
     const storage = memory();
-    const setup = { opponents: "manual", seat: "west", botSkill: "expert", biddingStyle: "2/1", botAggression: "aggressive", scoring: "single" } as const;
+    const setup = { opponents: "manual", seat: "west", botSkill: "expert", biddingStyle: "2/1", botAggression: "aggressive", cast: { partner: "bea", left: "custom", right: "tess" }, scoring: "single" } as const;
     saveSoloSetup(storage, setup);
     expect(loadSoloSetup(storage)).toEqual(setup);
     expect(storage.getItem("contractplay.scoring")).toBe("single");
@@ -30,6 +30,9 @@ describe("solo setup storage", () => {
       .toEqual({ ...defaultSoloSetup, botSkill: "expert" });
     expect(loadSoloSetup(memory({ "contractplay.soloSetup": '{"botAggression":"conservative"}' })))
       .toEqual({ ...defaultSoloSetup, botAggression: "conservative" });
+    expect(loadSoloSetup(memory({ "contractplay.soloSetup": '{"cast":{"partner":"kim","left":"nobody","right":3}}' })))
+      .toEqual({ ...defaultSoloSetup, cast: { partner: "kim", left: "custom", right: "custom" } });
+    expect(loadSoloSetup(memory({ "contractplay.soloSetup": '{"cast":"bea"}' }))).toEqual(defaultSoloSetup);
     expect(loadSoloSetup(memory({ "contractplay.soloSetup": "{not json" }))).toEqual(defaultSoloSetup);
     expect(loadSoloSetup(memory({ "contractplay.soloSetup": "null" }))).toEqual(defaultSoloSetup);
   });
@@ -37,5 +40,22 @@ describe("solo setup storage", () => {
   it("ignores storage that throws", () => {
     expect(loadSoloSetup(broken)).toEqual(defaultSoloSetup);
     expect(() => saveSoloSetup(broken, defaultSoloSetup)).not.toThrow();
+  });
+
+  it("seats the cast around the player", () => {
+    expect([castRoleOf("north", "south"), castRoleOf("west", "south"), castRoleOf("east", "south"), castRoleOf("south", "south")])
+      .toEqual(["partner", "left", "right", undefined]);
+    const cast = { partner: "bea", left: "tess", right: "custom" };
+    expect(castCharacterAt(cast, "north", "south")?.name).toBe("Bold Bea");
+    expect(castCharacterAt(cast, "west", "south")?.name).toBe("Timid Tess");
+    expect(castCharacterAt(cast, "east", "south")).toBeUndefined();
+    const setup = { cast, botSkill: "expert", botAggression: "normal" } as const;
+    expect(botSettingsAt(setup, "north", "south")).toEqual({ skill: "advanced", aggression: "aggressive" });
+    expect(botSettingsAt(setup, "west", "south")).toEqual({ skill: "beginner", aggression: "conservative" });
+    // A custom bot, and the bot playing the player's own cards on auto play, take the setup's own settings.
+    expect(botSettingsAt(setup, "east", "south")).toEqual({ skill: "expert", aggression: "normal" });
+    expect(botSettingsAt(setup, "south", "south")).toEqual({ skill: "expert", aggression: "normal" });
+    expect(castHasCustom(cast)).toBe(true);
+    expect(castHasCustom({ partner: "bea", left: "tess", right: "kim" })).toBe(false);
   });
 });
