@@ -34,7 +34,7 @@ import { exportPbn } from "@contractplay/pbn";
 import { newestHands, retainHandHistory } from "./handHistoryRetention.js";
 import sampleBoardSetUrl from "./fixtures/bridge-training-ruffing-short-hand-level-1.pbn?url&no-inline";
 import { deleteSavedHand, isSyncableSoloHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
-import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
+import { botCharacter, checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
@@ -54,6 +54,7 @@ import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
 import { botSettingsAt, castCharacterAt, castHasCustom, loadSoloSetup, saveSoloSetup, soloSetupStored, type BotCast, type SoloScoring } from "./soloSetup.js";
 import { BotCastFields } from "./table/BotCastFields.js";
+import { loadPartnerResults, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands, uploadSoloHand } from "./online/handHistory.js";
@@ -140,6 +141,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">(initialSetup.biddingStyle);
   const [botAggression, setBotAggression] = useState<Aggression>(initialSetup.botAggression);
   const [cast, setCast] = useState<BotCast>(initialSetup.cast);
+  const [partnerResults, setPartnerResults] = useState<readonly PartnerResult[]>(() => loadPartnerResults(persistence.storage));
   const [auctionShown, setAuctionShown] = useState(false);
   const [fullscreen, toggleFullscreen] = useFullscreen(() => setMessage("Full screen is not available here."));
   const [pbnInput, setPbnInput] = useState("");
@@ -291,6 +293,17 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     saveSoloData(persistence.storage, nextData);
     setSoloData(nextData);
   }, [game, currentHandId, currentPbnMetadata, rubber, boardSet, boardSetLibrary, currentRecord, handsStarted]);
+
+  // A hand finished with a named partner counts towards your results with them, once per finish (a hand taken back and
+  // finished again replaces its result). The hand open when solo starts was counted when it was finished.
+  const resultCountedFor = useRef(game);
+  useEffect(() => {
+    if (frozen || !game || !currentHandId || !playAgainstBots || resultCountedFor.current === game) return;
+    resultCountedFor.current = game;
+    const result = partnerResultOf(currentHandId, game, userSeat, cast);
+    if (result) setPartnerResults(recordPartnerResult(persistence.storage, result));
+  }, [frozen, game, currentHandId, playAgainstBots, userSeat, cast, persistence]);
+  const partnerRecords = useMemo(() => partnerStats(partnerResults), [partnerResults]);
 
   // Hands played against bots on dealt or replayed deals go to the archive; imported, board-set and repeated ones do not.
   useSoloResultPost(currentHandId, game, !frozen && playAgainstBots && !currentPbnMetadata && !boardSet && (!currentRecord || !!currentRecord.replay), currentRecord?.replay?.dealId);
@@ -830,7 +843,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     {scoring === "single" || !rubberUnderway ? <label>{scoring === "rubber" ? "First dealer" : "Dealer"}<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label> : null}
     {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} />{castHasCustom(cast) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} stats={partnerRecords} />{castHasCustom(cast) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
@@ -854,6 +867,11 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       <button className="review-link" aria-label={`Review ${savedHandName(hand)}, played ${playedOn(hand)}`} onClick={() => openReview(hand)}><strong>{savedHandName(hand)}</strong><span>Played {playedOn(hand)}</span></button>
       <div className="recent-actions">{(!hand.record || hand.record.event === "Previous attempts") && !hand.pbnMetadata && hand.game.score ? <button onClick={() => replaySavedDeal(hand)} aria-label={`Play this deal again from ${savedHandName(hand)}`}>Play this deal again</button> : null}<button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}
+    {partnerRecords.length ? <><h3>Your partners</h3><ul className="recent-list partner-results" aria-label="Your partners">{partnerRecords.map((stats) => {
+      const character = botCharacter(stats.partner);
+      return <li key={stats.partner}><div className="review-link"><strong>{character?.name ?? stats.partner}</strong>
+        <span>{partnerSummary(stats)}{stats.declared ? ` · made ${stats.made} of ${stats.declared} contracts you declared` : ""}</span></div></li>;
+    })}</ul></> : null}
     {boardSetLibrary.length ? <><h3>Imported board sets</h3><ul className="recent-list">{boardSetLibrary.map((entry) => <li key={entry.id}>
       <div className="review-link"><strong>{entry.name}</strong><span>{entry.completed ? `Complete · ${entry.records.length} boards` : `${entry.progress} of ${entry.records.length} played`}</span></div>
       <div className="recent-actions"><button type="button" onClick={() => resumeBoardSet(entry)}>Resume</button><button type="button" onClick={() => resumeBoardSet(entry, true)}>Restart</button><button type="button" onClick={() => { void exportBoardSet(entry); }}>Export backup</button><button type="button" onClick={() => deleteBoardSet(entry)}>Delete</button></div>
@@ -895,7 +913,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
           <div className="setup-controls">{dealSettings}</div>
           <button className="primary-button" disabled={replayPending} onClick={startHand}>Start a new hand</button>
           {online ? <button className="secondary-button" type="button" onClick={goOnline}>Lobby</button> : null}
-          {soloData.completedHands.length || boardSetLibrary.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
+          {soloData.completedHands.length || boardSetLibrary.length || partnerResults.length ? <button className="secondary-button" type="button" onClick={() => setDialog("hands")}>Recent hands</button> : null}
           {pbnImportForm}
         </section>
         {message ? <p className="error-message" role="alert">{message}</p> : null}

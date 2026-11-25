@@ -682,3 +682,5 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 /* Named bots: their blurbs under the seat picks, and their name tag beside the seat badge at a solo table. */
 .bot-cast-blurbs { display: grid; gap: 3px; grid-column: 1 / -1; flex: 1 0 100%; margin: 0; padding-left: 1.1em; line-height: 1.35; }
 .bot-cast-blurbs strong { color: inherit; }
+.partner-record { color: var(--gold, #f2c14e); font-weight: 600; }
+.recent-panel h3 { margin: 14px 0 4px; }

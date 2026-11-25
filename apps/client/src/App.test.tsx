@@ -9,6 +9,7 @@ import { loadSoloData, saveSoloData, type SavedHand, type SoloData } from "@cont
 import { handName } from "./handNames.js";
 import bridgewebsPbn from "./fixtures/bridgewebs-regis.pbn?raw";
 import App from "./App.js";
+import { loadPartnerResults } from "./partnerResults.js";
 import { suitSymbols } from "./table/labels.js";
 import { replayNotice } from "./replays.js";
 import { defaultSoloSetup, saveSoloSetup } from "./soloSetup.js";
@@ -2121,6 +2122,26 @@ describe("Solo hand account sync", () => {
     // The last card is forced, so it plays itself and the hand ends.
     await waitFor(() => expect(uploads(fetchMock).map(([url]) => url)).toEqual(["/api/account/online-hands/mf3k2x-ab12cd"]), { timeout: 5000 });
     await waitFor(() => expect(loadSoloData(window.localStorage).completedHands[0]?.onlineHistory?.ownerPlayerId).toBe(account.playerId));
+  });
+
+  it("counts a hand finished with a named partner towards your results with them, once", async () => {
+    stubAccount(null);
+    saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east", cast: { partner: "bea", left: "cora", right: "custom" } });
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "mf3k2x-ab12cd", currentGame: gameAfterPlays(51), completedHands: [] }));
+    render(<App />);
+    await waitFor(() => expect(loadPartnerResults(window.localStorage)).toHaveLength(1), { timeout: 5000 });
+    const finished = loadSoloData(window.localStorage).currentGame!;
+    // North declared 1♣, so East and partner West defended and score the other side of North–South's result.
+    expect(loadPartnerResults(window.localStorage)[0]).toEqual({ handId: "mf3k2x-ab12cd", partner: "bea", left: "cora", right: "custom",
+      score: -finished.score!.score, declared: false, made: false });
+    cleanup();
+    // Opening solo again on the finished hand does not count it twice.
+    render(<App />);
+    chooseMenu("Recent hands");
+    const partners = await screen.findByRole("list", { name: "Your partners" });
+    expect(partners.textContent).toContain("Bold Bea");
+    expect(partners.textContent).toContain("1 hand together");
+    expect(loadPartnerResults(window.localStorage)).toHaveLength(1);
   });
 
   it("keeps finished solo hands local for guests", async () => {

@@ -32,7 +32,8 @@ function fixedConnection(view: TableView): typeof connectTable {
 /** The solo App opened on an in-memory copy of its saved hand and settings. */
 function SoloPreviewScreen({ data }: { data: Extract<PreviewData, { kind: "solo" }> }) {
   const preview = useMemo(() => {
-    const storage = memoryStorage({ "contractplay.scoring": data.scoring });
+    const storage = memoryStorage({ "contractplay.scoring": data.scoring,
+      ...(data.partnerResults ? { "contractplay.partnerResults": JSON.stringify(data.partnerResults) } : {}) });
     saveSoloData(storage, data.data);
     return { storage, ...data.table };
   }, [data]);

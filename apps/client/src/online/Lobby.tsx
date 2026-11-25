@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadSoloData, type StorageLike } from "@contractplay/persistence";
 import type { Aggression } from "@contractplay/core";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
@@ -6,6 +6,7 @@ import { aggressionNames, aggressionOptions, seatNames, seats } from "../table/l
 import { boardSetFromPbn } from "../boardSet.js";
 import { castHasCustom, loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { BotCastFields } from "../table/BotCastFields.js";
+import { loadPartnerResults, partnerStats } from "../partnerResults.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
@@ -209,6 +210,8 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
   const [mode, setMode] = useState<"bots" | "people">("bots");
   // The Play panel always starts solo against bots, whatever solo was last left at.
   const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
+  // Your record with each named partner, shown beside the partner you pick.
+  const partnerRecords = useMemo(() => partnerStats(loadPartnerResults(storage)), [storage]);
   // An unfinished solo hand resumes as it was set up; the panel's choices then wait for the next deal.
   // Open tables, Play and New duplicate session start collapsed to their headers; a click on a header opens its list or form.
   const [tablesOpen, setTablesOpen] = useState(expandedPanels);
@@ -378,7 +381,7 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
           </div>
           {mode === "bots" ? <>
             <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-            <BotCastFields cast={soloSetup.cast} onChange={(cast) => chooseSolo({ cast })} />
+            <BotCastFields cast={soloSetup.cast} onChange={(cast) => chooseSolo({ cast })} stats={partnerRecords} />
             {castHasCustom(soloSetup.cast) ? <>
               <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
               <label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={soloSetup.botAggression} onChange={(event) => chooseSolo({ botAggression: event.target.value as Aggression })}>{aggressionOptions}</select></label>

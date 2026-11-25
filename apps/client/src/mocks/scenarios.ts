@@ -1,6 +1,7 @@
 import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type HandRecord, type GameState, type Rank, type Rubber, type Seat, type TravellerRow } from "@contractplay/core";
 import type { SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
+import type { PartnerResult } from "../partnerResults.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
 import { handName } from "../handNames.js";
@@ -130,7 +131,7 @@ export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
   | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard }
   | { kind: "auth"; sent: boolean }
-  | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage"> };
+  | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[] };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
 
@@ -286,6 +287,17 @@ const savedHand = (): SavedHand => {
   return { id: "preview-saved", name: handName(game.initialDeal.north), game, savedAt: new Date(AT).toISOString() };
 };
 
+/** A record built up over weeks: fourteen hands with Bold Bea, nine with Sharp Kim, and three with Rookie Ray. */
+function partnerHistory(): PartnerResult[] {
+  const hands = (partner: string, scores: readonly number[], declared: number, made: number): PartnerResult[] => scores.map((score, index) =>
+    ({ handId: `${partner}-${index}`, partner, left: "cora", right: "custom", score, declared: index < declared, made: index < made }));
+  return [
+    ...hands("bea", [620, 420, 170, 650, 140, 420, 450, -100, -200, -50, 110, -100, 90, 600], 9, 7),
+    ...hands("kim", [420, 620, 140, 450, 400, 1430, -50, 110, 170], 6, 6),
+    ...hands("ray", [90, -100, -300], 2, 1)
+  ];
+}
+
 function solo(game: GameState | null, table: Omit<SoloPreview, "storage">, extra: Partial<SoloData> = {}): PreviewData {
   return {
     kind: "solo",
@@ -343,8 +355,8 @@ const onlineReplayResult: PreviewScreen = {
 
 export const soloScreens: readonly PreviewScreen[] = [
   {
-    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner, Careful Cora on your left, and a custom bot on your right with its own skill and aggressiveness.",
-    build: () => solo(null, { userSeat: "south", cast: { partner: "bea", left: "cora", right: "custom" } }, { completedHands: [], rubber: { hands: [] } })
+    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner (14 hands together so far), Careful Cora on your left, and a custom bot on your right with its own skill and aggressiveness.",
+    build: () => ({ ...solo(null, { userSeat: "south", cast: { partner: "bea", left: "cora", right: "custom" } }, { completedHands: [], rubber: { hands: [] } }), partnerResults: partnerHistory() })
   },
   {
     id: "solo-auction", title: "Solo: your call against bots", detail: "You are South against bots; partner opened 1♠ and East passed.",
@@ -375,8 +387,8 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "settings" })
   },
   {
-    id: "solo-hands", title: "Solo: recent hands", detail: "Recent hands from the game menu: review or export a finished hand, or import a PBN deal.",
-    build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "hands" })
+    id: "solo-hands", title: "Solo: recent hands", detail: "Recent hands from the game menu: review or export a finished hand, see your results with each named partner, or import a PBN deal.",
+    build: () => ({ ...solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "hands" }), partnerResults: partnerHistory() })
   },
   {
     id: "solo-result", title: "Solo: hand result with scorecard", detail: "4♠ made: the whole deal face-up with each seat's calls, and the scorecard: They (East–West) have 60 below from 2♥, We (North–South) add 120 to win game 1, and the breakdown explains the hand.",
