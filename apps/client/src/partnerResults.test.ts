@@ -80,6 +80,15 @@ describe("online cast", () => {
   const gina: OwnCharacter = { id: "own-abc123", name: "Gentle Gina", blurb: "Never doubles.", skill: "advanced",
     traits: { ...TRAIT_PRESETS.normal, doubles: "cautious" }, updatedAt: 5 };
 
+  it("counts your own character online, and another player's as custom", () => {
+    const seats = { north: { kind: "human", name: "Ann", away: false }, east: { kind: "bot", skill: "advanced", character: "bea" },
+      south: { kind: "bot", skill: "advanced", custom: { id: gina.id, name: gina.name, traits: gina.traits } }, west: { kind: "bot", skill: "intermediate" } } as const;
+    expect(onlineCast(seats, "north", [gina]).partner).toBe(gina.id);
+    const other = { ...seats, south: { kind: "bot" as const, skill: "advanced" as const, custom: { name: gina.name, traits: gina.traits } } };
+    expect(onlineCast(other, "north", [gina]).partner).toBe("custom");
+    expect(onlineCast(seats, "north", []).partner).toBe("custom");
+  });
+
   it("records a hand with an own character and its name", () => {
     const withGina = { partner: gina.id, left: "custom", right: "custom" };
     expect(partnerResultOf("h1", finished("north", 420), "south", withGina, {}, [gina]))

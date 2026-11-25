@@ -323,6 +323,19 @@ describe("your own characters", () => {
     expect(picker.value).toBe("seated");
     expect(picker.selectedOptions[0]?.textContent).toBe("Odd Otto");
   });
+
+  it("records a finished hand with your character under its name", () => {
+    const storage = memoryStorage();
+    storage.setItem("contractplay.ownCharacters", JSON.stringify([GINA]));
+    const service = setup({ storage });
+    const finished = playCards(oneNoTrump(), 52);
+    const view = tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: {
+      north: human("Bob"), east: { kind: "bot", skill: "advanced", character: "bea" },
+      south: { kind: "bot", skill: "advanced", custom: { id: GINA.id, name: GINA.name, traits: GINA.traits } }, west: bot
+    }, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal });
+    service.push(view);
+    expect(loadPartnerResults(storage)).toEqual([expect.objectContaining({ handId: "online-ABC234-1", partner: GINA.id, online: true, names: { [GINA.id]: GINA.name } })]);
+  });
 });
 
 describe("OnlineTable play", () => {

@@ -55,10 +55,10 @@ export function partnerResultOf(handId: string, game: GameState, userSeat: Seat,
 }
 
 /** Who sat around the player at an online table: named bots by id, other bots as "custom", people as "human". */
-export function onlineCast(seats: Readonly<Record<Seat, SeatInfo>>, userSeat: Seat): Readonly<{ partner: string; left: string; right: string }> {
+export function onlineCast(seats: Readonly<Record<Seat, SeatInfo>>, userSeat: Seat, own: readonly OwnCharacter[] = []): Readonly<{ partner: string; left: string; right: string }> {
   const at = (turn: number): string => {
     const info = seats[SEATS[(SEATS.indexOf(userSeat) + turn) % 4]!];
-    return info.kind === "bot" ? botCharacter(info.character)?.id ?? "custom" : info.kind === "empty" ? "custom" : "human";
+    return info.kind === "bot" ? botCharacter(info.character)?.id ?? (info.custom?.id && rosterCharacter(info.custom.id, own) ? info.custom.id : "custom") : info.kind === "empty" ? "custom" : "human";
   };
   return { left: at(1), partner: at(2), right: at(3) };
 }

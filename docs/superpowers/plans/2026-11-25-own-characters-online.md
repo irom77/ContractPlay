@@ -154,20 +154,20 @@
 - Consumes: `SeatInfo.custom.id` (owner's view only), `rosterCharacter`.
 - Produces: `onlineCast(seats, userSeat, own: readonly OwnCharacter[] = [])`. A custom seat gives its `id` when that id is a live character in `own`, otherwise `"custom"`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - In `partnerResults.test.ts`, test **`counts your own character at an online table, and anyone else's as custom`**:
     - A partner seat `{kind:"bot", skill:"advanced", custom:{id:GINA.id, name:"Gentle Gina", traits}}` with `own=[GINA]` gives `partner: GINA.id`.
     - The same seat without `id` (another player's view) gives `"custom"`.
     - With `id` but `own=[]` it gives `"custom"`.
   - In `OnlineTable.test.tsx`, test **`records a finished hand with your character under its name`**: follow the existing online result test, with Gina as partner in the owner's view. The stored result has `partner: GINA.id`, `online: true` and `names: { [GINA.id]: "Gentle Gina" }`.
 
-- [ ] **Step 2: Run** `pnpm --filter @contractplay/client exec vitest run src/partnerResults.test.ts src/online/OnlineTable.test.tsx`. Expected: FAIL. Today the custom seat is "custom".
+- [x] **Step 2: Run** `pnpm --filter @contractplay/client exec vitest run src/partnerResults.test.ts src/online/OnlineTable.test.tsx`. Expected: FAIL. Today the custom seat is "custom".
 
-- [ ] **Step 3: Implement.** `recordOnlineResult` gets the same `own` list as the picker and passes it to both `onlineCast` and `partnerResultOf`.
+- [x] **Step 3: Implement.** `recordOnlineResult` gets the same `own` list as the picker and passes it to both `onlineCast` and `partnerResultOf`.
 
-- [ ] **Step 4: Run** the same command. Expected: PASS.
+- [x] **Step 4: Run** the same command. Expected: PASS.
 
-- [ ] **Step 5: Commit** `Count online hands with your own characters`.
+- [x] **Step 5: Commit** `Count online hands with your own characters`.
 
 ### Task 5: Preview and docs
 

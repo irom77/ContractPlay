@@ -147,9 +147,9 @@ function saveToHistory(storage: StorageLike, view: TableViewData, account?: Acco
  * Counts a finished hand towards the player's results with and against the named bots at the table, once: a hand already
  * counted (this view arriving again, or the table reopened) is left as it is. Returns the result when it is new.
  */
-function recordOnlineResult(storage: StorageLike, view: TableViewData, saved: SavedHand): PartnerResult | undefined {
+function recordOnlineResult(storage: StorageLike, view: TableViewData, saved: SavedHand, own: readonly OwnCharacter[] = []): PartnerResult | undefined {
   if (!view.yourSeat || loadPartnerResults(storage).some((result) => result.handId === saved.id)) return undefined;
-  const result = partnerResultOf(saved.id, saved.game, view.yourSeat, onlineCast(view.seats, view.yourSeat), { online: true, at: Date.now() });
+  const result = partnerResultOf(saved.id, saved.game, view.yourSeat, onlineCast(view.seats, view.yourSeat, own), { online: true, at: Date.now() }, own);
   if (result) recordPartnerResult(storage, result);
   return result;
 }
@@ -323,7 +323,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       if (saved && account) void uploadOnlineHand(storage, account, saved).catch(() => {
         setNotice({ text: "Online history could not sync. This hand is saved locally; reopen Recent hands to retry." });
       });
-      const result = saved ? recordOnlineResult(storage, view, saved) : undefined;
+      const result = saved ? recordOnlineResult(storage, view, saved, ownCharacters) : undefined;
       if (result && account) void uploadBotResult(storage, account, result).catch(() => {});
     }
   }, [view, storage, identity]);
