@@ -2144,6 +2144,17 @@ describe("Solo hand account sync", () => {
     expect(loadPartnerResults(window.localStorage)).toHaveLength(1);
   });
 
+  it("counts a hand against named opponents even with a custom partner", async () => {
+    stubAccount(null);
+    saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east", cast: { partner: "custom", left: "dex", right: "custom" } });
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "mf3k2x-ab12cd", currentGame: gameAfterPlays(51), completedHands: [] }));
+    render(<App />);
+    await waitFor(() => expect(loadPartnerResults(window.localStorage)).toHaveLength(1), { timeout: 5000 });
+    chooseMenu("Recent hands");
+    expect((await screen.findByRole("list", { name: "Your opponents" })).textContent).toContain("Daring Dex1 hand against");
+    expect(screen.queryByRole("list", { name: "Your partners" })).toBeNull();
+  });
+
   it("keeps finished solo hands local for guests", async () => {
     const fetchMock = stubAccount(null);
     finishAgainstBots();

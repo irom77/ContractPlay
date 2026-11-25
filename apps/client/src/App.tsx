@@ -54,7 +54,7 @@ import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
 import { botSettingsAt, castCharacterAt, castHasCustom, loadSoloSetup, saveSoloSetup, soloSetupStored, type BotCast, type SoloScoring } from "./soloSetup.js";
 import { BotCastFields } from "./table/BotCastFields.js";
-import { loadPartnerResults, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
+import { loadPartnerResults, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands, uploadSoloHand } from "./online/handHistory.js";
@@ -303,7 +303,8 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     const result = partnerResultOf(currentHandId, game, userSeat, cast);
     if (result) setPartnerResults(recordPartnerResult(persistence.storage, result));
   }, [frozen, game, currentHandId, playAgainstBots, userSeat, cast, persistence]);
-  const partnerRecords = useMemo(() => partnerStats(partnerResults), [partnerResults]);
+  const castRecords = useMemo(() => ({ partners: partnerStats(partnerResults), opponents: opponentStats(partnerResults) }), [partnerResults]);
+  const partnerRecords = castRecords.partners;
 
   // Hands played against bots on dealt or replayed deals go to the archive; imported, board-set and repeated ones do not.
   useSoloResultPost(currentHandId, game, !frozen && playAgainstBots && !currentPbnMetadata && !boardSet && (!currentRecord || !!currentRecord.replay), currentRecord?.replay?.dealId);
@@ -843,7 +844,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     {scoring === "single" || !rubberUnderway ? <label>{scoring === "rubber" ? "First dealer" : "Dealer"}<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label> : null}
     {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} stats={partnerRecords} />{castHasCustom(cast) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} records={castRecords} />{castHasCustom(cast) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
@@ -872,6 +873,8 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       return <li key={stats.partner}><div className="review-link"><strong>{character?.name ?? stats.partner}</strong>
         <span>{partnerSummary(stats)}{stats.declared ? ` · made ${stats.made} of ${stats.declared} contracts you declared` : ""}</span></div></li>;
     })}</ul></> : null}
+    {castRecords.opponents.length ? <><h3>Your opponents</h3><ul className="recent-list partner-results" aria-label="Your opponents">{castRecords.opponents.map((stats) =>
+      <li key={stats.opponent}><div className="review-link"><strong>{botCharacter(stats.opponent)?.name ?? stats.opponent}</strong><span>{opponentSummary(stats)}</span></div></li>)}</ul></> : null}
     {boardSetLibrary.length ? <><h3>Imported board sets</h3><ul className="recent-list">{boardSetLibrary.map((entry) => <li key={entry.id}>
       <div className="review-link"><strong>{entry.name}</strong><span>{entry.completed ? `Complete · ${entry.records.length} boards` : `${entry.progress} of ${entry.records.length} played`}</span></div>
       <div className="recent-actions"><button type="button" onClick={() => resumeBoardSet(entry)}>Resume</button><button type="button" onClick={() => resumeBoardSet(entry, true)}>Restart</button><button type="button" onClick={() => { void exportBoardSet(entry); }}>Export backup</button><button type="button" onClick={() => deleteBoardSet(entry)}>Delete</button></div>

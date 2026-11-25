@@ -1,6 +1,6 @@
 import type { GameState } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { loadPartnerResults, MAX_PARTNER_RESULTS, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
+import { loadPartnerResults, MAX_PARTNER_RESULTS, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
 
 const memory = () => {
   const map = new Map<string, string>();
@@ -23,8 +23,9 @@ describe("partner results", () => {
     expect(partnerResultOf("h3", finished("east", 100, 2), "west", cast)).toMatchObject({ score: -100, declared: true, made: false });
   });
 
-  it("counts only finished hands with a named partner", () => {
-    expect(partnerResultOf("h1", finished("north", 420), "south", { ...cast, partner: "custom" })).toBeUndefined();
+  it("counts only finished hands with at least one named bot", () => {
+    expect(partnerResultOf("h1", finished("north", 420), "south", { ...cast, partner: "custom" })).toMatchObject({ partner: "custom", left: "cora" });
+    expect(partnerResultOf("h1", finished("north", 420), "south", { partner: "custom", left: "custom", right: "custom" })).toBeUndefined();
     expect(partnerResultOf("h1", { phase: "play" } as GameState, "south", cast)).toBeUndefined();
   });
 
@@ -54,5 +55,15 @@ describe("partner results", () => {
     expect(partnerSummary(stats[0])).toBe("3 hands together, +157 a hand");
     expect(partnerSummary({ partner: "ray", hands: 1, average: -50, declared: 0, made: 0 })).toBe("1 hand together, -50 a hand");
     expect(partnerSummary(undefined)).toBe("No hands together yet");
+    expect(partnerStats([result("a", "custom", 100)])).toEqual([]);
+  });
+
+  it("sums each named opponent's record, most-met first", () => {
+    const against = (handId: string, left: string, right: string, score: number): PartnerResult => ({ ...result(handId, "custom", score), left, right });
+    const stats = opponentStats([against("a", "cora", "wes", 420), against("b", "cora", "custom", -100), against("c", "dex", "dex", -50)]);
+    expect(stats).toEqual([{ opponent: "cora", hands: 2, average: 160 }, { opponent: "wes", hands: 1, average: 420 }, { opponent: "dex", hands: 1, average: -50 }]);
+    expect(opponentSummary(stats[0])).toBe("2 hands against, +160 a hand");
+    expect(opponentSummary(stats[2])).toBe("1 hand against, -50 a hand");
+    expect(opponentSummary(undefined)).toBe("No hands against yet");
   });
 });

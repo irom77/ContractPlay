@@ -152,6 +152,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((screen.getByRole("combobox", { name: "Left opponent" }) as HTMLSelectElement).value).toBe("cora");
     expect((screen.getByRole("combobox", { name: "Right opponent" }) as HTMLSelectElement).value).toBe("custom");
     expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Bold Bea (Advanced): Competes on every hand. 14 hands together, +230 a hand.");
+    expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Careful Cora (Intermediate): Won't bid without the goods. 16 hands against, +317 a hand.");
   },
   "solo-auction": () => {
     expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
@@ -212,6 +213,14 @@ const expectations: Record<string, () => Promise<void> | void> = {
       "Bold Bea14 hands together, +230 a hand · made 7 of 9 contracts you declared",
       "Sharp Kim9 hands together, +410 a hand · made 6 of 6 contracts you declared",
       "Rookie Ray3 hands together, -103 a hand · made 1 of 2 contracts you declared"
+    ]);
+    const opponents = within(dialog).getAllByRole("listitem").filter((item) => item.closest("[aria-label='Your opponents']")).map((item) => item.textContent);
+    expect(opponents).toEqual([
+      "Careful Cora16 hands against, +317 a hand",
+      "Wild Wes16 hands against, +317 a hand",
+      "Daring Dex7 hands against, +263 a hand",
+      "Timid Tess3 hands against, -103 a hand",
+      "Eager Eddie3 hands against, -103 a hand"
     ]);
   },
   "solo-result": () => {

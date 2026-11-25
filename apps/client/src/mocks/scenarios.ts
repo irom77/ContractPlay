@@ -287,14 +287,20 @@ const savedHand = (): SavedHand => {
   return { id: "preview-saved", name: handName(game.initialDeal.north), game, savedAt: new Date(AT).toISOString() };
 };
 
-/** A record built up over weeks: fourteen hands with Bold Bea, nine with Sharp Kim, and three with Rookie Ray. */
+/**
+ * A record built up over weeks: fourteen hands with Bold Bea (half against Careful Cora and Wild Wes, half against
+ * Daring Dex and a custom bot), nine with Sharp Kim against Cora and Wes, and three with Rookie Ray against Timid Tess and Eager Eddie.
+ */
 function partnerHistory(): PartnerResult[] {
-  const hands = (partner: string, scores: readonly number[], declared: number, made: number): PartnerResult[] => scores.map((score, index) =>
-    ({ handId: `${partner}-${index}`, partner, left: "cora", right: "custom", score, declared: index < declared, made: index < made }));
+  const hands = (partner: string, scores: readonly number[], declared: number, made: number, opponents: readonly (readonly [string, string])[]): PartnerResult[] =>
+    scores.map((score, index) => {
+      const [left, right] = opponents[index % opponents.length]!;
+      return { handId: `${partner}-${index}`, partner, left, right, score, declared: index < declared, made: index < made };
+    });
   return [
-    ...hands("bea", [620, 420, 170, 650, 140, 420, 450, -100, -200, -50, 110, -100, 90, 600], 9, 7),
-    ...hands("kim", [420, 620, 140, 450, 400, 1430, -50, 110, 170], 6, 6),
-    ...hands("ray", [90, -100, -300], 2, 1)
+    ...hands("bea", [620, 420, 170, 650, 140, 420, 450, -100, -200, -50, 110, -100, 90, 600], 9, 7, [["cora", "wes"], ["dex", "custom"]]),
+    ...hands("kim", [420, 620, 140, 450, 400, 1430, -50, 110, 170], 6, 6, [["cora", "wes"]]),
+    ...hands("ray", [90, -100, -300], 2, 1, [["tess", "eddie"]])
   ];
 }
 
@@ -355,7 +361,7 @@ const onlineReplayResult: PreviewScreen = {
 
 export const soloScreens: readonly PreviewScreen[] = [
   {
-    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner (14 hands together so far), Careful Cora on your left, and a custom bot on your right with its own skill and aggressiveness.",
+    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner (14 hands together so far), Careful Cora on your left (16 hands against), and a custom bot on your right with its own skill and aggressiveness.",
     build: () => ({ ...solo(null, { userSeat: "south", cast: { partner: "bea", left: "cora", right: "custom" } }, { completedHands: [], rubber: { hands: [] } }), partnerResults: partnerHistory() })
   },
   {
@@ -387,7 +393,7 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "settings" })
   },
   {
-    id: "solo-hands", title: "Solo: recent hands", detail: "Recent hands from the game menu: review or export a finished hand, see your results with each named partner, or import a PBN deal.",
+    id: "solo-hands", title: "Solo: recent hands", detail: "Recent hands from the game menu: review or export a finished hand, see your results with each named partner and against each named opponent, or import a PBN deal.",
     build: () => ({ ...solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "hands" }), partnerResults: partnerHistory() })
   },
   {
