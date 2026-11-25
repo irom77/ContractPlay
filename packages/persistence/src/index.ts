@@ -11,7 +11,7 @@ export type SavedHand = Readonly<{
   playerSeat?: Seat;
   game: GameState;
   savedAt: string;
-  /** Browser uploads are archives only; ownerPlayerId is a local cache partition, never server authority. */
+  /** Browser uploads are archives only; ownerPlayerId is the local cache partition for synced online and solo hands, never server authority. */
   onlineHistory?: Readonly<{ source: "user-imported"; competitive: false; ownerPlayerId?: string }>;
   pbnMetadata?: PbnMetadata;
   /** The imported board this hand was played on, when it came from a board set. */
@@ -179,6 +179,16 @@ function isGame(value: unknown): value is GameState {
 export function isSavedHand(value: unknown): value is SavedHand {
   return isRecord(value) && typeof value.id === "string" && typeof value.savedAt === "string" && (value.name === undefined || typeof value.name === "string") && isGame(value.game) && value.game.phase === "complete" &&
     (value.pbnMetadata === undefined || isPbnMetadata(value.pbnMetadata)) && (value.playerSeat === undefined || isSeat(value.playerSeat));
+}
+
+/** Whether `id` has the shape solo play gives a hand (online hands use an `online-` prefix). */
+export function isSoloHandId(id: string): boolean {
+  return /^[a-z0-9]{1,16}-[a-z0-9]{1,16}$/.test(id) && !id.startsWith("online-");
+}
+
+/** A solo hand that may go to the signed-in account: dealt or replayed from the archive, never one from an imported file or board set. */
+export function isSyncableSoloHand(hand: SavedHand): boolean {
+  return isSoloHandId(hand.id) && hand.pbnMetadata === undefined && (hand.record === undefined || hand.record.replay !== undefined);
 }
 
 /** A saved hand with a malformed board record dropped; the hand itself stays. */

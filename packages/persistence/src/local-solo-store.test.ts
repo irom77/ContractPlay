@@ -1,6 +1,6 @@
 import { applyAction, claimSeatFor, createGameState, deal, validatePlay, type GameAction, type HandRecord } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { deleteSavedHand, exportSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, MAX_BOARD_SET_LIBRARY_CHARS, MAX_BOARD_SET_LIBRARY_ENTRIES, type BoardSet, type BoardSetLibraryEntry, type SoloData } from "./index.js";
+import { deleteSavedHand, isSoloHandId, isSyncableSoloHand, exportSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, MAX_BOARD_SET_LIBRARY_CHARS, MAX_BOARD_SET_LIBRARY_ENTRIES, type BoardSet, type BoardSetLibraryEntry, type SoloData } from "./index.js";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -265,5 +265,24 @@ describe("local solo store", () => {
       saveSoloData(storage, data);
       expect(loadSoloData(storage)).toEqual(data);
     });
+  });
+});
+
+describe("solo hand sync rule", () => {
+  const record: HandRecord = { dealer: "north", vulnerability: "None", deal: deal(), field: [] };
+  const replay = { dealId: "d1", firstPlayedAt: 1, rescored: false, original: { multiplicity: 1, artificial: false } };
+  const saved = (id: string, extra = {}) => ({ id, game: finishHand(), savedAt: new Date(1).toISOString(), ...extra });
+
+  it("recognises the ids solo play creates", () => {
+    expect(isSoloHandId("mf3k2x-ab12cd")).toBe(true);
+    for (const id of ["online-ABC234-1", "online-abc", "Solo 1", "a-", ""]) expect(isSoloHandId(id)).toBe(false);
+  });
+
+  it("syncs only dealt or replayed solo hands", () => {
+    expect(isSyncableSoloHand(saved("mf3k2x-ab12cd"))).toBe(true);
+    expect(isSyncableSoloHand(saved("mf3k2x-ab12cd", { pbnMetadata: { tags: [] } }))).toBe(false);
+    expect(isSyncableSoloHand(saved("mf3k2x-ab12cd", { record }))).toBe(false);
+    expect(isSyncableSoloHand(saved("mf3k2x-ab12cd", { record: { ...record, replay } }))).toBe(true);
+    expect(isSyncableSoloHand(saved("online-ABC234-1"))).toBe(false);
   });
 });
