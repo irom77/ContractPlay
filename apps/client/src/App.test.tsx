@@ -2070,3 +2070,52 @@ describe("Remembered solo setup", () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.soloSetup")!).opponents).toBe("manual"));
   });
 });
+
+describe("Solo hand account sync", () => {
+  const account = { playerId: "account-player", displayName: "Owner" };
+  /** Stubs fetch: `/api/auth/me` answers with `signedIn`, hand uploads echo the hand back, anything else is offline. */
+  function stubAccount(signedIn: typeof account | null) {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/auth/me") return signedIn ? Response.json(signedIn) : new Response(null, { status: 401 });
+      if (url.startsWith("/api/account/online-hands/") && init?.method === "PUT") return Response.json({ hands: [JSON.parse(init.body as string).hand] });
+      throw new TypeError("offline");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+  const uploads = (fetchMock: ReturnType<typeof stubAccount>) => fetchMock.mock.calls.filter(([url, init]) => url.startsWith("/api/account/online-hands/") && init?.method === "PUT");
+  const finishAgainstBots = (extra: object = {}) => {
+    saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east" });
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "mf3k2x-ab12cd", currentGame: gameAfterPlays(51), completedHands: [], ...extra }));
+  };
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it("uploads a hand finished against bots for a signed-in player", async () => {
+    const fetchMock = stubAccount(account);
+    finishAgainstBots();
+    render(<App />);
+    // The last card is forced, so it plays itself and the hand ends.
+    await waitFor(() => expect(uploads(fetchMock).map(([url]) => url)).toEqual(["/api/account/online-hands/mf3k2x-ab12cd"]), { timeout: 5000 });
+    await waitFor(() => expect(loadSoloData(window.localStorage).completedHands[0]?.onlineHistory?.ownerPlayerId).toBe(account.playerId));
+  });
+
+  it("keeps finished solo hands local for guests", async () => {
+    const fetchMock = stubAccount(null);
+    finishAgainstBots();
+    render(<App />);
+    await waitFor(() => expect(loadSoloData(window.localStorage).completedHands).toHaveLength(1), { timeout: 5000 });
+    await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => url === "/api/auth/me")).toBe(true));
+    expect(uploads(fetchMock)).toEqual([]);
+    expect(loadSoloData(window.localStorage).completedHands[0]?.onlineHistory).toBeUndefined();
+  });
+
+  it("does not upload a hand played from an imported file", async () => {
+    const fetchMock = stubAccount(account);
+    finishAgainstBots({ currentPbnMetadata: { tags: [{ name: "Event", value: "Club" }] } });
+    render(<App />);
+    await waitFor(() => expect(loadSoloData(window.localStorage).completedHands).toHaveLength(1), { timeout: 5000 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(uploads(fetchMock)).toEqual([]);
+  });
+});

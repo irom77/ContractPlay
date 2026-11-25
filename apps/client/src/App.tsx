@@ -32,7 +32,7 @@ import {
 import { exportPbn } from "@contractplay/pbn";
 import { newestHands, retainHandHistory } from "./handHistoryRetention.js";
 import sampleBoardSetUrl from "./fixtures/bridge-training-ruffing-short-hand-level-1.pbn?url&no-inline";
-import { deleteSavedHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
+import { deleteSavedHand, isSyncableSoloHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
 import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
@@ -52,7 +52,7 @@ import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
 import { loadSoloSetup, saveSoloSetup, soloSetupStored, type SoloScoring } from "./soloSetup.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
-import { syncOnlineHands } from "./online/handHistory.js";
+import { syncOnlineHands, uploadSoloHand } from "./online/handHistory.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
@@ -259,7 +259,9 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
         game,
         savedAt: new Date().toISOString(),
         ...(currentPbnMetadata ? { pbnMetadata: currentPbnMetadata } : {}),
-        ...(currentRecord ? { record: currentRecord } : {})
+        ...(currentRecord ? { record: currentRecord } : {}),
+        // A hand already saved to the account keeps its owner when it is saved again.
+        ...(existing?.onlineHistory ? { onlineHistory: existing.onlineHistory } : {})
       };
       completedHands = retainHandHistory([record, ...completedHands.filter((hand) => hand.id !== currentHandId)]);
     }
@@ -282,6 +284,22 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
 
   // Hands played against bots on dealt or replayed deals go to the archive; imported, board-set and repeated ones do not.
   useSoloResultPost(currentHandId, game, !frozen && playAgainstBots && !currentPbnMetadata && !boardSet && (!currentRecord || !!currentRecord.replay), currentRecord?.replay?.dealId);
+
+  // A signed-in player's finished hand goes to their account at once (dealt or replayed only); a failure retries on the next sync.
+  const uploadedHandId = useRef(game?.phase === "complete" ? currentHandId : undefined);
+  useEffect(() => {
+    if (frozen || !currentHandId || game?.phase !== "complete" || uploadedHandId.current === currentHandId || serviceUrl() === undefined) return;
+    // The finished hand reaches the saved list one render after the game ends.
+    const hand = soloData.completedHands.find((candidate) => candidate.id === currentHandId);
+    if (!hand) return;
+    uploadedHandId.current = currentHandId;
+    if (!isSyncableSoloHand(hand)) return;
+    void currentAccount().then(async (account) => {
+      if (!account) return;
+      await uploadSoloHand(persistence.storage, account, hand);
+      setSoloData(loadSoloData(persistence.storage));
+    }).catch(() => {});
+  }, [frozen, currentHandId, game, soloData, persistence]);
 
   // A rubber hand is scored when it ends, and loses its score again if it is taken back from the end.
   useEffect(() => {

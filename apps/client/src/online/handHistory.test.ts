@@ -1,5 +1,5 @@
 import { applyAction, createDeck, createGameState, deal, type GameState } from "@contractplay/core";
-import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
+import { loadSoloData, saveSoloData, type SavedHand, type StorageLike } from "@contractplay/persistence";
 import { afterEach, expect, it, vi } from "vitest";
 import { syncOnlineHands, uploadOnlineHand, uploadSoloHand } from "./handHistory.js";
 function hand(id: string, at = 1) {
@@ -9,7 +9,7 @@ function hand(id: string, at = 1) {
   }
   return { id, game, savedAt: new Date(at).toISOString() };
 }
-function storageWith(hands: ReturnType<typeof hand>[]) {
+function storageWith(hands: SavedHand[]) {
   const data = new Map<string, string>();
   const storage: StorageLike = { getItem: k => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: k => void data.delete(k) };
   saveSoloData(storage, { ...loadSoloData(storage), completedHands: hands }); storage.setItem("settings", "keep me");
