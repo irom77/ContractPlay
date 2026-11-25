@@ -55,14 +55,14 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 /* ---------- Corners of the table ---------- */
 .table-status, .table-tools, .history-controls, .hint-controls { position: absolute; z-index: 6; display: flex; gap: var(--u); }
 /* The status card (top right): contract on the left; NS and EW columns with tricks won (gold) over the running score; whose turn underneath. */
-.table-status { top: calc(1.5 * var(--u)); right: calc(2 * var(--u)); display: grid; grid-template-columns: repeat(2, minmax(2.6em, auto)); grid-auto-flow: row; align-items: center; justify-items: center; column-gap: calc(.4 * var(--u)); row-gap: calc(.2 * var(--u)); border: 1px solid var(--line); border-radius: 10px; padding: calc(.9 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .62); box-shadow: 0 4px 12px #0005; font-variant-numeric: tabular-nums; }
-.table-status.has-contract { grid-template-columns: auto repeat(2, minmax(2.6em, auto)); }
-.table-status .contract-badge { grid-column: 1; align-self: center; margin-right: calc(.8 * var(--u)); }
+.table-status { top: calc(1.2 * var(--u)); right: calc(1.6 * var(--u)); display: grid; grid-template-columns: repeat(2, minmax(2em, auto)); grid-auto-flow: row; align-items: center; justify-items: center; column-gap: calc(.3 * var(--u)); row-gap: 0; border: 1px solid var(--line); border-radius: 7px; padding: calc(.45 * var(--u)) calc(.7 * var(--u)); background: rgba(8, 28, 24, .62); box-shadow: 0 2px 8px #0004; font-variant-numeric: tabular-nums; }
+.table-status.has-contract { grid-template-columns: auto repeat(2, minmax(2em, auto)); }
+.table-status .contract-badge { grid-column: 1; align-self: center; margin-right: calc(.5 * var(--u)); }
 .hud-row { display: contents; }
 .hud-ns { grid-column: -3; }
 .hud-ew { grid-column: -2; }
 .hud-side { color: var(--muted); font-size: var(--text-s); font-weight: 700; letter-spacing: .08em; line-height: 1; }
-.trick-count b { color: var(--gold); font-size: var(--text-l); font-weight: 800; line-height: 1.1; }
+.trick-count b { color: var(--gold); font-size: var(--text-m); font-weight: 800; line-height: 1.15; }
 .match-score span { color: var(--ink); font-size: var(--text-s); font-weight: 600; opacity: .85; }
 /* The tools corner (top left): the game menu and the full-screen button. */
 .table-tools { top: calc(1.5 * var(--u)); left: calc(2 * var(--u)); flex-direction: column; align-items: flex-start; }
@@ -81,14 +81,14 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .hint-toggle[aria-checked="true"] .hint-switch { background: var(--gold); }
 .hint-toggle[aria-checked="true"] .hint-switch::after { left: calc(100% - 2px); transform: translateX(-100%); }
 
-.contract-badge { display: flex; align-items: baseline; gap: calc(.9 * var(--u)); border: 0; border-radius: 8px; padding: calc(.7 * var(--u)) calc(1.5 * var(--u)); background: #fdfcf8; color: var(--card-black); box-shadow: 0 3px 8px #0007; font-family: var(--suit-font); cursor: pointer; }
-.contract-badge strong { font-size: max(18px, calc(3.6 * var(--u))); font-weight: 800; line-height: 1.1; }
-.contract-badge > span { font-size: var(--text-m); font-weight: 700; color: #4b5953; }
+.contract-badge { display: flex; align-items: baseline; gap: calc(.5 * var(--u)); border: 0; border-radius: 5px; padding: calc(.25 * var(--u)) calc(.8 * var(--u)); background: #fdfcf8; color: var(--card-black); box-shadow: 0 2px 5px #0006; font-family: var(--suit-font); cursor: pointer; }
+.contract-badge strong { font-size: max(15px, calc(2.7 * var(--u))); font-weight: 800; line-height: 1.1; }
+.contract-badge > span { font-size: var(--text-s); font-weight: 700; color: #4b5953; }
 .contract-badge:disabled { cursor: default; }
 .contract-badge[aria-expanded="true"]:not(:disabled) { box-shadow: 0 0 0 3px var(--gold); }
-.status-pill { grid-column: 1 / -1; justify-self: stretch; color: var(--gold); font-size: var(--text-m); font-weight: 600; text-align: left; }
+.status-pill { grid-column: 1 / -1; justify-self: stretch; color: var(--gold); font-size: var(--text-s); font-weight: 600; text-align: left; }
 .board-label { grid-column: 1 / -1; justify-self: stretch; color: var(--muted); font-size: var(--text-s); text-align: left; }
-.table-status:is(.has-contract, :has(.hud-side)) .status-pill { margin-top: calc(.5 * var(--u)); border-top: 1px solid var(--line); padding-top: calc(.6 * var(--u)); }
+.table-status:is(.has-contract, :has(.hud-side)) .status-pill { margin-top: calc(.35 * var(--u)); border-top: 1px solid var(--line); padding-top: calc(.3 * var(--u)); }
 
 /* The last trick is a small badge with the card that won it; a click lays the whole trick out on the table, another clears it.
    It lies beside the winner's place in the trick, as a won trick is gathered in front of its winner: beside the top or
