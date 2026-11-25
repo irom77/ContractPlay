@@ -51,6 +51,7 @@ function readCohort({ configJson, ...row }: CohortRow): BenchmarkCohort {
 
 export type BenchmarkJobStatus = "queued" | "running" | "paused" | "cancelled" | "completed" | "failed";
 export type BenchmarkJobAction = "pause" | "resume" | "cancel";
+export type BenchmarkClaim = Readonly<{ token: string; now: number }>;
 export type BenchmarkJob = Readonly<{
   id: string;
   cohortId: string;
@@ -130,6 +131,7 @@ const transitions: Record<BenchmarkJobAction, { from: string; to: BenchmarkJobSt
   cancel: { from: "'queued', 'running', 'paused'", to: "cancelled" }
 };
 const activeStatuses = "'queued', 'running', 'paused'";
+const ownsClaim = "j.status = 'running' AND j.claim_token = ?3 AND j.claim_expires_at > ?4";
 
 /** The queue, immutable configuration snapshots, and benchmark-only archive. */
 export class BenchmarkStore {
@@ -285,7 +287,7 @@ export class BenchmarkStore {
   }
 
   /** A job's full rotation is committed before any of its results can be recorded. */
-  async putTableAssignments(id: string, assignments: readonly BenchmarkTableAssignment[]): Promise<void> {
+  async putTableAssignments(id: string, assignments: readonly BenchmarkTableAssignment[], claim: BenchmarkClaim): Promise<void> {
     const job = await this.getJob(id);
     if (!job || assignments.length < 2 || assignments.length > job.cohort.maxTables) return;
     const roster = new Map(job.profiles.map((profile) => [benchmarkProfileVersionId(profile), profile]));
@@ -299,8 +301,9 @@ export class BenchmarkStore {
     }
     await this.db.prepare(`INSERT INTO benchmark_table_assignments (job_id, table_index, seats_json)
       SELECT j.id, entry.key, entry.value FROM benchmark_jobs j, json_each(?2) entry
-      WHERE j.id = ?1 AND j.status IN (${activeStatuses})
-        AND NOT EXISTS (SELECT 1 FROM benchmark_table_assignments WHERE job_id = ?1)`).bind(id, JSON.stringify(snapshots)).run();
+      WHERE j.id = ?1 AND ${ownsClaim}
+        AND NOT EXISTS (SELECT 1 FROM benchmark_table_assignments WHERE job_id = ?1)`)
+      .bind(id, JSON.stringify(snapshots), claim.token, claim.now).run();
   }
 
   async listTableAssignments(id: string): Promise<BenchmarkTableAssignment[]> {
@@ -310,16 +313,17 @@ export class BenchmarkStore {
   }
 
   /** A job's first valid generated or imported board set becomes its permanent source. */
-  async putJobBoards(id: string, generatedBoards: readonly DuplicateSessionBoard[] = []): Promise<void> {
+  async putJobBoards(id: string, generatedBoards: readonly DuplicateSessionBoard[], claim: BenchmarkClaim): Promise<void> {
     await this.db.prepare(`WITH source AS (
         SELECT j.id, COALESCE(i.boards_json, ?2) AS boards_json, json_extract(j.cohort_json, '$.boardCount') AS board_count
         FROM benchmark_jobs j LEFT JOIN benchmark_imports i ON j.import_id = i.id
-        WHERE j.id = ?1 AND j.status IN (${activeStatuses})
+        WHERE j.id = ?1 AND ${ownsClaim}
       ) INSERT INTO benchmark_boards (job_id, board_index, board_number, dealer, vulnerability, deal_json)
       SELECT source.id, entry.key, json_extract(entry.value, '$.number'), json_extract(entry.value, '$.dealer'),
         json_extract(entry.value, '$.vulnerability'), json_extract(entry.value, '$.deal')
       FROM source, json_each(source.boards_json) entry WHERE json_array_length(source.boards_json) = source.board_count
-        AND NOT EXISTS (SELECT 1 FROM benchmark_boards WHERE job_id = ?1)`).bind(id, JSON.stringify(generatedBoards)).run();
+        AND NOT EXISTS (SELECT 1 FROM benchmark_boards WHERE job_id = ?1)`)
+      .bind(id, JSON.stringify(generatedBoards), claim.token, claim.now).run();
   }
 
   async listJobBoards(id: string): Promise<DuplicateSessionBoard[]> {
@@ -328,12 +332,26 @@ export class BenchmarkStore {
     return results.map(({ dealJson, ...board }) => ({ ...board, deal: JSON.parse(dealJson) as DuplicateSessionBoard["deal"] }));
   }
 
+  /** Admit a board once for play under the current lease, before the coordinator sends it to the tables. */
+  async startBoard(id: string, boardIndex: number, claim: BenchmarkClaim): Promise<boolean> {
+    const { meta } = await this.db.prepare(`UPDATE benchmark_boards SET started_at = COALESCE(started_at, ?4)
+      WHERE job_id = ?1 AND board_index = ?2
+        AND EXISTS (SELECT 1 FROM benchmark_jobs j WHERE j.id = ?1 AND ${ownsClaim})
+        AND (SELECT COUNT(*) FROM benchmark_table_assignments WHERE job_id = ?1) >= 2
+        AND (?2 = 0 OR EXISTS (SELECT 1 FROM benchmark_results r
+          WHERE r.job_id = ?1 AND r.board_index = ?2 - 1 AND r.released_at IS NOT NULL))`)
+      .bind(id, boardIndex, claim.token, claim.now).run();
+    return meta.changes === 1;
+  }
+
   /** Results stay private until every table assigned to the job has returned a result on the same board. */
   async recordResult(result: BenchmarkBoardResultInput): Promise<boolean> {
     const { jobId, tableIndex, boardIndex, actions, contract, tricks, nsScore, completedAt } = result;
     const [inserted] = await this.db.batch([
       this.db.prepare(`INSERT INTO benchmark_results (job_id, table_index, board_index, actions_json, contract_json, tricks, ns_score, completed_at)
-        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 FROM benchmark_jobs WHERE id = ?1 AND status IN (${activeStatuses})
+        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 FROM benchmark_jobs j
+        JOIN benchmark_boards b ON b.job_id = j.id AND b.board_index = ?3
+        WHERE j.id = ?1 AND j.status IN (${activeStatuses}) AND b.started_at IS NOT NULL
         ON CONFLICT DO NOTHING`).bind(jobId, tableIndex, boardIndex, JSON.stringify(actions), contract && JSON.stringify(contract), tricks, nsScore, completedAt),
       this.db.prepare(`UPDATE benchmark_results SET released_at = (
           SELECT MAX(completed_at) FROM benchmark_results WHERE job_id = ?1 AND board_index = ?2
@@ -352,13 +370,24 @@ export class BenchmarkStore {
     return results;
   }
 
-  async getPublicResult(jobId: string, tableIndex: number, boardIndex: number): Promise<BenchmarkResult | null> {
+  getPublicResult(jobId: string, tableIndex: number, boardIndex: number): Promise<BenchmarkResult | null> {
+    return this.readReleasedResult(jobId, tableIndex, boardIndex, true);
+  }
+
+  /** Internal archive read. Imported deals and play stay available here after the duplicate field finishes. */
+  getReleasedResult(jobId: string, tableIndex: number, boardIndex: number): Promise<BenchmarkResult | null> {
+    return this.readReleasedResult(jobId, tableIndex, boardIndex, false);
+  }
+
+  private async readReleasedResult(jobId: string, tableIndex: number, boardIndex: number, generatedOnly: boolean): Promise<BenchmarkResult | null> {
     const row = await this.db.prepare(`SELECT ${resultColumns}, b.dealer, b.vulnerability, b.deal_json AS dealJson,
       r.actions_json AS actionsJson, r.contract_json AS contractJson, t.seats_json AS seatsJson
       FROM benchmark_results r JOIN benchmark_boards b ON b.job_id = r.job_id AND b.board_index = r.board_index
       JOIN benchmark_table_assignments t ON t.job_id = r.job_id AND t.table_index = r.table_index
-      WHERE r.job_id = ? AND r.table_index = ? AND r.board_index = ? AND r.released_at IS NOT NULL`)
-      .bind(jobId, tableIndex, boardIndex).first<ResultRow>();
+      JOIN benchmark_jobs j ON j.id = r.job_id
+      WHERE r.job_id = ?1 AND r.table_index = ?2 AND r.board_index = ?3 AND r.released_at IS NOT NULL
+        AND (?4 = 0 OR j.import_id IS NULL)`)
+      .bind(jobId, tableIndex, boardIndex, generatedOnly ? 1 : 0).first<ResultRow>();
     if (!row) return null;
     const { actionsJson, contractJson, seatsJson, dealJson, dealer, vulnerability, ...summary } = row;
     return { ...summary, actions: JSON.parse(actionsJson) as GameAction[], contract: contractJson ? JSON.parse(contractJson) as Contract : null,

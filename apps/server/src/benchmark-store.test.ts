@@ -33,14 +33,16 @@ async function queue(id = "job", boardCount = 1) {
   return store.startJob({ id, cohortId: "cohort", roundIndex: 0, now: 3 });
 }
 
-async function finish(id: string) {
+async function finish(id: string, now = 4) {
   const assignment = createRotation(profiles, 17, 0, 2)[0]!;
-  await store.putTableAssignments(id, [assignment, assignment]);
-  await store.putJobBoards(id, [board]);
-  await store.claimNextJob("worker", 4, 10);
+  const claim = { token: "worker", now };
+  expect((await store.claimNextJob(claim.token, now, 10))?.id).toBe(id);
+  await store.putTableAssignments(id, [assignment, assignment], claim);
+  await store.putJobBoards(id, [board], claim);
+  expect(await store.startBoard(id, 0, claim)).toBe(true);
   for (const tableIndex of [0, 1]) await store.recordResult({ jobId: id, tableIndex, boardIndex: 0, actions,
-    contract: null, tricks: null, nsScore: 0, completedAt: 5 });
-  expect(await store.finishJob(id, "worker", "completed", 6)).toBe(true);
+    contract: null, tricks: null, nsScore: 0, completedAt: now + 1 });
+  expect(await store.finishJob(id, claim.token, "completed", now + 2)).toBe(true);
 }
 
 describe("BenchmarkStore", () => {
@@ -81,17 +83,75 @@ describe("BenchmarkStore", () => {
     expect(await store.claimNextJob("fourth", 19, 10)).toBeNull();
   });
 
+  it("fences job setup against an expired, paused, or replaced claim", async () => {
+    await queue();
+    const assignment = createRotation(profiles, 17, 0, 2)[0]!;
+    const setups = async (token: string, now: number) => {
+      await store.putTableAssignments("job", [assignment, assignment], { token, now });
+      await store.putJobBoards("job", [board], { token, now });
+    };
+    await store.claimNextJob("expired", 4, 10);
+    await setups("expired", 14);
+    expect(await store.listTableAssignments("job")).toEqual([]);
+    expect(await store.listJobBoards("job")).toEqual([]);
+
+    await store.claimNextJob("paused", 15, 10);
+    await store.changeJobStatus("job", "pause", 16);
+    await setups("paused", 17);
+    expect(await store.listTableAssignments("job")).toEqual([]);
+    expect(await store.listJobBoards("job")).toEqual([]);
+
+    await store.changeJobStatus("job", "resume", 18);
+    await store.claimNextJob("current", 19, 10);
+    await setups("paused", 20);
+    expect(await store.listTableAssignments("job")).toEqual([]);
+    expect(await store.listJobBoards("job")).toEqual([]);
+
+    await setups("current", 21);
+    expect(await store.listTableAssignments("job")).toEqual([assignment, assignment]);
+    expect(await store.listJobBoards("job")).toEqual([board]);
+  });
+
+  it("accepts late results for a board already in play while pause closes admission to later boards", async () => {
+    await queue("job", 2);
+    const assignment = createRotation(profiles, 17, 0, 2)[0]!;
+    await store.claimNextJob("before-pause", 4, 20);
+    const initial = { token: "before-pause", now: 5 };
+    await store.putTableAssignments("job", [assignment, assignment], initial);
+    await store.putJobBoards("job", [board, { ...board, number: 2 }], initial);
+    const result = { jobId: "job", tableIndex: 0, boardIndex: 0, actions, contract: null, tricks: null, nsScore: 0, completedAt: 7 };
+    expect(await store.recordResult(result)).toBe(false);
+    expect(await store.startBoard("job", 1, initial)).toBe(false);
+    expect(await store.startBoard("job", 0, initial)).toBe(true);
+    expect(await store.recordResult(result)).toBe(true);
+    await store.changeJobStatus("job", "pause", 8);
+    expect(await store.recordResult({ ...result, tableIndex: 1, completedAt: 9 })).toBe(true);
+    expect(await store.getPublicResult("job", 0, 0)).toMatchObject({ board, releasedAt: 9 });
+    expect(await store.startBoard("job", 1, { ...initial, now: 10 })).toBe(false);
+    expect(await store.recordResult({ ...result, boardIndex: 1, completedAt: 11 })).toBe(false);
+
+    await store.changeJobStatus("job", "resume", 12);
+    await store.claimNextJob("resumed", 13, 20);
+    expect(await store.startBoard("job", 1, { ...initial, now: 14 })).toBe(false);
+    const renewed = { token: "resumed", now: 15 };
+    expect(await store.startBoard("job", 1, renewed)).toBe(true);
+    expect(await store.startBoard("job", 1, renewed)).toBe(true);
+    expect(await store.recordResult({ ...result, boardIndex: 1, completedAt: 16 })).toBe(true);
+  });
+
   it("releases a board once every duplicate table finishes it and keeps future boards private", async () => {
     await queue("job", 2);
     const assignment = createRotation(profiles, 17, 0, 2)[0]!;
-    await store.putTableAssignments("job", [assignment, assignment]);
-    await store.putJobBoards("job", [board, { ...board, number: 2 }]);
+    const claim = { token: "worker", now: 4 };
+    await store.claimNextJob(claim.token, claim.now, 10);
+    await store.putTableAssignments("job", [assignment, assignment], claim);
+    await store.putJobBoards("job", [board, { ...board, number: 2 }], claim);
+    expect(await store.startBoard("job", 0, claim)).toBe(true);
     const result = { jobId: "job", tableIndex: 0, boardIndex: 0, actions, contract: null, tricks: null, nsScore: 0, completedAt: 5 };
     expect(await store.recordResult(result)).toBe(true);
     expect(await store.recordResult({ ...result, nsScore: 100 })).toBe(false);
     expect(await store.getPublicResult("job", 0, 0)).toBeNull();
     expect(await store.listPublicResults()).toEqual([]);
-    await store.claimNextJob("worker", 6, 10);
     expect(await store.finishJob("job", "worker", "completed", 7)).toBe(false);
     expect(await store.recordResult({ ...result, tableIndex: 1 })).toBe(true);
     expect(await store.finishJob("job", "worker", "completed", 8)).toBe(false);
@@ -112,8 +172,7 @@ describe("BenchmarkStore", () => {
     await expect(store.commitRatingPeriod("job", period, 10)).resolves.toMatchObject({ result: period, ratedAt: 10 });
     await expect(store.commitRatingPeriod("job", amended, 11)).resolves.toMatchObject({ result: period, ratedAt: 10 });
     await store.startJob({ id: "next", cohortId: "cohort", roundIndex: 1, now: 12 });
-    // Archive timestamps are independent of fixture creation times.
-    await finish("next");
+    await finish("next", 13);
     await store.commitRatingPeriod("next", amended, 20);
     expect(await store.listRatingHistory(competitorId)).toMatchObject([{ jobId: "next", rating: 1600 }, { jobId: "job", rating: 1550 }]);
     expect(await store.listLeaderboard()).toMatchObject([{ jobId: "next", rating: 1600, eligible: true }]);
@@ -125,16 +184,20 @@ describe("BenchmarkStore", () => {
     await store.putImport("source", [source], 2);
     expect(await store.createCohort("cohort", { ...cohort, importId: "source" }, 3)).toBe(true);
     expect(await store.startJob({ id: "job", cohortId: "cohort", roundIndex: 0, now: 4 })).not.toBeNull();
-    await store.putJobBoards("job", [board]);
+    const claim = { token: "worker", now: 5 };
+    await store.claimNextJob(claim.token, claim.now, 10);
+    await store.putJobBoards("job", [board], claim);
     expect(await store.listJobBoards("job")).toEqual([source]);
   });
 
   it("rejects a whole assignment if a seat was not in the job's profile snapshot", async () => {
     await queue();
     const assignment = createRotation(profiles, 17, 0, 2)[0]!;
-    await store.putTableAssignments("job", [assignment, { ...assignment, north: { ...assignment.north, version: "other" } }]);
+    const claim = { token: "worker", now: 4 };
+    await store.claimNextJob(claim.token, claim.now, 10);
+    await store.putTableAssignments("job", [assignment, { ...assignment, north: { ...assignment.north, version: "other" } }], claim);
     expect(await store.listTableAssignments("job")).toEqual([]);
-    await store.putTableAssignments("job", [assignment, assignment]);
+    await store.putTableAssignments("job", [assignment, assignment], claim);
     expect(await store.listTableAssignments("job")).toEqual([assignment, assignment]);
   });
 

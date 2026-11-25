@@ -1,11 +1,13 @@
 import { env } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { BOT_CHARACTERS } from "@contractplay/core";
+import { createBenchmarkProfile, createRotation } from "@contractplay/benchmark";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import migration from "../migrations/0006_bot_benchmarks.sql?raw";
 import { hash } from "./auth.js";
 import { AuthStore } from "./auth-store.js";
 import worker from "./index.js";
+import { BenchmarkStore } from "./benchmark-store.js";
 
 const origin = "https://bridge.example";
 const admin = "/api/admin/benchmarks";
@@ -51,7 +53,8 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await env.DB.batch(["sessions", "account_player_identities", "accounts"].map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
-  await env.DB.batch(["benchmark_jobs", "benchmark_cohorts", "benchmark_imports", "benchmark_profile_versions",
+  await env.DB.batch(["benchmark_results", "benchmark_boards", "benchmark_table_assignments", "benchmark_jobs",
+    "benchmark_cohorts", "benchmark_imports", "benchmark_profile_versions",
     "benchmark_profiles"].map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
   const now = Date.now();
   const accounts = await Promise.all([auth.getOrCreateAccount("ops@example.test", "Ops", now),
@@ -109,6 +112,40 @@ describe("benchmark HTTP routes", () => {
     expect(await (await call(`${publicPath}/leaderboard`)).json()).toEqual({ ratings: [] });
     expect((await call(`${publicPath}/profiles?limit=100000`)).status).toBe(400);
     expect((await call(`${publicPath}/profiles?limit=1`)).status).toBe(200);
+  });
+
+  it("keeps the replay of a completed imported board private while publishing its scores", async () => {
+    const upload = await call(`${admin}/imports`, { method: "POST", body: pbn, headers: { Cookie: cookie(tokens.admin) } });
+    expect(upload.status).toBe(201);
+    const { id: importId } = await upload.json<{ id: string }>();
+    const store = new BenchmarkStore(env.DB);
+    const roster = BOT_CHARACTERS.slice(0, 4).map(({ skill, aggression }) =>
+      createBenchmarkProfile({ ...profile, skill, aggression, biddingStyle: "SAYC" }));
+    for (const entry of roster) await store.addProfileVersion(entry, 1);
+    expect(await store.createCohort("private-cohort", { name: "Private boards", profiles: roster, boardCount: 1, maxTables: 2,
+      biddingStyle: "SAYC", scoring: "imps", rotationSeed: 7, importId, intervalMinutes: null }, 2)).toBe(true);
+    await store.startJob({ id: "imported-job", cohortId: "private-cohort", roundIndex: 0, now: 3 });
+    const seats = createRotation(roster, 7, 0, 2)[0]!;
+    const claim = { token: "worker", now: 4 };
+    await store.claimNextJob(claim.token, claim.now, 10);
+    await store.putTableAssignments("imported-job", [seats, seats], claim);
+    await store.putJobBoards("imported-job", [], claim);
+    expect(await store.startBoard("imported-job", 0, claim)).toBe(true);
+    const actions = (["west", "north", "east", "south"] as const).map((seat) => ({ type: "bid", seat, bid: "pass" } as const));
+    for (const tableIndex of [0, 1]) {
+      expect(await store.recordResult({ jobId: "imported-job", tableIndex, boardIndex: 0, actions,
+        contract: null, tricks: null, nsScore: 0, completedAt: 5 })).toBe(true);
+    }
+
+    const attempt = await call(`${publicPath}/results/imported-job/0/0`);
+    expect(attempt.status).toBe(404);
+    expect(await attempt.json()).toEqual({ error: "not-found" });
+    expect(await store.getReleasedResult("imported-job", 0, 0)).toMatchObject({ board: { number: 8, dealer: "west" }, actions });
+    const list = await call(`${publicPath}/results`);
+    const { results } = await list.json<{ results: unknown[] }>();
+    expect(results).toHaveLength(2);
+    expect(results[0]).toEqual({ jobId: "imported-job", tableIndex: 0, boardIndex: 0, boardNumber: 8,
+      nsScore: 0, ewScore: 0, tricks: null, completedAt: 5, releasedAt: 5 });
   });
 
   it("atomically rejects invalid or oversized PBN and stores only validated board facts on retry", async () => {

@@ -66,6 +66,7 @@ CREATE TABLE benchmark_boards (
   dealer TEXT NOT NULL CHECK (dealer IN ('north', 'east', 'south', 'west')),
   vulnerability TEXT NOT NULL CHECK (vulnerability IN ('None', 'NS', 'EW', 'Both')),
   deal_json TEXT NOT NULL,
+  started_at INTEGER,
   PRIMARY KEY (job_id, board_index),
   UNIQUE (job_id, board_number)
 );
