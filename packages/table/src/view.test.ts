@@ -1,4 +1,4 @@
-import { SEATS, cardId } from "@contractplay/core";
+import { SEATS, TRAIT_PRESETS, cardId } from "@contractplay/core";
 import type { Card, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import type { TableState } from "./state.js";
@@ -17,6 +17,16 @@ function cardsIn(value: unknown, found: Set<string> = new Set()): Set<string> {
 }
 
 describe("viewFor", () => {
+  it("shows everyone your character but only you its id", () => {
+    const custom = { id: "own-abc123", name: "Gentle Gina", skill: "advanced" as const, traits: TRAIT_PRESETS.conservative };
+    const t = sendOk(tableWithBots(), "alice", { type: "setBot", seat: "east", skill: "beginner", custom });
+    expect(summaryOf(t).seats.east).toEqual({ kind: "bot", skill: "advanced", custom: { name: "Gentle Gina", traits: custom.traits } });
+    expect(viewFor(t, "alice").seats.east).toMatchObject({ kind: "bot", custom: { id: custom.id } });
+    expect(viewFor(t, "bob").seats.east).toMatchObject({ kind: "bot", custom: { name: "Gentle Gina" } });
+    expect("id" in (viewFor(t, "bob").seats.east as { custom?: object }).custom!).toBe(false);
+    expect("id" in (viewFor(t, undefined).seats.east as { custom?: object }).custom!).toBe(false);
+  });
+
   it("never reveals a card the viewer may not see (seeds 1-30, one human and four humans)", async () => {
     for (const humans of [1, 4]) for (let seed = 1; seed <= 30; seed++) {
       const start = humans === 1 ? tableWithBots() : fourHumans();

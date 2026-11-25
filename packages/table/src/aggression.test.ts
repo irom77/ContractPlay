@@ -1,8 +1,10 @@
-import type { Aggression, Hand, Suit } from "@contractplay/core";
+import { TRAIT_PRESETS } from "@contractplay/core";
+import type { Aggression, BotTraits, Hand, Suit } from "@contractplay/core";
+import type { CustomBot } from "@contractplay/protocol";
 import { describe, expect, it } from "vitest";
 import { chooseBotAction } from "./hand.js";
 import { createTable, type TableState } from "./state.js";
-import { send, sendOk, tableWithBots } from "./test-helpers.js";
+import { newTable, send, sendOk, tableWithBots } from "./test-helpers.js";
 import { summaryOf } from "./view.js";
 
 const suitOrder: readonly Suit[] = ["spades", "hearts", "diamonds", "clubs"];
@@ -10,10 +12,10 @@ const suitOrder: readonly Suit[] = ["spades", "hearts", "diamonds", "clubs"];
 const hand = (text: string): Hand => text.split(".").flatMap((ranks, index) => [...ranks].map((rank) => ({ suit: suitOrder[index]!, rank }))) as unknown as Hand;
 
 /** Dealt, with any opening pass from the human at north, and the first bot to call holding a light two-suiter that only an aggressive bot opens. */
-function firstBotToCall(aggression: Aggression, character?: string): TableState {
+function firstBotToCall(aggression: Aggression, character?: string, custom?: CustomBot): TableState {
   let t: TableState = { ...tableWithBots(), aggression };
   // A named bot in every bot seat, so whichever calls first is one.
-  if (character) for (const seat of ["east", "south", "west"] as const) t = sendOk(t, "alice", { type: "setBot", seat, skill: "beginner", character });
+  if (character || custom) for (const seat of ["east", "south", "west"] as const) t = sendOk(t, "alice", { type: "setBot", seat, skill: "beginner", ...(character ? { character } : {}), ...(custom ? { custom } : {}) });
   t = sendOk(t, "alice", { type: "deal" });
   if (t.game!.currentActor === "north") {
     t = sendOk(t, "alice", { type: "act", handNumber: t.handNumber, revision: t.revision, action: { type: "bid", seat: "north", bid: "pass" } });
@@ -56,5 +58,36 @@ describe("table bot aggressiveness", () => {
     expect(send(tableWithBots(), "alice", { type: "setBot", seat: "east", skill: "expert", character: "nobody" }).refused).toBe("not-allowed");
     const named = sendOk(tableWithBots(), "alice", { type: "setBot", seat: "east", skill: "beginner", character: "dex" });
     expect(sendOk(named, "alice", { type: "setBot", seat: "east", skill: "intermediate" }).seats.east).toEqual({ kind: "bot", skill: "intermediate" });
+  });
+});
+
+describe("your own character at the table", () => {
+  const custom: CustomBot = { id: "own-abc123", name: "Gentle Gina", skill: "beginner", traits: TRAIT_PRESETS.aggressive };
+
+  it("plays with its own dials, not the table's", async () => {
+    const t = firstBotToCall("normal", undefined, custom);
+    expect(await chooseBotAction(t)).toEqual({ type: "bid", seat: t.game!.currentActor, bid: "1spades" });
+    const oneDial = firstBotToCall("normal", undefined, { ...custom, traits: { ...TRAIT_PRESETS.normal, openings: "bold" } as BotTraits });
+    expect(await chooseBotAction(oneDial)).toEqual({ type: "bid", seat: oneDial.game!.currentActor, bid: "1spades" });
+  });
+
+  it("keeps playing as seated after its owner leaves", async () => {
+    let t: TableState = newTable();
+    t = sendOk(t, "alice", { type: "sit", seat: "north" });
+    t = sendOk(t, "bob", { type: "sit", seat: "south" });
+    for (const seat of ["east", "west"] as const) t = sendOk(t, "alice", { type: "setBot", seat, skill: "advanced", custom });
+    t = sendOk(t, "alice", { type: "leave" });
+    t = sendOk(t, "bob", { type: "setBot", seat: "north", skill: "advanced" });
+    expect(t.seats.east).toMatchObject({ kind: "bot", custom: { id: custom.id, owner: "alice" } });
+    t = sendOk(t, "bob", { type: "deal" });
+    const game = t.game!;
+    const withLightHand = { ...t, game: { ...game, auction: [{ seat: "north" as const, bid: "pass" as const }], currentActor: "east" as const,
+      hands: { ...game.hands, east: hand("KQJ54.KJ543.32.4") } } };
+    expect(await chooseBotAction(withLightHand)).toEqual({ type: "bid", seat: "east", bid: "1spades" });
+  });
+
+  it("keeps legacy bot seats on today's table aggression", async () => {
+    const normal = firstBotToCall("normal");
+    expect(await chooseBotAction(normal)).toEqual({ type: "bid", seat: normal.game!.currentActor, bid: "pass" });
   });
 });

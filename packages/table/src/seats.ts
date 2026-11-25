@@ -1,4 +1,5 @@
 import type { Seat, SkillLevel } from "@contractplay/core";
+import type { CustomBot } from "@contractplay/protocol";
 import { botCharacter, SEATS } from "@contractplay/core";
 import { accept, betweenHands, hostAfter, refuse, seatOf, without, withoutClaim, withoutGame, withoutHost, type Outcome, type PlayerId, type SeatState, type TableState } from "./state.js";
 
@@ -29,13 +30,17 @@ export function leave(state: TableState, player: PlayerId): Outcome {
 }
 
 /** Seats a bot of this skill, or with `character` that named bot at its own skill. */
-export function setBot(state: TableState, player: PlayerId, seat: Seat, skill: SkillLevel, character?: string): Outcome {
+export function setBot(state: TableState, player: PlayerId, seat: Seat, skill: SkillLevel, character?: string, custom?: CustomBot): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (!betweenHands(state)) return refuse(state, "hand-in-progress");
   if (state.seats[seat].kind === "human") return refuse(state, "not-allowed");
   const named = character === undefined ? undefined : botCharacter(character);
   if (character !== undefined && !named) return refuse(state, "not-allowed");
-  return accept(state, { seats: withSeat(state, seat, named ? { kind: "bot", skill: named.skill, character: named.id } : { kind: "bot", skill }) });
+  if (custom && character) return refuse(state, "not-allowed");
+  const bot = custom
+    ? { kind: "bot" as const, skill: custom.skill, custom: { id: custom.id, name: custom.name, traits: { ...custom.traits }, owner: player } }
+    : named ? { kind: "bot" as const, skill: named.skill, character: named.id } : { kind: "bot" as const, skill };
+  return accept(state, { seats: withSeat(state, seat, bot) });
 }
 
 export function clearSeat(state: TableState, player: PlayerId, seat: Seat): Outcome {

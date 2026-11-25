@@ -1,12 +1,12 @@
-import type { Aggression, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel } from "@contractplay/core";
+import type { Aggression, BotTraits, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
-import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
+import type { ClientMessage, CustomBot, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
 
 export type PlayerId = string;
 export type SeatState =
   | { kind: "empty" }
   /** `character`: a named bot, playing at its own skill and aggressiveness rather than the table's. */
-  | { kind: "bot"; skill: SkillLevel; character?: string }
+  | { kind: "bot"; skill: SkillLevel; character?: string; custom?: { id: string; name: string; traits: BotTraits; owner: PlayerId } }
   | { kind: "human"; player: PlayerId; name: string; since: number; standIn?: SkillLevel;
       /** The stand-in was asked for by the player (Auto play) and lasts only until the hand ends. */
       autoPlay?: true };

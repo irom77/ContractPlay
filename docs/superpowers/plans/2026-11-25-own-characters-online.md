@@ -85,7 +85,7 @@
   - `summaryOf` gives `custom: {name, traits}` (no id, no owner).
   - `viewFor(state, player)` adds `id` to `custom` on seats whose `owner === player`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - In `aggression.test.ts`, `describe("your own character at the table")`:
     - **`plays with its own dials, not the table's`:** use `firstBotToCall("normal")`. The table bot passes (as now). Seat a custom with `skill:"beginner"` and `traits: TRAIT_PRESETS.aggressive` in the three bot seats, the same way `firstBotToCall` does for `character`; it opens. Use `{ ...TRAIT_PRESETS.normal, openings: "bold" }` to show that a single dial is enough.
     - **`keeps playing as seated after its owner leaves`:** seat it (alice), have alice `leave`, then deal with another seated player. The bot still opens the light hand.
@@ -97,17 +97,17 @@
     - `viewFor(t, "bob").seats.east.custom` has no `id`.
     - `viewFor(t, undefined)` has no `id`.
 
-- [ ] **Step 2: Run** `pnpm --filter @contractplay/table exec vitest run src/aggression.test.ts src/view.test.ts`. Expected: FAIL. `setBot` ignores `custom`, and the seat shows a plain bot.
+- [x] **Step 2: Run** `pnpm --filter @contractplay/table exec vitest run src/aggression.test.ts src/view.test.ts`. Expected: FAIL. `setBot` ignores `custom`, and the seat shows a plain bot.
 
-- [ ] **Step 3: Implement.**
+- [x] **Step 3: Implement.**
   - `reduce` passes `message.custom` through.
   - Replace `botAggression` with `botConfig(state, seat): Pick<BotConfig, "aggression" | "traits">`. A custom seat returns `{ traits: custom.traits }`. A named bot returns its aggression. Anything else returns the table's aggression. Stand-ins are unchanged.
   - `chooseBotAction` spreads it into `createBot`.
   - `seatInfo` in `view.ts` strips `owner` and `id`; `viewFor` puts the id back for the owner.
 
-- [ ] **Step 4: Run** `pnpm --filter @contractplay/table exec vitest run`. Expected: PASS (all table tests).
+- [x] **Step 4: Run** `pnpm --filter @contractplay/table exec vitest run`. Expected: PASS (all table tests).
 
-- [ ] **Step 5: Commit** `Play a player's own character in an online table's bot seat`.
+- [x] **Step 5: Commit** `Play a player's own character in an online table's bot seat`.
 
 ### Task 3: Seating it, and seeing it
 

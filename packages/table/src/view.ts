@@ -5,13 +5,19 @@ import { sideOf } from "./claim.js";
 import { canDeal, readyNeeded } from "./hand.js";
 import { betweenHands, scoringOf, seatOf, type PlayerId, type SeatState, type TableState } from "./state.js";
 
-const seatInfo = (state: TableState, s: SeatState): SeatInfo =>
-  s.kind === "human"
-    ? { kind: "human", name: s.name, away: state.awaySince[s.player] !== undefined, ...(s.standIn ? { standIn: s.standIn } : {}), ...(s.autoPlay ? { autoPlay: true as const } : {}) }
-    : s;
+const seatInfo = (state: TableState, s: SeatState, viewer?: PlayerId): SeatInfo => {
+  if (s.kind === "human") return { kind: "human", name: s.name, away: state.awaySince[s.player] !== undefined,
+    ...(s.standIn ? { standIn: s.standIn } : {}), ...(s.autoPlay ? { autoPlay: true as const } : {}) };
+  if (s.kind === "bot" && s.custom) return { kind: "bot", skill: s.skill, custom: { name: s.custom.name, traits: s.custom.traits,
+    ...(s.custom.owner === viewer ? { id: s.custom.id } : {}) } };
+  return s;
+};
+
+const seatsFor = (state: TableState, viewer?: PlayerId): Record<Seat, SeatInfo> =>
+  Object.fromEntries(SEATS.map((seat) => [seat, seatInfo(state, state.seats[seat], viewer)])) as Record<Seat, SeatInfo>;
 
 export function summaryOf(state: TableState): TableSummary {
-  const seats = Object.fromEntries(SEATS.map((seat) => [seat, seatInfo(state, state.seats[seat])])) as Record<Seat, SeatInfo>;
+  const seats = seatsFor(state);
   return { id: state.id, name: state.name, style: state.style, scoring: scoringOf(state), aggression: state.aggression ?? "normal", seats, handInProgress: !betweenHands(state) };
 }
 
@@ -75,6 +81,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined, session
   const waitingOn = pending ? pending.responders.filter((seat) => !pending.accepted.includes(seat)) : [];
   return {
     ...summaryOf(state),
+    seats: seatsFor(state, player),
     listed: state.listed, revision: state.revision, handNumber: state.handNumber, totals: { ...state.totals },
     ...(state.rubber ? { rubber: state.rubber } : {}),
     ...(hostSeat ? { host: hostSeat } : {}),
