@@ -25,6 +25,8 @@ import {
 
 const tablePositions = ["bottom", "left", "top", "right"] as const;
 const liveTurnPhase = (phase: PublicGame["phase"]) => phase === "auction" || phase === "play";
+// The bidding box reads from the highest strain down in each row (NT, ♠, ♥, ♦, ♣), as on Trickster Cards.
+const bidBoxStrains = [...biddingStrains].reverse();
 
 export type TableViewProps = {
   game: PublicGame;                      // hidden hands are empty arrays
@@ -210,7 +212,7 @@ export function TableView({
           {auctionList}
           {canAct && onBid && phase === "auction" ? <div className="bid-picker" aria-label="Choose a bid">
             <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
-              {[1, 2, 3, 4, 5, 6, 7].map((level) => biddingStrains.map((strain) => {
+              {[1, 2, 3, 4, 5, 6, 7].map((level) => bidBoxStrains.map((strain) => {
                 const bid = `${level}${strain}` as Bid;
                 return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""} ${hintedBid === bid ? "hinted-bid" : ""}`} aria-label={`${level} ${strain}`} title={hintedBid === bid ? "Suggested bid" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
               }))}

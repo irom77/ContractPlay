@@ -135,7 +135,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   "solo-auction": () => {
     expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
-    expect(screen.getByRole("group", { name: "Contract bids by level and strain" })).toBeTruthy();
+    const bidRows = within(screen.getByRole("group", { name: "Contract bids by level and strain" })).getAllByRole("button");
+    // Each row of the bidding box runs from notrump down to clubs.
+    expect(bidRows.slice(0, 5).map((bid) => bid.getAttribute("aria-label"))).toEqual(["1 notrump", "1 spades", "1 hearts", "1 diamonds", "1 clubs"]);
     expect(screen.getByRole("list", { name: "Auction calls" }).querySelectorAll("li")).toHaveLength(2);
   },
   "solo-declaring": () => {
