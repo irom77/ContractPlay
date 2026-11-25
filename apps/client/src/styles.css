@@ -187,7 +187,9 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .cards-row .playing-card + .playing-card { margin-left: max(calc(var(--step) - var(--suit-gap) * var(--gap-share, 0) - var(--w)), calc(-.68 * var(--w))); }
 .cards-row .playing-card.suit-gap { margin-left: calc(var(--step) + var(--suit-gap) - var(--w)); }
 button.playing-card { cursor: pointer; }
-button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var(--u))); }
+/* Lift on hover only where a pointer hovers: a touch screen keeps :hover on the last spot tapped, which would leave
+   whichever card slides under it raised as if suggested. */
+@media (hover: hover) { button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var(--u))); } }
 .playing-card.hinted-card { transform: translateY(calc(-1.6 * var(--u))); box-shadow: 0 0 0 max(3px, calc(.5 * var(--u))) var(--gold), 0 0 calc(3 * var(--u)) var(--gold); }
 /* A queued card is raised and outlined until its turn comes or it is clicked again. */
 .playing-card.queued-card, button.playing-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-3 * var(--u))); outline: max(3px, calc(.5 * var(--u))) solid var(--queued); outline-offset: 1px; }
@@ -207,7 +209,7 @@ button.playing-card:hover:not(:disabled) { transform: translateY(calc(-2.5 * var
 .pos-top.has-fixed-hand .seat-head { order: 1; }
 .has-fixed-hand .seat-head { display: flex; align-items: center; gap: var(--u); }
 .has-fixed-hand .seat-head .seat-auction-calls { order: 0; flex-basis: auto; }
-.pos-bottom button.dummy-card:hover:not(:disabled) { transform: translateY(calc(-1.2 * var(--u))); }
+@media (hover: hover) { .pos-bottom button.dummy-card:hover:not(:disabled) { transform: translateY(calc(-1.2 * var(--u))); } }
 .pos-left { top: 50%; left: calc(2 * var(--u)); flex-direction: column; align-items: flex-start; transform: translateY(-50%); }
 .pos-right { top: 50%; right: calc(2 * var(--u)); flex-direction: column; align-items: flex-end; transform: translateY(-50%); }
 .pos-left.has-dummy, .pos-right.has-dummy { top: calc(21 * var(--u)); display: grid; grid-template-columns: auto 1fr; transform: none; }
@@ -267,7 +269,7 @@ button.seat-auction-call:hover, .seat-auction-call.explained-call { outline: max
 .pos-right .dummy-table-hand { align-items: flex-end; }
 .dummy-suit-row { display: flex; }
 button.dummy-card { cursor: pointer; transition: transform .12s ease; }
-button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.2 * var(--u))); }
+@media (hover: hover) { button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.2 * var(--u))); } }
 .dummy-card.hinted-card { z-index: 1; box-shadow: 0 0 0 max(2px, calc(.4 * var(--u))) var(--gold), 0 0 calc(2 * var(--u)) var(--gold); }
 .dummy-card.queued-card, button.dummy-card.queued-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(1.6 * var(--u))); outline: max(2px, calc(.4 * var(--u))) solid var(--queued); outline-offset: 1px; }
 .pos-bottom .dummy-card.queued-card, .pos-bottom button.dummy-card.queued-card:hover:not(:disabled) { transform: translateY(calc(-1.6 * var(--u))); }
@@ -332,8 +334,10 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .bid-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: calc(.5 * var(--u)); }
 .bid-cell, .bid-special { display: flex; height: calc(4.7 * var(--u)); align-items: center; justify-content: center; border: 0; border-radius: calc(.6 * var(--u)); padding: 0; background: #fdfcf8; color: var(--card-black); font: 800 var(--text-l)/1 var(--suit-font); cursor: pointer; }
 .bid-cell.bid-red { color: var(--card-red); }
-.bid-cell:hover:not(:disabled), .bid-special:hover:not(:disabled) { box-shadow: 0 0 0 max(2px, calc(.35 * var(--u))) var(--gold); }
+@media (hover: hover) { .bid-cell:hover:not(:disabled), .bid-special:hover:not(:disabled) { box-shadow: 0 0 0 max(2px, calc(.35 * var(--u))) var(--gold); } }
 .bid-cell.hinted-bid:not(:disabled), .bid-special.hinted-bid:not(:disabled) { background: var(--gold); color: var(--deep); box-shadow: 0 0 0 max(2px, calc(.35 * var(--u))) #fff6d6, 0 0 calc(2.4 * var(--u)) var(--gold); }
+/* A suggested heart or diamond keeps its red suit on the gold, so 2♥ never reads as 2♠. */
+.bid-cell.bid-red.hinted-bid:not(:disabled) span { color: #b0101a; }
 .bid-cell:disabled { background: rgba(255, 255, 255, .07); color: rgba(255, 255, 255, .22); cursor: not-allowed; }
 .bid-special-calls { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: calc(.5 * var(--u)); margin-top: var(--u); }
 .bid-special { height: calc(5 * var(--u)); color: #fff; }
@@ -409,7 +413,22 @@ button.dummy-card:hover:not(:disabled) { z-index: 1; transform: translateY(calc(
 .pad-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--u); }
 /* The end-of-hand panel holding the scorecard scrolls rather than spilling off a short screen. */
 .score-panel.scorecard-panel { max-height: calc(100% - 4 * var(--u)); overflow-y: auto; overscroll-behavior: contain; background: #0c2822; }
-.hands-revealed .score-panel.scorecard-panel { max-width: min(calc(56 * var(--u)), calc(100% - 4 * var(--u))); }
+/* With the deal face-up, the result panel stays in the band between the north and south hands so neither seat head
+   (nor its HCP badge) is covered: the pad sits beside the status, the last hand's points and the buttons. */
+.hands-revealed .score-panel { --edge-band: calc(var(--edge-h) + 7 * var(--u)); max-height: calc(100% - 2 * var(--edge-band)); overflow-y: auto; overscroll-behavior: contain; }
+.hands-revealed .score-panel.scorecard-panel { gap: calc(.6 * var(--u)); padding: calc(1.4 * var(--u)) calc(2.4 * var(--u)); }
+.hands-revealed .scorecard-panel h2 { font-size: max(18px, calc(3.2 * var(--u))); }
+.hands-revealed .scorecard-panel .scorecard { grid-template-columns: minmax(calc(32 * var(--u)), calc(42 * var(--u))) minmax(calc(26 * var(--u)), calc(34 * var(--u))); grid-template-rows: auto auto 1fr; grid-template-areas: "pad status" "pad breakdown" "pad actions"; align-items: start; column-gap: calc(1.6 * var(--u)); width: auto; }
+.hands-revealed .scorecard-panel .pad { grid-area: pad; }
+.hands-revealed .scorecard-panel .pad-status, .hands-revealed .scorecard-panel .pad-result { grid-area: status; }
+.hands-revealed .scorecard-panel .pad-breakdown { grid-area: breakdown; }
+.hands-revealed .scorecard-panel .pad-actions { grid-area: actions; align-self: end; }
+/* Tall, narrow windows put the panel below the side hands, with room to stack the scorecard in one column. */
+@media (max-aspect-ratio: 4/5) {
+  .hands-revealed .score-panel { max-height: calc(100% - 4 * var(--u)); }
+  .hands-revealed .scorecard-panel .scorecard { grid-template-columns: none; grid-template-rows: none; grid-template-areas: none; width: min(100%, calc(52 * var(--u))); }
+  .hands-revealed .scorecard-panel .scorecard > * { grid-area: auto; }
+}
 .menu-dialog .scorecard { width: 100%; }
 .rubber-menu { display: grid; gap: var(--u); justify-items: start; margin-top: 6px; border-top: 1px solid rgba(255, 255, 255, .12); padding-top: 10px; }
 
