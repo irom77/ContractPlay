@@ -354,7 +354,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const visibleBidHint = hintGame && bidHint?.game === hintGame ? bidHint : undefined;
   const visibleHint = hintGame && playHint?.game === hintGame ? playHint : undefined;
   const callsKey = `${original ? "original:" : ""}${reviewHandId ?? currentHandId}:${shownGame?.auction.length ?? 0}`;
-  const shownExplanation = hintsOn && explainedCall?.key === callsKey ? explainedCall.index : undefined;
+  const shownExplanation = explainedCall?.key === callsKey ? explainedCall.index : undefined;
 
   useEffect(() => {
     if (!hintGame) return;
@@ -1012,7 +1012,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       {hintsOn && phase === "auction" && auctionHandSeat ? <strong className="hand-points" aria-label={`${highCardPoints(shownGame.hands[auctionHandSeat])} high-card points`}>{highCardPoints(shownGame.hands[auctionHandSeat])} HCP</strong> : null}
       {visibleBidHint && phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
       {visibleHint && phase === "play" ? <p role="status">{visibleHint.reason}</p> : null}
-      <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
+      <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: your points and suggested bids and cards"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
     </div> : null}
 
     {pickingClaim && game ? <ClaimPanel mode="pick" remaining={remainingTricks(game)} onClaim={claim} onCancel={() => setClaimPickedAt(undefined)} />
@@ -1056,14 +1056,14 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
           onPlay={(seat, card) => submitAction({ type: "play", seat, card })}
           hintedBid={visibleBidHint?.bid}
           hintedCards={visibleHint?.cardIds}
-          explainCall={hintsOn ? {
+          explainCall={{
             shown: shownExplanation,
             onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { key: callsKey, index }),
             text: (index) => {
               const seat = shownGame.auction[index]!.seat;
               return explainBid(shownGame.auction, index, biddingStyle, playAgainstBots && seat !== userSeat ? botSkill : "expert");
             }
-          } : undefined}
+          }}
           tools={tableTools}
           overlay={tableOverlay}
         />

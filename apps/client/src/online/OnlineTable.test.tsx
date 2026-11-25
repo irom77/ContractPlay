@@ -227,7 +227,7 @@ describe("OnlineTable seating", () => {
     expect(screen.queryAllByRole("img", { name: / of (spades|hearts|diamonds|clubs)$/ })).toHaveLength(0);
   });
 
-  it("keeps online hints off by default and shows points, a suggested call, and call meanings when enabled", async () => {
+  it("explains calls with hints off, and shows points and a suggested call when hints are enabled", async () => {
     const user = userEvent.setup();
     const service = setup();
     const game = newGame();
@@ -236,6 +236,14 @@ describe("OnlineTable seating", () => {
     const toggle = screen.getByRole("switch", { name: "Hints" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     expect(document.querySelector(".hinted-bid, .hand-points, .call-meaning")).toBeNull();
+    const openingCall = apply(game, { type: "bid", seat: "north", bid: "1clubs" });
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "north", seats: seatedNorth, game: publicGame(openingCall, ["north"]) }));
+    // Call meanings are available with Hints off.
+    await user.click(screen.getByRole("button", { name: "Explain North's 1 clubs" }));
+    expect(document.querySelector(".call-meaning")?.textContent).toContain("Opening bid");
+    await user.click(screen.getByRole("button", { name: "Explain North's 1 clubs" }));
+    expect(document.querySelector(".call-meaning")).toBeNull();
+    service.push(tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "north", seats: seatedNorth, game: publicGame(game, ["north"]) }));
     await user.click(toggle);
 
     await screen.findByText(/Suggested:/);

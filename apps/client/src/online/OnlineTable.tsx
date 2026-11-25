@@ -563,7 +563,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             onPlay={(seat, card) => act({ type: "play", seat, card })}
             hintedBid={visibleBidHint?.bid}
             hintedCards={visiblePlayHint?.cardIds}
-            explainCall={hintsOn ? {
+            explainCall={{
               shown: shownExplanation,
               onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { handNumber: view.handNumber, auctionLength: game.auction.length, index }),
               text: (index) => {
@@ -572,7 +572,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
                 const skill = info.kind === "bot" ? info.skill : info.kind === "human" && info.standIn ? info.standIn : "expert";
                 return explainBid(game.auction, index, view.style, skill);
               }
-            } : undefined}
+            }}
             matchScore={score}
             tools={<><GameMenu items={menuItems} defaultOpen={menuOpen} /><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
             overlay={<>
@@ -582,7 +582,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
                 {hintsOn && actingSeat && game.phase === "auction" ? <strong className="hand-points" aria-label={`${highCardPoints(game.hands[game.currentActor])} high-card points`}>{highCardPoints(game.hands[game.currentActor])} HCP</strong> : null}
                 {visibleBidHint && game.phase === "auction" ? <p role="status"><strong>Suggested: {compactCallLabel(visibleBidHint.bid)}</strong> {visibleBidHint.reason}</p> : null}
                 {visiblePlayHint && game.phase === "play" ? <p role="status">{visiblePlayHint.reason}</p> : null}
-                <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: suggested bids and cards, and what each call means"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
+                <button className="secondary-button hint-toggle" type="button" role="switch" aria-checked={hintsOn} title={hintsOn ? "Hide hints" : "Show hints: your points and suggested bids and cards"} onClick={toggleHints}>Hints<span className="hint-switch" aria-hidden="true" /></button>
               </div> : null}
               {standIn ? <DraggableBanner className="online-resume" storageKey={resumeBannerKey} label={mine.autoPlay ? "Auto play is on" : "A bot is playing for you"}>
                 <span>{mine.autoPlay ? "Auto play: a bot plays for you until this hand ends." : "A bot is playing for you."}</span>

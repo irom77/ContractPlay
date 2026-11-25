@@ -779,7 +779,11 @@ describe("bridge table", () => {
 
     expect(hints.getAttribute("aria-checked")).toBe("false");
     expect(container.querySelector(".hand-points, .hinted-bid, .call-meaning")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Explain North's 1 spades" })).toBeNull();
+    // Call meanings are available with Hints off.
+    await user.click(screen.getByRole("button", { name: "Explain North's 1 spades" }));
+    expect(container.querySelector(".call-meaning")?.textContent).toContain("12–21 points with at least five spades");
+    await user.keyboard("{Escape}");
+    expect(container.querySelector(".call-meaning")).toBeNull();
 
     await user.click(hints);
 
@@ -802,7 +806,7 @@ describe("bridge table", () => {
     expect(screen.getByRole("switch", { name: "Hints" }).getAttribute("aria-checked")).toBe("true");
     await user.click(screen.getByRole("switch", { name: "Hints" }));
     expect(document.querySelector(".hand-points, .hinted-bid")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Explain North's 1 spades" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Explain North's 1 spades" })).toBeTruthy();
   });
 
   it("does not display a pending hint after dealing a replacement hand", async () => {
