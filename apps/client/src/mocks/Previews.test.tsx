@@ -13,10 +13,16 @@ const surface = () => document.querySelector(".table-surface");
 /** What each preview must actually show, so a change that breaks a screen fails here instead of drifting. */
 const expectations: Record<string, () => Promise<void> | void> = {
   lobby: async () => {
-    await screen.findByRole("heading", { name: "Open tables" });
+    // Open tables sits above Play, and both open collapsed to their headers.
+    const tables = await screen.findByRole("button", { name: /^Open tables/, expanded: false });
+    const playToggle = screen.getByRole("button", { name: /^Play/, expanded: false });
+    expect(tables.compareDocumentPosition(playToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByRole("button", { name: "Recent hands" })).toBeTruthy();
     expect(screen.getByText("Signed in as Alex")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Change name" })).toBeTruthy();
+    const user = userEvent.setup();
+    await user.click(tables);
+    await user.click(playToggle);
     const play = screen.getByRole("form", { name: "Play" });
     expect(within(play).getByRole("radio", { name: "Me and bots" })).toBeTruthy();
     expect(within(play).getByRole("radio", { name: "With other people" })).toBeTruthy();

@@ -33,7 +33,11 @@ const slides = [
   { file: "auto-play", mock: 21 },
   { file: "result", mock: 26 },
   { file: "replay", mock: 32 },
-  { file: "lobby", mock: 1 }
+  // The lobby opens with both panels collapsed; the tour shows them open.
+  { file: "lobby", mock: 1, prepare: async (page) => {
+    await page.getByRole("button", { name: /^Open tables/ }).click();
+    await page.getByRole("button", { name: /^Play/ }).click();
+  } }
 ];
 
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});

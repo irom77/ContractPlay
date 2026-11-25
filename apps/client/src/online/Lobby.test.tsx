@@ -29,7 +29,8 @@ const summaries: TableSummary[] = [
 
 const signedIn = { currentAccount: async () => ({ playerId: "account-1", displayName: "Bob" }), requestMagicLink: async () => {}, signOut: async () => {} };
 
-function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"]; storage?: StorageLike } = {}) {
+/** Renders the lobby; its Open tables and Play panels start open unless `collapsed` keeps the real default. */
+function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"]; storage?: StorageLike; collapsed?: boolean } = {}) {
   const storage = options.storage ?? memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const listTables = vi.fn(options.list ?? (() => Promise.resolve(summaries)));
@@ -42,13 +43,39 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
     void input;
     return { sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] };
   });
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} auth={options.auth ?? signedIn} />);
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} auth={options.auth ?? signedIn} expandedPanels={!options.collapsed} />);
   return { storage, listTables, createTable, createSession, onOpenTable, onPlaySolo, onRecentHands };
 }
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("Lobby", () => {
+  it("shows Open tables above Play, both collapsed to their headers until clicked", async () => {
+    const { onPlaySolo } = setup({ collapsed: true });
+    const user = userEvent.setup();
+    const tablesToggle = await screen.findByRole("button", { name: /^Open tables/ });
+    const playToggle = screen.getByRole("button", { name: /^Play/ });
+    // Open tables comes first on the page.
+    expect(tablesToggle.compareDocumentPosition(playToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(tablesToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(playToggle.getAttribute("aria-expanded")).toBe("false");
+    // Collapsed, the headers carry the table count and the chosen mode; the list and form stay hidden.
+    expect(await screen.findByLabelText("2 open")).toBeTruthy();
+    expect(playToggle.textContent).toContain("Me and bots");
+    expect(screen.queryByText("Friday club")).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Me and bots" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Refresh" })).toBeNull();
+    await user.click(tablesToggle);
+    expect(tablesToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Friday club")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refresh" })).toBeTruthy();
+    await user.click(playToggle);
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(onPlaySolo).toHaveBeenCalledTimes(1);
+    await user.click(tablesToggle);
+    expect(screen.queryByText("Friday club")).toBeNull();
+  });
+
   it("changes the account name from the lobby and uses it for new table names", async () => {
     const updateDisplayName = vi.fn(async (name: string) => ({ playerId: "account-1", displayName: name.trim() }));
     setup({ auth: { ...signedIn, updateDisplayName } });

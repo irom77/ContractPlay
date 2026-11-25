@@ -50,11 +50,12 @@ it("restores the account after callback and returns to the sign-in gate on sign-
   const { fetcher } = setup(true, true);
   const user = userEvent.setup();
   expect(await screen.findByText("Signed in as Account")).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: /^Play/, expanded: false }));
   await user.click(screen.getByRole("radio", { name: "With other people" }));
   expect((screen.getByLabelText("Table name") as HTMLInputElement).value).toBe("Account's table");
   await user.click(screen.getByRole("button", { name: "Sign out" }));
   expect(await screen.findByLabelText("Email sign-in")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^Play/ })).toBeNull();
   expect(fetcher.mock.calls.find(([url]) => url === "/api/auth/sign-out")?.[1]?.credentials).toBe("same-origin");
 });
 

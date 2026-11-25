@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { loadSoloData, type StorageLike } from "@contractplay/persistence";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
 import { seatNames, seats } from "../table/labels.js";
@@ -42,6 +42,8 @@ export type LobbyProps = {
   onRecentHands(): void;
   api?: LobbyApi;
   auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands };
+  /** Opens Open tables and Play from the start; both are collapsed to their headers otherwise. */
+  expandedPanels?: boolean;
 };
 
 const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession };
@@ -58,7 +60,7 @@ function seatLabel(seat: SeatInfo): string {
 
 const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands };
 
-export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands, api = defaultApi, auth = defaultAuth }: LobbyProps) {
+export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands, api = defaultApi, auth = defaultAuth, expandedPanels = false }: LobbyProps) {
   const [identity] = useState<Identity | undefined>(() => loadIdentity(storage));
   const [account, setAccount] = useState<AccountSession | null>(null);
   const [accountResolved, setAccountResolved] = useState(false);
@@ -81,7 +83,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands
   return <>
     {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
-    <LobbyTables identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands}
+    <LobbyTables expandedPanels={expandedPanels} identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands}
       account={account} onRename={async (name) => setAccount(await (auth.updateDisplayName ?? updateDisplayName)(name))} onSignOut={() => {
         void auth.signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
       }} />
@@ -129,6 +131,16 @@ function MissionPanel() {
     </ul>
     <SignInTour />
   </section>;
+}
+
+/** A lobby panel's header: its title as a button that opens or closes the panel, with a chevron and a badge beside it. */
+function PanelToggle({ title, open, controls, badge, onToggle }: { title: string; open: boolean; controls: string; badge?: ReactNode; onToggle(): void }) {
+  return <h2 className="panel-toggle-heading">
+    <button type="button" className="panel-toggle" aria-expanded={open} aria-controls={controls} onClick={onToggle}>
+      <svg className="panel-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6" /></svg>
+      <span>{title}</span>{badge}
+    </button>
+  </h2>;
 }
 
 /** The online name form: saves the display name (keeping the device secret) and hands back the identity. */
@@ -180,8 +192,8 @@ function AccountName({ name, onRename }: { name: string; onRename(name: string):
   </form>;
 }
 
-function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
-  identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string): void; onPlaySolo(): void; onRecentHands(): void;
+function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
+  expandedPanels: boolean; identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string): void; onPlaySolo(): void; onRecentHands(): void;
   account: AccountSession; onRename(name: string): Promise<void>; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
@@ -195,6 +207,9 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
   // The Play panel always starts solo against bots, whatever solo was last left at.
   const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
   // An unfinished solo hand resumes as it was set up; the panel's choices then wait for the next deal.
+  // Open tables and Play start collapsed to their headers; a click on a header opens its list or form.
+  const [tablesOpen, setTablesOpen] = useState(expandedPanels);
+  const [playOpen, setPlayOpen] = useState(expandedPanels);
   const [soloResumes] = useState(() => { const phase = loadSoloData(storage).currentGame?.phase; return phase === "auction" || phase === "play"; });
   const [sessionStyle, setSessionStyle] = useState<TableStyle>("SAYC");
   const [sessionTables, setSessionTables] = useState(2);
@@ -320,31 +335,13 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
           </span>
         </div>
-        <form className="lobby-panel" aria-label="Play" onSubmit={(event) => { event.preventDefault(); play(); }}>
-          <h2>Play</h2>
-          <div className="lobby-choice" role="radiogroup" aria-label="Who's playing">
-            <label className="lobby-check"><input type="radio" name="play-mode" checked={mode === "bots"} onChange={() => { setCreateError(undefined); setMode("bots"); }} />Me and bots</label>
-            <label className="lobby-check"><input type="radio" name="play-mode" checked={mode === "people"} onChange={() => { setCreateError(undefined); setMode("people"); }} />With other people</label>
-          </div>
-          {mode === "bots" ? <>
-            <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-            <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
-            <label>Bidding style<select aria-label="Bidding style" value={soloSetup.biddingStyle} onChange={(event) => chooseSolo({ biddingStyle: event.target.value as SoloSetup["biddingStyle"] })}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
-            {soloResumes ? <p className="quiet-copy">Your unfinished solo hand will resume; these settings apply from the next deal.</p> : null}
-            <label>Scoring<select aria-label="Scoring" value={soloSetup.scoring} onChange={(event) => chooseSolo({ scoring: event.target.value as SoloSetup["scoring"] })}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
-          </> : <>
-            <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
-            <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
-            <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
-            <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
-          </>}
-          <button className="primary-button" type="submit" disabled={creating || (mode === "people" && effectiveName.trim() === "")}>Play</button>
-        </form>
-        <div className="lobby-panel">
+        <section className={`lobby-panel collapsible-panel${tablesOpen ? " open" : ""}`} aria-label="Open tables">
           <div className="section-heading">
-            <h2>Open tables</h2>
-            <button className="secondary-button" type="button" onClick={() => { void refresh(); }}>Refresh</button>
+            <PanelToggle title="Open tables" open={tablesOpen} controls="lobby-open-tables" onToggle={() => setTablesOpen((open) => !open)}
+              badge={tables ? <span className="panel-count" aria-label={`${tables.length} open`}>{tables.length}</span> : null} />
+            {tablesOpen ? <button className="secondary-button" type="button" onClick={() => { void refresh(); }}>Refresh</button> : null}
           </div>
+          {tablesOpen ? <div id="lobby-open-tables" className="collapsible-body">
           {tables?.length === 0 ? <p className="quiet-copy">No open tables yet. Create one to start.</p> : null}
           <ul className="lobby-tables">
             {(tables ?? []).map((table) => (
@@ -363,7 +360,33 @@ function LobbyTables({ identity, baseUrl, storage, api, onOpenTable, onPlaySolo,
               </li>
             ))}
           </ul>
-        </div>
+          </div> : null}
+        </section>
+        <form className={`lobby-panel collapsible-panel${playOpen ? " open" : ""}`} aria-label="Play" onSubmit={(event) => { event.preventDefault(); play(); }}>
+          <div className="section-heading">
+            <PanelToggle title="Play" open={playOpen} controls="lobby-play" onToggle={() => setPlayOpen((open) => !open)}
+              badge={<span className="panel-hint">{mode === "bots" ? "Me and bots" : "With other people"}</span>} />
+          </div>
+          {playOpen ? <div id="lobby-play" className="collapsible-body">
+          <div className="lobby-choice" role="radiogroup" aria-label="Who's playing">
+            <label className="lobby-check"><input type="radio" name="play-mode" checked={mode === "bots"} onChange={() => { setCreateError(undefined); setMode("bots"); }} />Me and bots</label>
+            <label className="lobby-check"><input type="radio" name="play-mode" checked={mode === "people"} onChange={() => { setCreateError(undefined); setMode("people"); }} />With other people</label>
+          </div>
+          {mode === "bots" ? <>
+            <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
+            <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
+            <label>Bidding style<select aria-label="Bidding style" value={soloSetup.biddingStyle} onChange={(event) => chooseSolo({ biddingStyle: event.target.value as SoloSetup["biddingStyle"] })}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            {soloResumes ? <p className="quiet-copy">Your unfinished solo hand will resume; these settings apply from the next deal.</p> : null}
+            <label>Scoring<select aria-label="Scoring" value={soloSetup.scoring} onChange={(event) => chooseSolo({ scoring: event.target.value as SoloSetup["scoring"] })}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
+          </> : <>
+            <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
+            <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
+            <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
+          </>}
+          <button className="primary-button" type="submit" disabled={creating || (mode === "people" && effectiveName.trim() === "")}>Play</button>
+          </div> : null}
+        </form>
 
         <form className="lobby-panel" aria-label="New duplicate session" onSubmit={(event) => { event.preventDefault(); void createDuplicateSession(); }}>
           <h2>New duplicate session</h2>

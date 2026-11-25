@@ -36,7 +36,9 @@ describe("Root", () => {
     location.hash = "#/online";
     render(<Root />);
     expect(await screen.findByText("Open tables")).toBeTruthy();
-    await userEvent.setup().click(screen.getByRole("button", { name: "Play" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^Play/, expanded: false }));
+    await user.click(screen.getByRole("button", { name: "Play" }));
     expect(location.hash).toBe("#/solo");
     await vi.waitFor(() => expect(loadSoloData(window.localStorage).handsStarted).toBe(1));
     expect(soloVisible()).toBe(false);
@@ -46,7 +48,9 @@ describe("Root", () => {
     const { loadSoloData, saveSoloData } = await import("@contractplay/persistence");
     location.hash = "#/online";
     render(<Root />);
-    await userEvent.setup().click(await screen.findByRole("button", { name: "Play" }));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Play/, expanded: false }));
+    await user.click(screen.getByRole("button", { name: "Play" }));
     await vi.waitFor(() => expect(loadSoloData(window.localStorage).handsStarted).toBe(1));
     await act(async () => { location.hash = "#/online"; });
     expect(await screen.findByText("Open tables")).toBeTruthy();
