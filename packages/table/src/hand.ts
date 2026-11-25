@@ -182,7 +182,7 @@ export async function chooseBotAction(state: TableState): Promise<GameAction | u
   const game = state.game;
   if (seat === undefined || !game) return undefined;
   const skill = botSkill(state, seat)!;
-  const bot = createBot({ skill, biddingStyle: state.style });
+  const bot = createBot({ skill, biddingStyle: state.style, aggression: state.aggression ?? "normal" });
   if (game.phase === "auction") return { type: "bid", seat, bid: await bot.chooseBid(game.hands[seat], game.auction, seat) };
   return { type: "play", seat, card: await bot.chooseCard(playContextFor(game, seat)) };
 }

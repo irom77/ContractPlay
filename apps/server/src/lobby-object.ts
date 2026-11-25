@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDeck, deal, shuffle } from "@contractplay/core";
-import type { Vulnerability } from "@contractplay/core";
+import type { Aggression, Vulnerability } from "@contractplay/core";
 import { MAX_TABLE_NAME } from "@contractplay/protocol";
 import type { TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 import type { DuplicateSessionBoard } from "@contractplay/table";
@@ -27,8 +27,8 @@ function secureRandom(): number { return crypto.getRandomValues(new Uint32Array(
 /** A lobby entry; `summary` is missing while the table is being created (the id is reserved). */
 type Entry = { listed: boolean; summary?: TableSummary };
 
-/** `scoring` is missing only from callers that predate rubber tables; the table then scores rubbers. */
-export type NewTable = { name: string; style: TableStyle; scoring?: TableScoring; listed: boolean };
+/** `scoring` is missing only from callers that predate rubber tables; the table then scores rubbers. A missing `aggression` is Normal. */
+export type NewTable = { name: string; style: TableStyle; scoring?: TableScoring; aggression?: Aggression; listed: boolean };
 
 /** `length` characters from a 32-letter alphabet; 256 is a multiple of 32, so `byte % 32` is uniform. */
 function randomTableId(length: number): string {

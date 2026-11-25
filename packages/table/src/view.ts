@@ -12,7 +12,7 @@ const seatInfo = (state: TableState, s: SeatState): SeatInfo =>
 
 export function summaryOf(state: TableState): TableSummary {
   const seats = Object.fromEntries(SEATS.map((seat) => [seat, seatInfo(state, state.seats[seat])])) as Record<Seat, SeatInfo>;
-  return { id: state.id, name: state.name, style: state.style, scoring: scoringOf(state), seats, handInProgress: !betweenHands(state) };
+  return { id: state.id, name: state.name, style: state.style, scoring: scoringOf(state), aggression: state.aggression ?? "normal", seats, handInProgress: !betweenHands(state) };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
-import type { Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
+import type { Aggression, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
 export const PROTOCOL_VERSION = 8;
 export const MAX_MESSAGE_BYTES = 4096;
@@ -17,7 +17,8 @@ export type SeatInfo =
     /** The player asked a bot to play their cards for the rest of this hand; they get the seat back when it ends. */
     autoPlay?: true };
 
-export type TableSummary = { id: string; name: string; style: TableStyle; scoring: TableScoring; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
+/** `aggression`: how every bot and stand-in at the table bids and plays; missing from servers that predate it, and then Normal. */
+export type TableSummary = { id: string; name: string; style: TableStyle; scoring: TableScoring; aggression?: Aggression; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
 
 /** GameState without history or the original deal; hands the viewer may not see are empty arrays. */
 export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader" | "claim">;

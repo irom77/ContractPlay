@@ -3,7 +3,11 @@ import type { Bid } from "./history.js";
 
 export type SkillLevel = "beginner" | "intermediate" | "advanced" | "expert";
 export type BiddingStyle = "SAYC" | "2/1" | (string & {});
-export type BotConfig = Readonly<{ skill: SkillLevel; biddingStyle: BiddingStyle }>;
+/** How readily a bot bids and how boldly it plays; Normal is the skill level's own rules. */
+export type Aggression = "conservative" | "normal" | "aggressive";
+export const AGGRESSIONS: readonly Aggression[] = ["conservative", "normal", "aggressive"];
+/** `aggression` is missing from callers that predate it, and then means Normal. */
+export type BotConfig = Readonly<{ skill: SkillLevel; biddingStyle: BiddingStyle; aggression?: Aggression }>;
 export type PublicBid = Readonly<{ seat: Seat; bid: Bid }>;
 export type PlayContext = Readonly<{
   seat: Seat;

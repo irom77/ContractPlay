@@ -163,7 +163,7 @@ describe("Lobby", () => {
     await user.selectOptions(screen.getByLabelText("Bidding style"), "2/1");
     await user.click(screen.getByLabelText("Show in lobby"));
     await user.click(screen.getByRole("button", { name: "Play" }));
-    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Evening", style: "2/1", scoring: "rubber", listed: false });
+    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Evening", style: "2/1", scoring: "rubber", aggression: "normal", listed: false });
     await waitFor(() => expect(onOpenTable).toHaveBeenCalledWith("NEW123"));
     expect(onPlaySolo).not.toHaveBeenCalled();
   });
@@ -204,7 +204,18 @@ describe("Lobby", () => {
     expect(((await screen.findByLabelText("Scoring")) as HTMLSelectElement).value).toBe("rubber");
     await user.selectOptions(screen.getByLabelText("Scoring"), "duplicate");
     await user.click(screen.getByRole("button", { name: "Play" }));
-    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Bob's table", style: "SAYC", scoring: "duplicate", listed: true });
+    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Bob's table", style: "SAYC", scoring: "duplicate", aggression: "normal", listed: true });
+  });
+
+  it("creates a table with the chosen bot aggressiveness and lists it beside the style", async () => {
+    const user = userEvent.setup();
+    const { createTable } = setup({ list: () => Promise.resolve([{ ...summaries[0]!, aggression: "aggressive" }]) });
+    expect(await screen.findByText("SAYC · Rubber bridge · Aggressive bots")).toBeTruthy();
+    await withPeople(user);
+    expect(((await screen.findByLabelText("Bot aggressiveness")) as HTMLSelectElement).value).toBe("normal");
+    await user.selectOptions(screen.getByLabelText("Bot aggressiveness"), "conservative");
+    await user.click(screen.getByRole("button", { name: "Play" }));
+    expect(createTable).toHaveBeenCalledWith("https://x.test", { name: "Bob's table", style: "SAYC", scoring: "rubber", aggression: "conservative", listed: true });
   });
 
   it("shows each table's scoring in the list", async () => {
@@ -323,11 +334,12 @@ describe("Lobby", () => {
     await user.selectOptions(screen.getByLabelText("Your seat"), "west");
     await user.selectOptions(screen.getByLabelText("Bot skill"), "expert");
     await user.selectOptions(screen.getByLabelText("Bidding style"), "2/1");
+    await user.selectOptions(screen.getByLabelText("Bot aggressiveness"), "aggressive");
     await user.selectOptions(screen.getByLabelText("Scoring"), "single");
     await user.click(screen.getByRole("button", { name: "Play" }));
     expect(onPlaySolo).toHaveBeenCalledTimes(1);
     expect(createTable).not.toHaveBeenCalled();
-    expect(loadSoloSetup(storage)).toEqual({ opponents: "bots", seat: "west", botSkill: "expert", biddingStyle: "2/1", scoring: "single" });
+    expect(loadSoloSetup(storage)).toEqual({ opponents: "bots", seat: "west", botSkill: "expert", biddingStyle: "2/1", botAggression: "aggressive", scoring: "single" });
   });
 
   it("plays against bots even when solo was last left at a manual table", async () => {

@@ -25,8 +25,10 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByRole("button", { name: "Change name" })).toBeTruthy();
     const user = userEvent.setup();
     await user.click(tables);
+    expect(screen.getByText("SAYC · Rubber bridge · Conservative bots")).toBeTruthy();
     await user.click(playToggle);
     const play = screen.getByRole("form", { name: "Play" });
+    expect(within(play).getByLabelText("Bot aggressiveness")).toBeTruthy();
     expect(within(play).getByRole("radio", { name: "Me and bots" })).toBeTruthy();
     expect(within(play).getByRole("radio", { name: "With other people" })).toBeTruthy();
     expect(within(play).getByRole("button", { name: "Play" })).toBeTruthy();
@@ -145,6 +147,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((screen.getByRole("combobox", { name: "Scoring" }) as HTMLSelectElement).value).toBe("rubber");
     expect((screen.getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
     expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("south");
+    expect((screen.getByRole("combobox", { name: "Bot aggressiveness" }) as HTMLSelectElement).value).toBe("normal");
   },
   "solo-auction": () => {
     expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
@@ -339,6 +342,23 @@ describe("UI previews", () => {
     screen.getByRole("button", { name: "Next screen" }).focus();
     await user.keyboard(" ");
     expect(onIndex.mock.calls).toEqual([[4]]);
+  });
+
+  it("keeps stepping with Space on a screen whose form takes focus by itself, but types in a field the reviewer clicks", async () => {
+    const user = userEvent.setup();
+    const onIndex = vi.fn();
+    const signIn = previewScreens.findIndex((s) => s.id === "email-sign-in");
+    render(<Previews index={signIn} onIndex={onIndex} />);
+    const email = screen.getByLabelText("Email") as HTMLInputElement;
+    expect(document.activeElement).not.toBe(email);
+    await user.keyboard(" ");
+    expect(onIndex).toHaveBeenLastCalledWith(signIn + 1);
+    expect(email.value).toBe("alex@example.com");
+
+    onIndex.mockClear();
+    await user.click(email);
+    await user.keyboard(" ");
+    expect(onIndex).not.toHaveBeenCalled();
   });
 
   it("puts every screen in exactly one picker group and jumps to the chosen screen", async () => {

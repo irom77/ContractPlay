@@ -1,4 +1,4 @@
-import type { Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel } from "@contractplay/core";
+import type { Aggression, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
 import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
 
@@ -14,6 +14,8 @@ export type TableState = Readonly<{
   id: string; name: string; style: TableStyle; listed: boolean;
   /** Missing on tables stored before rubber scoring, which keep their running totals. */
   scoring?: TableScoring;
+  /** How the table's bots bid and play; missing on tables stored before it was chosen, which are Normal. */
+  aggression?: Aggression;
   /** Durable duplicate-session coordinator id; only generated-session table views carry this. */
   sessionId?: string;
   /** The current released board, copied from the coordinator immediately before dealing. */
@@ -75,9 +77,9 @@ export const UNVISITED_TABLE_MS = 600_000;
 /** How a table scores; tables stored before rubber scoring keep running totals. */
 export const scoringOf = (state: TableState): TableScoring => state.scoring ?? "duplicate";
 
-export function createTable(input: { id: string; name: string; style: TableStyle; scoring?: TableScoring; listed: boolean; at: number }): TableState {
+export function createTable(input: { id: string; name: string; style: TableStyle; scoring?: TableScoring; aggression?: Aggression; listed: boolean; at: number }): TableState {
   return {
-    id: input.id, name: input.name, style: input.style, scoring: input.scoring ?? "rubber", listed: input.listed,
+    id: input.id, name: input.name, style: input.style, scoring: input.scoring ?? "rubber", aggression: input.aggression ?? "normal", listed: input.listed,
     seats: { north: { kind: "empty" }, east: { kind: "empty" }, south: { kind: "empty" }, west: { kind: "empty" } },
     connections: {}, awaySince: {}, names: {}, revision: 0, handNumber: 0, totals: { ns: 0, ew: 0 },
     turnSince: input.at, lastHumanAt: input.at, trickJustCompleted: false, unvisited: true

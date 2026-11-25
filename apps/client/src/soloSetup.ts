@@ -1,11 +1,11 @@
-import type { Seat, SkillLevel } from "@contractplay/core";
+import { AGGRESSIONS, type Aggression, type Seat, type SkillLevel } from "@contractplay/core";
 
 export type SoloOpponents = "bots" | "manual";
 export type SoloScoring = "rubber" | "single";
 /** How the next solo hand is set up; the lobby's Play panel writes it and solo reads it. */
-export type SoloSetup = Readonly<{ opponents: SoloOpponents; seat: Seat; botSkill: SkillLevel; biddingStyle: "SAYC" | "2/1"; scoring: SoloScoring }>;
+export type SoloSetup = Readonly<{ opponents: SoloOpponents; seat: Seat; botSkill: SkillLevel; biddingStyle: "SAYC" | "2/1"; botAggression: Aggression; scoring: SoloScoring }>;
 
-export const defaultSoloSetup: SoloSetup = { opponents: "bots", seat: "north", botSkill: "beginner", biddingStyle: "SAYC", scoring: "rubber" };
+export const defaultSoloSetup: SoloSetup = { opponents: "bots", seat: "north", botSkill: "beginner", biddingStyle: "SAYC", botAggression: "normal", scoring: "rubber" };
 
 const setupKey = "contractplay.soloSetup";
 /** Scoring keeps the key it had before the rest of the setup was remembered. */
@@ -33,6 +33,7 @@ export function loadSoloSetup(storage: Pick<Storage, "getItem">): SoloSetup {
     seat: pick(stored.seat, seats, defaultSoloSetup.seat),
     botSkill: pick(stored.botSkill, skills, defaultSoloSetup.botSkill),
     biddingStyle: pick<"SAYC" | "2/1">(stored.biddingStyle, ["SAYC", "2/1"], defaultSoloSetup.biddingStyle),
+    botAggression: pick(stored.botAggression, AGGRESSIONS, defaultSoloSetup.botAggression),
     scoring: read(storage, scoringKey) === "single" ? "single" : "rubber"
   };
 }

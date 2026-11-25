@@ -70,6 +70,13 @@ export function Previews({ index, onIndex }: PreviewsProps) {
   const data = useMemo(() => screen.build(), [screen]);
   const [hidden, setHidden] = useState(false);
 
+  // A screen whose form focuses a field by itself (the email sign-in) would otherwise take Space and the arrows as typing,
+  // so the reviewer could not step on; a field the reviewer clicks into still takes their typing.
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.closest("input, select, textarea") && !focused.closest(".preview-bar")) focused.blur();
+  }, [current]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;

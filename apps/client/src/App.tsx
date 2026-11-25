@@ -19,6 +19,7 @@ import {
   playContextFor,
   requestHint,
   undoAction,
+  type Aggression,
   type Bid,
   type GameState,
   type HandRecord,
@@ -39,7 +40,7 @@ import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
 import { FullscreenButton, useFullscreen } from "./table/FullscreenButton.js";
 import { createHandName, savedHandName } from "./handNames.js";
-import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
+import { aggressionOptions, cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
 import { useDealAnimation } from "./table/DealAnimation.js";
 import { bottomSeatFor } from "./table/bottomSeat.js";
@@ -134,6 +135,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [userSeat, setUserSeat] = useState<Seat>(initialSetup.seat);
   const [botSkill, setBotSkill] = useState<SkillLevel>(initialSetup.botSkill);
   const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">(initialSetup.biddingStyle);
+  const [botAggression, setBotAggression] = useState<Aggression>(initialSetup.botAggression);
   const [auctionShown, setAuctionShown] = useState(false);
   const [fullscreen, toggleFullscreen] = useFullscreen(() => setMessage("Full screen is not available here."));
   const [pbnInput, setPbnInput] = useState("");
@@ -147,8 +149,8 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [takenBackTo, setTakenBackTo] = useState<GameState>();
   const [scoring, setScoring] = useState<ScoringFormat>(initialSetup.scoring);
   useEffect(() => {
-    if (!frozen) saveSoloSetup(persistence.storage, { opponents: playAgainstBots ? "bots" : "manual", seat: userSeat, botSkill, biddingStyle, scoring });
-  }, [frozen, persistence, playAgainstBots, userSeat, botSkill, biddingStyle, scoring]);
+    if (!frozen) saveSoloSetup(persistence.storage, { opponents: playAgainstBots ? "bots" : "manual", seat: userSeat, botSkill, biddingStyle, botAggression, scoring });
+  }, [frozen, persistence, playAgainstBots, userSeat, botSkill, biddingStyle, botAggression, scoring]);
   const [rubber, setRubber] = useState<Rubber>(() => soloData.rubber ?? emptyRubber());
   const [boardSet, setBoardSet] = useState<BoardSet | undefined>(() => soloData.boardSet);
   const [boardSetLibrary, setBoardSetLibrary] = useState<readonly BoardSetLibraryEntry[]>(() => soloData.boardSetLibrary ?? []);
@@ -319,7 +321,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     if (!botsFinishing && (!playAgainstBots || game.currentActor === userSeat || declaringSideIsHumanControlled)) return;
     let cancelled = false;
     const turnState = game;
-    const bot = createBot({ skill: botSkill, biddingStyle });
+    const bot = createBot({ skill: botSkill, biddingStyle, aggression: botAggression });
     const decide = async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0));
       if (cancelled) return;
@@ -333,7 +335,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     };
     void decide();
     return () => { cancelled = true; };
-  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill]);
+  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill, botAggression]);
 
   const actor = game?.currentActor;
   const selectedHand = reviewHandId ? newestHands(soloData.completedHands).find((hand) => hand.id === reviewHandId) : undefined;
@@ -822,7 +824,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     {scoring === "single" || !rubberUnderway ? <label>{scoring === "rubber" ? "First dealer" : "Dealer"}<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label> : null}
     {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;

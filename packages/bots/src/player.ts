@@ -1,5 +1,6 @@
 import { SEATS, cardId, type Bid, type BotConfig, type BotPlayer, type Hand, type PlayContext, type PublicBid, type Seat, type Suit } from "@contractplay/core";
 import { forcedContinuation, strongOpenerRebid } from "./forcing.js";
+import { adjustCall, aggressionCard } from "./aggression.js";
 import { advancedCard, expertCard } from "./play.js";
 import { createSystem } from "./system.js";
 
@@ -3675,23 +3676,28 @@ export function createRuleBot(config: BotConfig): BotPlayer {
 /**
  * A bot for the table. Where no rule fits and a pass would break a forcing agreement, it makes a natural forced call.
  * Should a rule ever choose a call the auction no longer allows, the bot passes instead, so a table never waits on a
- * call that cannot be made.
+ * call that cannot be made. Its aggressiveness then bends the chosen call or card (see `aggression.ts`).
  */
 export function createBot(config: BotConfig): BotPlayer {
   const bot = createRuleBot(config);
+  const aggression = config.aggression ?? "normal";
   return {
     config: bot.config,
     async chooseBid(hand, auction, seat) {
       const style = bot.config.biddingStyle === "2/1" ? "2/1" : "SAYC";
       const system = createSystem(hand, auction, seat, style, bot.config.skill);
-      const agreed = system.agreed();
-      if (agreed) return agreed;
-      const chosen = await bot.chooseBid(hand, auction, seat);
-      const bid = chosen === "pass"
-        ? system.continued() ?? forcedContinuation(hand, auction, seat, style) ?? system.values() ?? chosen
-        : system.corrected(chosen) ?? strongOpenerRebid(hand, auction, seat, chosen) ?? chosen;
-      return isLegalCall(bid, auction, seat) ? bid : "pass";
+      const natural = await (async (): Promise<Bid> => {
+        const agreed = system.agreed();
+        if (agreed) return agreed;
+        const chosen = await bot.chooseBid(hand, auction, seat);
+        const bid = chosen === "pass"
+          ? system.continued() ?? forcedContinuation(hand, auction, seat, style) ?? system.values() ?? chosen
+          : system.corrected(chosen) ?? strongOpenerRebid(hand, auction, seat, chosen) ?? chosen;
+        return isLegalCall(bid, auction, seat) ? bid : "pass";
+      })();
+      const adjusted = adjustCall(natural, system.h, system.v, aggression, () => forcedContinuation(hand, auction, seat, style) === undefined);
+      return isLegalCall(adjusted, auction, seat) ? adjusted : natural;
     },
-    chooseCard: (context) => bot.chooseCard(context)
+    chooseCard: async (context) => aggressionCard(context, aggression) ?? bot.chooseCard(context)
   };
 }

@@ -1,8 +1,11 @@
-import { type Bid, type Card, type Contract, type Seat, type Suit } from "@contractplay/core";
+import { AGGRESSIONS, type Aggression, type Bid, type Card, type Contract, type Seat, type Suit } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import type { ReactElement } from "react";
 
 export const seatNames: Record<Seat, string> = { north: "North", east: "East", south: "South", west: "West" };
+export const aggressionNames: Record<Aggression, string> = { conservative: "Conservative", normal: "Normal", aggressive: "Aggressive" };
+/** The options for a bot aggressiveness select, Conservative to Aggressive. */
+export const aggressionOptions = AGGRESSIONS.map((value) => <option key={value} value={value}>{aggressionNames[value]}</option>);
 /** The review/result line for a claim, counting the claimer's tricks among the tricks that remained. */
 export function claimText(claim: { seat: Seat; tricks: number }, declarer: Seat, remaining: number): string {
   const who = claim.seat === declarer ? `${seatNames[claim.seat]} (declarer)` : seatNames[claim.seat];

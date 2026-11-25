@@ -208,6 +208,18 @@ describe("lobby", () => {
     expect((await listTables()).find((t) => t.id === id)).toMatchObject({ scoring: "duplicate" });
   });
 
+  it("keeps the bot aggressiveness a table is created with, Normal when none is given", async () => {
+    const bold = await createTable({ name: "Bold table", style: "SAYC", aggression: "aggressive", listed: true });
+    expect(bold.status).toBe(201);
+    const { id } = await bold.json<{ id: string }>();
+    expect((await listTables()).find((t) => t.id === id)).toMatchObject({ aggression: "aggressive" });
+    expect((await storedState(id))?.aggression).toBe("aggressive");
+    const plain = await createTable({ name: "Plain table", style: "SAYC", listed: true });
+    const { id: plainId } = await plain.json<{ id: string }>();
+    expect((await listTables()).find((t) => t.id === plainId)).toMatchObject({ aggression: "normal" });
+    expect((await createTable({ name: "Wild table", style: "SAYC", aggression: "wild", listed: true })).status).toBe(400);
+  });
+
   it("creates duplicate session tables with one private shared board set", async () => {
     const response = await SELF.fetch("https://x/api/sessions", {
       method: "POST", headers: { "content-type": "application/json", "CF-Connecting-IP": freshIp() },

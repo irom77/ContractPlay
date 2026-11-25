@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { loadSoloData, type StorageLike } from "@contractplay/persistence";
+import type { Aggression } from "@contractplay/core";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
-import { seatNames, seats } from "../table/labels.js";
+import { aggressionNames, aggressionOptions, seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
 import { loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
@@ -202,6 +203,7 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
   const [tableName, setTableName] = useState<string | undefined>();
   const [style, setStyle] = useState<TableStyle>("SAYC");
   const [scoring, setScoring] = useState<TableScoring>("rubber");
+  const [aggression, setAggression] = useState<Aggression>("normal");
   const [listed, setListed] = useState(true);
   const [mode, setMode] = useState<"bots" | "people">("bots");
   // The Play panel always starts solo against bots, whatever solo was last left at.
@@ -254,7 +256,7 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
     setCreateError(undefined);
     let result: { id: string } | { error: string };
     try {
-      result = await api.createTable(baseUrl, { name, style, scoring, listed });
+      result = await api.createTable(baseUrl, { name, style, scoring, aggression, listed });
     } catch {
       result = { error: "failed" };
     }
@@ -349,7 +351,7 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
               <li key={table.id} className="lobby-table">
                 <div className="lobby-table-head">
                   <strong>{table.name}</strong>
-                  <span className="quiet-copy">{table.style} · {scoringNames[table.scoring ?? "duplicate"]}</span>
+                  <span className="quiet-copy">{table.style} · {scoringNames[table.scoring ?? "duplicate"]}{table.aggression && table.aggression !== "normal" ? ` · ${aggressionNames[table.aggression]} bots` : ""}</span>
                   {table.handInProgress ? <span className="lobby-playing">Playing</span> : null}
                 </div>
                 <ul className="lobby-seats">
@@ -377,11 +379,13 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
             <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
             <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
             <label>Bidding style<select aria-label="Bidding style" value={soloSetup.biddingStyle} onChange={(event) => chooseSolo({ biddingStyle: event.target.value as SoloSetup["biddingStyle"] })}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            <label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={soloSetup.botAggression} onChange={(event) => chooseSolo({ botAggression: event.target.value as Aggression })}>{aggressionOptions}</select></label>
             {soloResumes ? <p className="quiet-copy">Your unfinished solo hand will resume; these settings apply from the next deal.</p> : null}
             <label>Scoring<select aria-label="Scoring" value={soloSetup.scoring} onChange={(event) => chooseSolo({ scoring: event.target.value as SoloSetup["scoring"] })}><option value="rubber">Rubber bridge</option><option value="single">Single deals</option></select></label>
           </> : <>
             <label>Table name<input aria-label="Table name" value={effectiveName} maxLength={40} onChange={(event) => { setCreateError(undefined); setTableName(event.target.value); }} /></label>
             <label>Bidding style<select aria-label="Bidding style" value={style} onChange={(event) => { setCreateError(undefined); setStyle(event.target.value as TableStyle); }}><option value="SAYC">SAYC</option><option value="2/1">2/1</option></select></label>
+            <label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={aggression} onChange={(event) => { setCreateError(undefined); setAggression(event.target.value as Aggression); }}>{aggressionOptions}</select></label>
             <label>Scoring<select aria-label="Scoring" value={scoring} onChange={(event) => { setCreateError(undefined); setScoring(event.target.value as TableScoring); }}><option value="rubber">{scoringNames.rubber}</option><option value="duplicate">{scoringNames.duplicate}</option></select></label>
             <label className="lobby-check"><input type="checkbox" aria-label="Show in lobby" checked={listed} onChange={(event) => { setCreateError(undefined); setListed(event.target.checked); }} />Show in lobby</label>
           </>}

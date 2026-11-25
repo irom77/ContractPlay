@@ -142,10 +142,10 @@ const others = (seat: Seat) => SEATS.filter((s) => s !== seat);
 
 const onlineScreens: readonly PreviewScreen[] = [
   {
-    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats) above the Play panel (Me and bots, or With other people) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked. Renaming here changes only the preview.",
+    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats and conservative bots) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked. Renaming here changes only the preview.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
-      const open = table("Beginners welcome", { west: "Chris" }, ["east"]);
+      const open = { ...table("Beginners welcome", { west: "Chris" }, ["east"]), aggression: "conservative" as const };
       return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(playing), summaryOf(open)] };
     }
   },
@@ -343,7 +343,7 @@ const onlineReplayResult: PreviewScreen = {
 
 export const soloScreens: readonly PreviewScreen[] = [
   {
-    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, bot skill, and bidding style.",
+    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, bot skill, bidding style, and bot aggressiveness.",
     build: () => solo(null, { userSeat: "south" }, { completedHands: [], rubber: { hands: [] } })
   },
   {
