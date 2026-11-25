@@ -14,6 +14,7 @@ import { SignInTour } from "./SignInTour.js";
 import { currentAccount, requestMagicLink, signOut, updateDisplayName, type AccountSession } from "./auth.js";
 
 import { syncOnlineHands } from "./handHistory.js";
+import { syncBotResults } from "./botResultsSync.js";
 
 const REFRESH_MS = 5000;
 /** How the lobby names a table's scoring; lobby entries from before rubber tables have none and keep running totals. */
@@ -44,7 +45,7 @@ export type LobbyProps = {
   /** Opens the device's recent hands, solo and online alike. */
   onRecentHands(): void;
   api?: LobbyApi;
-  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands };
+  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands; syncResults?: typeof syncBotResults };
   /** Opens Open tables, Play and New duplicate session from the start; they are collapsed to their headers otherwise. */
   expandedPanels?: boolean;
 };
@@ -61,13 +62,14 @@ function seatLabel(seat: SeatInfo): string {
   return seat.kind === "human" ? seat.name : seat.kind === "bot" ? botName(seat) : "Open";
 }
 
-const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands };
+const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands, syncResults: syncBotResults };
 
 export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands, api = defaultApi, auth = defaultAuth, expandedPanels = false }: LobbyProps) {
   const [identity] = useState<Identity | undefined>(() => loadIdentity(storage));
   const [account, setAccount] = useState<AccountSession | null>(null);
   const [accountResolved, setAccountResolved] = useState(false);
   const [historyError, setHistoryError] = useState(false);
+  const [resultsSynced, setResultsSynced] = useState(0);
   const [signOutError, setSignOutError] = useState(false);
 
   useEffect(() => {
@@ -77,6 +79,8 @@ export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands
       setAccount(session);
       setAccountResolved(true);
       if (session && auth.syncHistory) void auth.syncHistory(storage, session).catch(() => { if (active) setHistoryError(true); });
+      // Results with named bots from the account; the lobby's records refresh once they are in.
+      if (session && auth.syncResults) void auth.syncResults(storage, session).then(() => { if (active) setResultsSynced((count) => count + 1); }).catch(() => {});
     }).catch(() => { if (active) setAccountResolved(true); });
     return () => { active = false; };
   }, [storage, auth]);
@@ -86,7 +90,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands
   return <>
     {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
-    <LobbyTables expandedPanels={expandedPanels} identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands}
+    <LobbyTables resultsSynced={resultsSynced} expandedPanels={expandedPanels} identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands}
       account={account} onRename={async (name) => setAccount(await (auth.updateDisplayName ?? updateDisplayName)(name))} onSignOut={() => {
         void auth.signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
       }} />
@@ -195,8 +199,8 @@ function AccountName({ name, onRename }: { name: string; onRename(name: string):
   </form>;
 }
 
-function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
-  expandedPanels: boolean; identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string): void; onPlaySolo(): void; onRecentHands(): void;
+function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
+  resultsSynced: number; expandedPanels: boolean; identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string): void; onPlaySolo(): void; onRecentHands(): void;
   account: AccountSession; onRename(name: string): Promise<void>; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
@@ -211,7 +215,7 @@ function LobbyTables({ expandedPanels, identity, baseUrl, storage, api, onOpenTa
   // The Play panel always starts solo against bots, whatever solo was last left at.
   const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
   // Your record with each named partner and against each named opponent, shown beside the bots you pick.
-  const castRecords = useMemo(() => { const results = loadPartnerResults(storage); return { partners: partnerStats(results), opponents: opponentStats(results) }; }, [storage]);
+  const castRecords = useMemo(() => { const results = loadPartnerResults(storage); return { partners: partnerStats(results), opponents: opponentStats(results) }; }, [storage, resultsSynced]);
   // An unfinished solo hand resumes as it was set up; the panel's choices then wait for the next deal.
   // Open tables, Play and New duplicate session start collapsed to their headers; a click on a header opens its list or form.
   const [tablesOpen, setTablesOpen] = useState(expandedPanels);

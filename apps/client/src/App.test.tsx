@@ -2102,6 +2102,7 @@ describe("Solo hand account sync", () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === "/api/auth/me") return signedIn ? Response.json(signedIn) : new Response(null, { status: 401 });
       if (url.startsWith("/api/account/online-hands/") && init?.method === "PUT") return Response.json({ hands: [JSON.parse(init.body as string).hand] });
+      if (url === "/api/account/bot-results" && init?.method === "POST") return Response.json(JSON.parse(init.body as string));
       throw new TypeError("offline");
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -2133,7 +2134,7 @@ describe("Solo hand account sync", () => {
     const finished = loadSoloData(window.localStorage).currentGame!;
     // North declared 1♣, so East and partner West defended and score the other side of North–South's result.
     expect(loadPartnerResults(window.localStorage)[0]).toEqual({ handId: "mf3k2x-ab12cd", partner: "bea", left: "cora", right: "custom",
-      score: -finished.score!.score, declared: false, made: false });
+      score: -finished.score!.score, declared: false, made: false, at: expect.any(Number) });
     cleanup();
     // Opening solo again on the finished hand does not count it twice.
     render(<App />);
@@ -2142,6 +2143,17 @@ describe("Solo hand account sync", () => {
     expect(partners.textContent).toContain("Bold Bea");
     expect(partners.textContent).toContain("1 hand together");
     expect(loadPartnerResults(window.localStorage)).toHaveLength(1);
+  });
+
+  it("sends a signed-in player's result with named bots to the account", async () => {
+    const fetchMock = stubAccount(account);
+    saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east", cast: { partner: "bea", left: "cora", right: "custom" } });
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "mf3k2x-ab12cd", currentGame: gameAfterPlays(51), completedHands: [] }));
+    render(<App />);
+    await waitFor(() => expect(loadPartnerResults(window.localStorage)[0]?.owner).toBe(account.playerId), { timeout: 5000 });
+    const sent = fetchMock.mock.calls.filter(([url]) => url === "/api/account/bot-results").map(([, init]) => JSON.parse(init!.body as string));
+    expect(sent).toEqual([{ results: [expect.objectContaining({ handId: "mf3k2x-ab12cd", partner: "bea", left: "cora" })] }]);
+    expect(sent[0].results[0].owner).toBeUndefined();
   });
 
   it("counts a hand against named opponents even with a custom partner", async () => {

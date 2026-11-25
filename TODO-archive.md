@@ -217,7 +217,23 @@ Completed checklist entries moved from [TODO.md](TODO.md), first on 2026-10-28 a
 - [x] Document Windows/macOS signing, Apple signing and store submission, web deployment, and account/device requirements in [the platform guide](docs/platform-delivery.md).
 - [x] Enable GitHub Pages with the Actions source and confirm its first deployment (live at https://irom77.github.io/ContractPlay/ since 2026-11-10).
 
+## Bots
+
+- [x] Allow players to configure bot aggressiveness levels (Conservative, Normal, Aggressive), alongside skill and bidding style, in solo settings and when creating an online table. Plan: `docs/superpowers/plans/2026-11-25-bot-aggressiveness.md`.
+- [x] A cast of twelve named solo bots (one per skill level and temperament) to pick as partner and each opponent, named at their seats. Plan: `docs/superpowers/plans/2026-11-25-named-bots.md`.
+- [x] Results with each named partner: hands played, average score a hand, and contracts made when declaring, beside the partner pick and under Your partners in Recent hands. Plan: `docs/superpowers/plans/2026-11-25-partner-results.md`.
+- [x] Results against each named opponent: hands against and your average score a hand, beside the opponent picks and under Your opponents in Recent hands. Plan: `docs/superpowers/plans/2026-11-25-partner-results.md`.
+- [x] Named bots at online tables: any bot seat can be a named bot, playing at its own skill and aggressiveness; names on the seating screen, at the table, on the scorecard, and in the lobby. Plan: `docs/superpowers/plans/2026-11-25-online-named-bots.md`.
+- [x] Results with and against named bots at online tables, and the whole record (solo and online) saved to the account so it follows a player across devices. Plan: `docs/superpowers/plans/2026-11-25-online-bot-results.md`.
+
 ## Online multiplayer
+
+- [x] Wait for every present human to confirm before dealing the next online hand, and open each new hand (solo and online) with a shuffle-and-deal animation.
+- [x] Add sign-in (authentication) so a seat and hand history follow a person across devices. Email magic links, linked seat recovery, and account-owned online archives pass the workspace release checks; deployment setup and live verification remain below.
+- [x] Provision the sign-in D1 database and apply production migrations.
+- [x] Verify the Resend sending domain and configure the production Worker with `RESEND_API_KEY` and `signin@romaniuk.us`.
+- [x] Let signed-in players change their account name from the lobby. Verified live on the deployment on 2026-11-24.
+- [x] Replay archived deals on every second new hand (solo against bots and online tables), with an anonymous D1 archive and a result comparison against earlier results. Design: `docs/superpowers/specs/2026-11-24-deal-replays-design.md`.
 
 - [x] Build sessions, table lifecycle, and server-authoritative actions (delivered with guest identity only: a display name and a device secret; sign-in remains open in TODO.md).
 - [x] Protect private hands and recover live tables after disconnects.

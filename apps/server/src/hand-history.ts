@@ -8,7 +8,7 @@ const headers = { "Cache-Control": "no-store" };
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers });
 const record = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
-async function readBody(request: Request): Promise<unknown> {
+export async function readBody(request: Request): Promise<unknown> {
   const length = request.headers.get("Content-Length");
   if (length !== null && (!Number.isSafeInteger(Number(length)) || Number(length) < 0 || Number(length) > MAX_BODY_BYTES)) throw new RangeError("body too large");
   if (!request.body) return undefined;

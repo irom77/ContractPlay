@@ -11,6 +11,7 @@ import { cardLabel } from "../table/labels.js";
 import { saveIdentity } from "./identity.js";
 import { handName } from "../handNames.js";
 import { OnlineTable } from "./OnlineTable.js";
+import { loadPartnerResults } from "../partnerResults.js";
 
 function memoryStorage(): StorageLike {
   const data = new Map<string, string>();
@@ -685,6 +686,25 @@ describe("OnlineTable play", () => {
       fireEvent.click(screen.getByRole("button", { name: "Claim all 1" }));
       expect(service.sent).toEqual([{ type: "claim", tricks: 1 }]);
     });
+  });
+
+  it("counts a finished hand towards the player's results with and against the named bots there, once", () => {
+    const service = setup();
+    const finished = playCards(oneNoTrump(), 52);
+    const nsScore = finished.score!.score;
+    const named = { north: human("Bob"), east: { kind: "bot", skill: "advanced", character: "bea" }, south: { kind: "bot", skill: "expert", character: "kim" }, west: bot } as const;
+    const view = tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: named, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal });
+    service.push(view);
+    service.push({ ...view, revision: 71 });
+    expect(loadPartnerResults(service.storage)).toEqual([expect.objectContaining({ handId: "online-ABC234-1", partner: "kim", left: "bea", right: "custom", score: nsScore, online: true })]);
+  });
+
+  it("leaves results alone when no named bot sat at the table", () => {
+    const service = setup();
+    const finished = playCards(oneNoTrump(), 52);
+    service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+    expect(loadSoloData(service.storage).completedHands).toHaveLength(1);
+    expect(loadPartnerResults(service.storage)).toEqual([]);
   });
 
   it("saves a finished hand to history once, even when the view repeats", () => {

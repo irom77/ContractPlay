@@ -1,6 +1,6 @@
 import type { GameState } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { loadPartnerResults, MAX_PARTNER_RESULTS, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
+import { loadPartnerResults, MAX_PARTNER_RESULTS, onlineCast, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
 
 const memory = () => {
   const map = new Map<string, string>();
@@ -65,5 +65,14 @@ describe("partner results", () => {
     expect(opponentSummary(stats[0])).toBe("2 hands against, +160 a hand");
     expect(opponentSummary(stats[2])).toBe("1 hand against, -50 a hand");
     expect(opponentSummary(undefined)).toBe("No hands against yet");
+  });
+});
+
+describe("online cast", () => {
+  it("names the bots around the player's seat, with other bots as custom and people as human", () => {
+    const seats = { north: { kind: "human", name: "Ann", away: false }, east: { kind: "bot", skill: "advanced", character: "bea" },
+      south: { kind: "bot", skill: "expert" }, west: { kind: "bot", skill: "intermediate", character: "cora" } } as const;
+    expect(onlineCast(seats, "north")).toEqual({ left: "bea", partner: "custom", right: "cora" });
+    expect(onlineCast(seats, "west")).toEqual({ left: "human", partner: "bea", right: "custom" });
   });
 });

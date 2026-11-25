@@ -20,6 +20,8 @@ import { connectTable as defaultConnect, type ConnectionStatus, type TableConnec
 import { loadIdentity, type Identity } from "./identity.js";
 import { currentAccount, type AccountSession } from "./auth.js";
 import { syncOnlineHands, uploadOnlineHand } from "./handHistory.js";
+import { syncBotResults, uploadBotResult } from "./botResultsSync.js";
+import { loadPartnerResults, onlineCast, partnerResultOf, recordPartnerResult, type PartnerResult } from "../partnerResults.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
 import { DealButton, HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.js";
@@ -139,6 +141,17 @@ function saveToHistory(storage: StorageLike, view: TableViewData, account?: Acco
   }
 }
 
+/**
+ * Counts a finished hand towards the player's results with and against the named bots at the table, once: a hand already
+ * counted (this view arriving again, or the table reopened) is left as it is. Returns the result when it is new.
+ */
+function recordOnlineResult(storage: StorageLike, view: TableViewData, saved: SavedHand): PartnerResult | undefined {
+  if (!view.yourSeat || loadPartnerResults(storage).some((result) => result.handId === saved.id)) return undefined;
+  const result = partnerResultOf(saved.id, saved.game, view.yourSeat, onlineCast(view.seats, view.yourSeat), { online: true, at: Date.now() });
+  if (result) recordPartnerResult(storage, result);
+  return result;
+}
+
 type Hold = { handNumber: number; cards: readonly TrickCard[] };
 type Received = { view?: TableViewData; hold?: Hold };
 
@@ -185,7 +198,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
     return () => { active = false; };
   }, [props.account]);
   useEffect(() => {
-    if (account) void syncOnlineHands(storage, account).catch(() => {});
+    if (account) void syncOnlineHands(storage, account).catch(() => {}).then(() => syncBotResults(storage, account)).catch(() => {});
   }, [storage, account]);
   if (!identity && !account) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
   if (account === undefined) return <main className="app-shell"><p role="status">Restoring your session…</p></main>;
@@ -298,6 +311,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       if (saved && account) void uploadOnlineHand(storage, account, saved).catch(() => {
         setNotice({ text: "Online history could not sync. This hand is saved locally; reopen Recent hands to retry." });
       });
+      const result = saved ? recordOnlineResult(storage, view, saved) : undefined;
+      if (result && account) void uploadBotResult(storage, account, result).catch(() => {});
     }
   }, [view, storage, identity]);
 

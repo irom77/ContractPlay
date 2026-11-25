@@ -58,6 +58,7 @@ import { loadPartnerResults, opponentStats, opponentSummary, partnerResultOf, pa
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands, uploadSoloHand } from "./online/handHistory.js";
+import { syncBotResults, uploadBotResult } from "./online/botResultsSync.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
@@ -194,6 +195,9 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       if (!active || !account) return;
       await syncOnlineHands(persistence.storage, account);
       if (active) setSoloData(loadSoloData(persistence.storage));
+      // Results with named bots follow the account too; a failure here just waits for the next sync.
+      const results = await syncBotResults(persistence.storage, account).catch(() => undefined);
+      if (active && results) setPartnerResults(results);
     }).catch(() => { if (active) setMessage("Online history could not sync. Your local hands are still available; reopen Recent hands to retry."); });
     return () => { active = false; };
   }, [dialog, frozen, persistence]);
@@ -300,8 +304,13 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   useEffect(() => {
     if (frozen || !game || !currentHandId || !playAgainstBots || resultCountedFor.current === game) return;
     resultCountedFor.current = game;
-    const result = partnerResultOf(currentHandId, game, userSeat, cast);
-    if (result) setPartnerResults(recordPartnerResult(persistence.storage, result));
+    const result = partnerResultOf(currentHandId, game, userSeat, cast, { at: Date.now() });
+    if (!result) return;
+    setPartnerResults(recordPartnerResult(persistence.storage, result));
+    if (serviceUrl() === undefined) return;
+    void currentAccount().then(async (account) => {
+      if (account) setPartnerResults(await uploadBotResult(persistence.storage, account, result));
+    }).catch(() => {});
   }, [frozen, game, currentHandId, playAgainstBots, userSeat, cast, persistence]);
   const castRecords = useMemo(() => ({ partners: partnerStats(partnerResults), opponents: opponentStats(partnerResults) }), [partnerResults]);
   const partnerRecords = castRecords.partners;

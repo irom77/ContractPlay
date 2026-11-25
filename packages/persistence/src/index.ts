@@ -282,3 +282,5 @@ export function exportSavedHand(data: SoloData, id: string): string | undefined 
   const hand = data.completedHands.find((candidate) => candidate.id === id);
   return hand ? JSON.stringify(hand, null, 2) : undefined;
 }
+
+export { botResultFields, isBotResult, MAX_BOT_RESULTS, type BotResult } from "./botResults.js";

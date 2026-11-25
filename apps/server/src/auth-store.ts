@@ -139,6 +139,24 @@ export class AuthStore {
     ]);
   }
 
+  /** Adds or replaces results, keeping the account's newest `limit`. */
+  async upsertBotResults(accountId: string, results: readonly StoredHand[], limit: number): Promise<void> {
+    if (results.length === 0) return;
+    await this.db.batch([
+      ...results.map((result) => this.db.prepare("INSERT INTO bot_results (account_id, hand_id, recorded_at, data_json) VALUES (?, ?, ?, ?) ON CONFLICT(account_id, hand_id) DO UPDATE SET recorded_at = excluded.recorded_at, data_json = excluded.data_json")
+        .bind(accountId, result.id, result.completedAt, JSON.stringify(result.data))),
+      this.db.prepare("DELETE FROM bot_results WHERE account_id = ?1 AND hand_id NOT IN (SELECT hand_id FROM bot_results WHERE account_id = ?1 ORDER BY recorded_at DESC, hand_id DESC LIMIT ?2)")
+        .bind(accountId, limit)
+    ]);
+  }
+
+  /** The account's results, oldest first. */
+  async listBotResults(accountId: string): Promise<StoredHand[]> {
+    const { results } = await this.db.prepare("SELECT hand_id, recorded_at, data_json FROM bot_results WHERE account_id = ? ORDER BY recorded_at, hand_id")
+      .bind(accountId).all<{ hand_id: string; recorded_at: number; data_json: string }>();
+    return results.map((row) => ({ id: row.hand_id, completedAt: row.recorded_at, data: JSON.parse(row.data_json) }));
+  }
+
   async listHands(accountId: string): Promise<StoredHand[]> {
     // The newest 25 online hands and the newest 25 solo hands, merged newest first.
     const newest = (match: string) => `SELECT * FROM (SELECT hand_id, completed_at, data_json FROM online_hands WHERE account_id = ?1 AND hand_id ${match} 'online-%' ORDER BY completed_at DESC, hand_id DESC LIMIT 25)`;
