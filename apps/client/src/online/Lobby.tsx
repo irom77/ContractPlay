@@ -7,6 +7,7 @@ import { loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
 import type { SessionBoardInput } from "./connection.js";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
+import { SignInTour } from "./SignInTour.js";
 import { currentAccount, requestMagicLink, signOut, updateDisplayName, type AccountSession } from "./auth.js";
 
 import { syncOnlineHands } from "./handHistory.js";
@@ -126,6 +127,7 @@ function MissionPanel() {
       <li><span className="mission-suit red" aria-hidden="true">♦</span><span><strong>Every hand on record</strong> Finished hands are saved to your account on any device, ready to review call by call and card by card.</span></li>
       <li><span className="mission-suit" aria-hidden="true">♣</span><span><strong>Practise with bots that explain</strong> Four skill levels, SAYC or 2/1, and hints that tell you what any call means.</span></li>
     </ul>
+    <SignInTour />
   </section>;
 }
 

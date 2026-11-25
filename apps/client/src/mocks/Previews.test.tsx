@@ -261,6 +261,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(mission).getByRole("heading", { level: 2 }).textContent).toBe("Bridge that remembers every hand");
     expect(within(mission).getAllByRole("listitem").map((item) => item.querySelector("strong")?.textContent))
       .toEqual(["Replay real deals", "Autopilot when you need it", "Every hand on record", "Practise with bots that explain"]);
+    // Under the points, a crossfading tour of the table; each slide opens its preview.
+    const tour = within(mission).getByRole("figure", { name: "A look at the table" });
+    expect(tour.querySelector(".tour-slide.current")?.getAttribute("href")).toBe("#/mocks/18");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Send sign-in link" }));
     expect(await screen.findByText("Check your email for a sign-in link.")).toBeTruthy();

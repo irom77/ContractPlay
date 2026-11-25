@@ -480,6 +480,19 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .mission-points strong { display: block; color: var(--ink); font-size: 14px; }
 .mission-suit { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 5px; background: #fdfcf8; color: var(--card-black); font: 700 16px/1 var(--suit-font); box-shadow: 0 1px 3px #0006; }
 .mission-suit.red { color: var(--card-red); }
+/* The sign-in tour: screenshots of the table crossfading under the four points, a caption and dots beneath. */
+.sign-in-tour { display: grid; gap: 8px; margin: 4px 0 0; }
+.tour-frame { position: relative; overflow: hidden; aspect-ratio: 8 / 5; border: 1px solid var(--line); border-radius: 8px; background: #0f5a3f; box-shadow: 0 3px 10px #0006; }
+.tour-slide { position: absolute; inset: 0; opacity: 0; transition: opacity .9s ease; pointer-events: none; }
+.tour-slide.current { opacity: 1; pointer-events: auto; }
+.tour-slide img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tour-slide:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.sign-in-tour figcaption { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.tour-caption { color: var(--ink); font-size: 13px; font-weight: 600; }
+.tour-dots { display: flex; gap: 6px; }
+.tour-dots button { width: 8px; height: 8px; border: 0; border-radius: 50%; padding: 0; background: rgba(255, 255, 255, .3); cursor: pointer; }
+.tour-dots button.current { background: var(--gold); }
+.tour-dots button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .lobby-panel label { display: grid; gap: 5px; color: #cfdbd1; font-size: 12px; font-weight: 600; }
 .lobby-panel input:not([type="checkbox"]), .lobby-panel select { min-width: 0; height: 38px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 10px; background: #21483e; color: var(--ink); font-size: 14px; }
 .lobby-panel .lobby-check { display: flex; align-items: center; gap: 8px; }
@@ -647,4 +660,5 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 @media (prefers-reduced-motion: reduce) {
   .deal-animation { display: none; }
   .table-panel.dealing :is(.hand-zone, .hidden-hand, .dummy-table-hand, .seat-auction-calls, .bid-picker) { animation: none; }
+  .tour-slide { transition: none; }
 }
