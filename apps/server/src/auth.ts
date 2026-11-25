@@ -73,6 +73,14 @@ export async function authenticatedAccount(request: Request, env: Env): Promise<
   return value ? new AuthStore(env.DB).findSession(await hash(value), Date.now()) : null;
 }
 
+/** Benchmark administration uses deployed account IDs and the same-origin account session. */
+export async function benchmarkAdminAccess(request: Request, env: Env): Promise<"authorized" | "unauthenticated" | "forbidden"> {
+  const account = await authenticatedAccount(request, env);
+  if (!account) return "unauthenticated";
+  const allowlist = env.BENCHMARK_ADMIN_ACCOUNT_IDS?.split(",").map((id) => id.trim()) ?? [];
+  return allowlist.includes(account.id) ? "authorized" : "forbidden";
+}
+
 async function boundedBody(request: Request): Promise<unknown> {
   const declared = request.headers.get("Content-Length");
   if (declared !== null && (!Number.isSafeInteger(Number(declared)) || Number(declared) < 0 || Number(declared) > 4096)) throw new Error("body too large");

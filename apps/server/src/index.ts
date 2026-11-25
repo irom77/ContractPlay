@@ -5,6 +5,7 @@ import type { Aggression, Seat, Vulnerability } from "@contractplay/core";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 import { authenticatedAccount, authRequestAllowed, authRoute } from "./auth.js";
+import { ADMIN_BENCHMARK_PATH, PUBLIC_BENCHMARK_PATH, benchmarkRoute } from "./benchmark-routes.js";
 import { dealRoute } from "./deal-routes.js";
 import { parseDeal, readLimited } from "./deal-input.js";
 import { handHistoryRoute } from "./hand-history.js";
@@ -118,6 +119,8 @@ export default {
     if (path === "/api/account/characters" || path.startsWith("/api/account/characters/")) return charactersRoute(request, env);
     if (path.startsWith("/api/deals/")) return dealRoute(request, env);
     if (path.startsWith("/api/auth/")) return authRoute(request, env);
+    if (path === ADMIN_BENCHMARK_PATH || path.startsWith(`${ADMIN_BENCHMARK_PATH}/`)) return benchmarkRoute(request, env, true);
+    if (path === PUBLIC_BENCHMARK_PATH || path.startsWith(`${PUBLIC_BENCHMARK_PATH}/`)) return benchmarkRoute(request, env, false);
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
     if (path === "/admin" && (request.method === "GET" || request.method === "HEAD")) {
       return env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method, headers: request.headers }));

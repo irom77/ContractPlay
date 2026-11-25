@@ -9,8 +9,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@contractplay/benchmark": "workspace:*",
     "@contractplay/bots": "workspace:*",
     "@contractplay/core": "workspace:*",
+    "@contractplay/pbn": "workspace:*",
     "@contractplay/persistence": "workspace:*",
     "@contractplay/protocol": "workspace:*",
     "@contractplay/table": "workspace:*"

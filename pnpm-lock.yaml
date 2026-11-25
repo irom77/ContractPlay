@@ -87,12 +87,18 @@ importers:
 
   apps/server:
     dependencies:
+      '@contractplay/benchmark':
+        specifier: workspace:*
+        version: link:../../packages/benchmark
       '@contractplay/bots':
         specifier: workspace:*
         version: link:../../packages/bots
       '@contractplay/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@contractplay/pbn':
+        specifier: workspace:*
+        version: link:../../packages/pbn
       '@contractplay/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
