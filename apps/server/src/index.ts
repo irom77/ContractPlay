@@ -9,6 +9,7 @@ import { dealRoute } from "./deal-routes.js";
 import { parseDeal, readLimited } from "./deal-input.js";
 import { handHistoryRoute } from "./hand-history.js";
 import { botResultsRoute } from "./bot-results.js";
+import { charactersRoute } from "./characters.js";
 import { VERIFIED_ACCOUNT_HEADER } from "./table-object.js";
 import type { VerifiedAccount } from "./table-object.js";
 
@@ -114,6 +115,7 @@ export default {
     const path = url.pathname;
     if (path === "/api/account/online-hands" || path.startsWith("/api/account/online-hands/")) return handHistoryRoute(request, env);
     if (path === "/api/account/bot-results" || path.startsWith("/api/account/bot-results/")) return botResultsRoute(request, env);
+    if (path === "/api/account/characters" || path.startsWith("/api/account/characters/")) return charactersRoute(request, env);
     if (path.startsWith("/api/deals/")) return dealRoute(request, env);
     if (path.startsWith("/api/auth/")) return authRoute(request, env);
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });

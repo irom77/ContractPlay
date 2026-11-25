@@ -1,9 +1,11 @@
-import { AGGRESSIONS, type Aggression, type Seat, type SkillLevel } from "@contractplay/core";
-import { BOT_CHARACTERS, botCharacter, type BotCharacter } from "@contractplay/bots";
+import { AGGRESSIONS, type Aggression, type BotTraits, type Seat, type SkillLevel } from "@contractplay/core";
+import { BOT_CHARACTERS, type BotCharacter } from "@contractplay/bots";
+import { isOwnCharacterId, type OwnCharacter } from "@contractplay/persistence";
+import { rosterCharacter } from "./ownCharacters.js";
 
 export type SoloOpponents = "bots" | "manual";
 export type SoloScoring = "rubber" | "single";
-/** A bot character's id, or "custom" for a bot that takes the setup's own skill and aggressiveness. */
+/** A cast member's or own character's id, or "custom" for a bot that takes the setup's own skill and aggressiveness. */
 export type CastChoice = string;
 /** Who sits where around the player: partner, left-hand opponent (next to call) and right-hand opponent. */
 export type BotCast = Readonly<{ partner: CastChoice; left: CastChoice; right: CastChoice }>;
@@ -27,9 +29,12 @@ function read(storage: Pick<Storage, "getItem">, key: string): string | null {
 
 const castChoices: readonly CastChoice[] = ["custom", ...BOT_CHARACTERS.map((character) => character.id)];
 
+/** An own character is kept by id even if this device doesn't hold it (yet): until it does, that seat plays as the custom bot. */
+const readChoice = (value: unknown): CastChoice => isOwnCharacterId(value) ? value : pick(value, castChoices, "custom");
+
 function readCast(value: unknown): BotCast {
   const stored = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  return { partner: pick(stored.partner, castChoices, "custom"), left: pick(stored.left, castChoices, "custom"), right: pick(stored.right, castChoices, "custom") };
+  return { partner: readChoice(stored.partner), left: readChoice(stored.left), right: readChoice(stored.right) };
 }
 
 /** Where each cast role sits for a player in this seat. */
@@ -38,20 +43,22 @@ export function castRoleOf(seat: Seat, userSeat: Seat): CastRole | undefined {
   return turn === 1 ? "left" : turn === 2 ? "partner" : turn === 3 ? "right" : undefined;
 }
 
-/** The character sitting in this seat, if it is a cast character rather than a custom bot (or the player). */
-export function castCharacterAt(cast: BotCast, seat: Seat, userSeat: Seat): BotCharacter | undefined {
+/** The character sitting in this seat, a cast member or one of the player's own, rather than a custom bot (or the player). */
+export function castCharacterAt(cast: BotCast, seat: Seat, userSeat: Seat, own: readonly OwnCharacter[]): BotCharacter | undefined {
   const role = castRoleOf(seat, userSeat);
-  return role ? botCharacter(cast[role]) : undefined;
+  return role ? rosterCharacter(cast[role], own) : undefined;
 }
 
-/** The skill and aggressiveness of the bot in this seat: its character's, or the setup's own for a custom bot. */
-export function botSettingsAt(setup: Pick<SoloSetup, "cast" | "botSkill" | "botAggression">, seat: Seat, userSeat: Seat): { skill: SkillLevel; aggression: Aggression } {
-  const character = castCharacterAt(setup.cast, seat, userSeat);
-  return character ? { skill: character.skill, aggression: character.aggression } : { skill: setup.botSkill, aggression: setup.botAggression };
+/** How the bot in this seat plays: its character's skill, aggressiveness and dials, or the setup's own for a custom bot. */
+export function botSettingsAt(setup: Pick<SoloSetup, "cast" | "botSkill" | "botAggression">, seat: Seat, userSeat: Seat,
+  own: readonly OwnCharacter[]): { skill: SkillLevel; aggression: Aggression; traits?: Partial<BotTraits> } {
+  const character = castCharacterAt(setup.cast, seat, userSeat, own);
+  if (!character) return { skill: setup.botSkill, aggression: setup.botAggression };
+  return { skill: character.skill, aggression: character.aggression, ...(character.traits ? { traits: character.traits } : {}) };
 }
 
-/** Whether any seat is a custom bot, so the setup's own skill and aggressiveness still matter. */
-export const castHasCustom = (cast: BotCast): boolean => CAST_ROLES.some((role) => !botCharacter(cast[role]));
+/** Whether any seat is a custom bot (or a character this device doesn't hold), so the setup's own skill and aggressiveness still matter. */
+export const castHasCustom = (cast: BotCast, own: readonly OwnCharacter[]): boolean => CAST_ROLES.some((role) => !rosterCharacter(cast[role], own));
 
 function pick<T>(value: unknown, allowed: readonly T[], fallback: T): T {
   return allowed.includes(value as T) ? value as T : fallback;

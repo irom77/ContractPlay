@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { loadSoloData, type StorageLike } from "@contractplay/persistence";
+import { loadSoloData, type OwnCharacter, type StorageLike } from "@contractplay/persistence";
 import type { Aggression } from "@contractplay/core";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
 import { aggressionNames, aggressionOptions, botName, seatNames, seats } from "../table/labels.js";
@@ -15,6 +15,8 @@ import { currentAccount, requestMagicLink, signOut, updateDisplayName, type Acco
 
 import { syncOnlineHands } from "./handHistory.js";
 import { syncBotResults } from "./botResultsSync.js";
+import { syncCharacters, uploadCharacters } from "./charactersSync.js";
+import { applyCharacters, changedCharacters, charactersFor, loadOwnCharacters, saveOwnCharacters } from "../ownCharacters.js";
 
 const REFRESH_MS = 5000;
 /** How the lobby names a table's scoring; lobby entries from before rubber tables have none and keep running totals. */
@@ -45,7 +47,7 @@ export type LobbyProps = {
   /** Opens the device's recent hands, solo and online alike. */
   onRecentHands(): void;
   api?: LobbyApi;
-  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands; syncResults?: typeof syncBotResults };
+  auth?: { currentAccount: typeof currentAccount; requestMagicLink: typeof requestMagicLink; signOut: typeof signOut; updateDisplayName?: typeof updateDisplayName; syncHistory?: typeof syncOnlineHands; syncResults?: typeof syncBotResults; syncCharacters?: typeof syncCharacters };
   /** Opens Open tables, Play and New duplicate session from the start; they are collapsed to their headers otherwise. */
   expandedPanels?: boolean;
 };
@@ -62,7 +64,7 @@ function seatLabel(seat: SeatInfo): string {
   return seat.kind === "human" ? seat.name : seat.kind === "bot" ? botName(seat) : "Open";
 }
 
-const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands, syncResults: syncBotResults };
+const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands, syncResults: syncBotResults, syncCharacters };
 
 export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands, api = defaultApi, auth = defaultAuth, expandedPanels = false }: LobbyProps) {
   const [identity] = useState<Identity | undefined>(() => loadIdentity(storage));
@@ -81,6 +83,8 @@ export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands
       if (session && auth.syncHistory) void auth.syncHistory(storage, session).catch(() => { if (active) setHistoryError(true); });
       // Results with named bots from the account; the lobby's records refresh once they are in.
       if (session && auth.syncResults) void auth.syncResults(storage, session).then(() => { if (active) setResultsSynced((count) => count + 1); }).catch(() => {});
+      // And the player's own characters, likewise.
+      if (session && auth.syncCharacters) void auth.syncCharacters(storage, session).then(() => { if (active) setResultsSynced((count) => count + 1); }).catch(() => {});
     }).catch(() => { if (active) setAccountResolved(true); });
     return () => { active = false; };
   }, [storage, auth]);
@@ -214,8 +218,12 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
   const [mode, setMode] = useState<"bots" | "people">("bots");
   // The Play panel always starts solo against bots, whatever solo was last left at.
   const [soloSetup, setSoloSetup] = useState<SoloSetup>(() => ({ ...loadSoloSetup(storage), opponents: "bots" }));
+  // The player's own characters; reloaded when an account sync may have brought changes.
+  // Only the signed-in account's, and ones not yet synced to any account, on a shared device.
+  const [ownCharacters, setOwnCharacters] = useState<readonly OwnCharacter[]>(() => charactersFor(loadOwnCharacters(storage), account.playerId));
+  useEffect(() => { setOwnCharacters(charactersFor(loadOwnCharacters(storage), account.playerId)); }, [storage, resultsSynced, account.playerId]);
   // Your record with each named partner and against each named opponent, shown beside the bots you pick.
-  const castRecords = useMemo(() => { const results = loadPartnerResults(storage); return { partners: partnerStats(results), opponents: opponentStats(results) }; }, [storage, resultsSynced]);
+  const castRecords = useMemo(() => { const results = loadPartnerResults(storage); return { partners: partnerStats(results), opponents: opponentStats(results), results }; }, [storage, resultsSynced]);
   // An unfinished solo hand resumes as it was set up; the panel's choices then wait for the next deal.
   // Open tables, Play and New duplicate session start collapsed to their headers; a click on a header opens its list or form.
   const [tablesOpen, setTablesOpen] = useState(expandedPanels);
@@ -385,8 +393,13 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
           </div>
           {mode === "bots" ? <>
             <label>Your seat<select aria-label="Your seat" value={soloSetup.seat} onChange={(event) => chooseSolo({ seat: event.target.value as SoloSetup["seat"] })}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label>
-            <BotCastFields cast={soloSetup.cast} onChange={(cast) => chooseSolo({ cast })} records={castRecords} />
-            {castHasCustom(soloSetup.cast) ? <>
+            <BotCastFields cast={soloSetup.cast} onChange={(cast) => chooseSolo({ cast })} records={castRecords} own={ownCharacters} onOwnChange={(next) => {
+              const changed = changedCharacters(ownCharacters, next);
+              const mine = (list: readonly OwnCharacter[]) => setOwnCharacters(charactersFor(list, account.playerId));
+              mine(saveOwnCharacters(storage, applyCharacters(loadOwnCharacters(storage), changed)));
+              void uploadCharacters(storage, account, changed).then(mine).catch(() => {});
+            }} />
+            {castHasCustom(soloSetup.cast, ownCharacters) ? <>
               <label>Bot skill<select aria-label="Bot skill" value={soloSetup.botSkill} onChange={(event) => chooseSolo({ botSkill: event.target.value as SoloSetup["botSkill"] })}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label>
               <label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={soloSetup.botAggression} onChange={(event) => chooseSolo({ botAggression: event.target.value as Aggression })}>{aggressionOptions}</select></label>
             </> : null}

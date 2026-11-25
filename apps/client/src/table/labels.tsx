@@ -1,4 +1,4 @@
-import { AGGRESSIONS, BOT_CHARACTERS, botCharacter, type Aggression, type Bid, type Card, type Contract, type Seat, type SkillLevel, type Suit } from "@contractplay/core";
+import { AGGRESSIONS, BOT_CHARACTERS, botCharacter, type Aggression, type BotTraits, type TraitLevel, type Bid, type Card, type Contract, type Seat, type SkillLevel, type Suit } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import type { ReactElement } from "react";
 
@@ -21,6 +21,34 @@ export function setBotFor(seat: Seat, choice: string): { type: "setBot"; seat: S
   const character = botCharacter(choice);
   return character ? { type: "setBot", seat, skill: character.skill, character: character.id } : { type: "setBot", seat, skill: choice as SkillLevel };
 }
+const asSkill = "Plays as its skill's system says.";
+/** Each trait dial's name, and the word and one-line meaning for each setting, as the character editor shows them. */
+export const traitWords: Record<keyof BotTraits, { label: string; levels: Record<TraitLevel, { word: string; meaning: string }> }> = {
+  openings: { label: "Openings", levels: {
+    cautious: { word: "Sound", meaning: "Needs 12 points to open one of a suit." },
+    standard: { word: "By the book", meaning: asSkill },
+    bold: { word: "Light", meaning: "Opens shapely hands on 10–11 points (the Rule of 20)." } } },
+  competing: { label: "Competing", levels: {
+    cautious: { word: "Sells out", meaning: "Needs more to overcall or double, and lets the opponents have partscores." },
+    standard: { word: "By the book", meaning: asSkill },
+    bold: { word: "Pushes", meaning: "Overcalls light on a good suit, and competes one more level with a fit." } } },
+  preempts: { label: "Preempts", levels: {
+    cautious: { word: "Sound", meaning: "Preempts only with two of the top three honours and 6+ points." },
+    standard: { word: "By the book", meaning: asSkill },
+    bold: { word: "Wild", meaning: "Preempts on a weak suit with one honour, from 4 points, in the first three seats." } } },
+  doubles: { label: "Penalty doubles", levels: {
+    cautious: { word: "Rarely", meaning: "Passes rather than double the opponents for penalty." },
+    standard: { word: "By the book", meaning: asSkill },
+    bold: { word: "Often", meaning: "Doubles the opponents' final contract when it holds a good defence." } } },
+  leads: { label: "Leads", levels: {
+    cautious: { word: "Passive", meaning: "Defends by leading from a sequence, or a suit without the ace or king." },
+    standard: { word: "By the book", meaning: asSkill },
+    bold: { word: "Attacking", meaning: "Defends by cashing the ace from ace-king against a suit contract." } } },
+  secondHand: { label: "Second hand", levels: {
+    cautious: { word: "Low", meaning: "Plays low second hand." },
+    standard: { word: "By the book", meaning: asSkill },
+    bold: { word: "High", meaning: "Wins the trick second hand when it can." } } }
+};
 /** The options for a bot aggressiveness select, Conservative to Aggressive. */
 export const aggressionOptions = AGGRESSIONS.map((value) => <option key={value} value={value}>{aggressionNames[value]}</option>);
 /** The review/result line for a claim, counting the claimer's tricks among the tricks that remained. */

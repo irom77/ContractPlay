@@ -1,4 +1,5 @@
-import { botCharacter, RANKS, SEATS, SUITS } from "@contractplay/core";
+import { botCharacter, cleanName, RANKS, SEATS, SUITS } from "@contractplay/core";
+export { cleanName } from "@contractplay/core";
 import type { Aggression, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
 export const PROTOCOL_VERSION = 8;
@@ -84,26 +85,11 @@ export type ServerMessage =
 const SKILLS: readonly string[] = ["beginner", "intermediate", "advanced", "expert"];
 const SECRET = /^[A-Za-z0-9_-]{32,128}$/;
 const BID = /^(pass|double|redouble|[1-7](clubs|diamonds|hearts|spades|notrump))$/;
-const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
-/** Unicode format characters: zero-width spaces and joiners, bidirectional overrides and the like. */
-const FORMAT = /\p{Cf}/gu;
-/** A surrogate half not paired with its partner (with the u flag, paired halves match as one code point). */
-const LONE_SURROGATE = /\p{Cs}/u;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const seatOf = (v: unknown): Seat | undefined => (SEATS as readonly unknown[]).includes(v) ? (v as Seat) : undefined;
 const skillOf = (v: unknown): SkillLevel | undefined => SKILLS.includes(v as string) ? (v as SkillLevel) : undefined;
 const count = (v: unknown): number | undefined => typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : undefined;
-
-/**
- * Removes format characters (zero-width and bidi controls), replaces control characters with spaces,
- * collapses whitespace and trims; undefined when not well-formed Unicode, empty, or longer than max.
- */
-export function cleanName(value: unknown, max: number): string | undefined {
-  if (typeof value !== "string" || LONE_SURROGATE.test(value)) return undefined;
-  const name = value.replace(FORMAT, "").replace(CONTROL, " ").replace(/\s+/g, " ").trim();
-  return name.length === 0 || [...name].length > max ? undefined : name;
-}
 
 function parseCard(v: unknown): Card | undefined {
   if (!isRecord(v)) return undefined;

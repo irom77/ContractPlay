@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { applyAction, cardId, createGameState, deal, RANKS, trickWinner, undoAction, validatePlay } from "@contractplay/core";
+import { applyAction, cardId, createGameState, deal, RANKS, TRAIT_PRESETS, trickWinner, undoAction, validatePlay } from "@contractplay/core";
 import type { GameState, Solver } from "@contractplay/core";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1273,7 +1273,7 @@ describe("bridge table", () => {
       expect(claimItem()).toBeNull();
       await waitFor(() => expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy(), { timeout: 3000 });
       expect(within(screen.getByRole("region", { name: "Hand result" })).getByText("Claimed by South (declarer): 13 of the remaining 13 tricks")).toBeTruthy();
-      expect(loadSoloData(window.localStorage).currentGame!.claim).toEqual({ seat: "south", tricks: 13 });
+      await waitFor(() => expect(loadSoloData(window.localStorage).currentGame!.claim).toEqual({ seat: "south", tricks: 13 }));
     });
 
     it("names the robot that rejects a claim it cannot prove and lets the user play on", async () => {
@@ -1831,7 +1831,8 @@ describe("solo deal replays", () => {
     chooseMenu("Deal a new hand");
     expect(await screen.findByText(notice)).toBeTruthy();
     expect(calls(fetchMock, "/api/deals/replay").map(([url]) => url)).toEqual(["/api/deals/replay"]);
-    expect(saved().currentGame).toMatchObject({ initialDeal: record.deal, dealer: "south", vulnerability: "EW" });
+    // The notice can show before the save effect runs.
+    await waitFor(() => expect(saved().currentGame).toMatchObject({ initialDeal: record.deal, dealer: "south", vulnerability: "EW" }));
     expect(saved().currentRecord?.replay?.dealId).toBe("deal-7");
 
     chooseMenu("Deal a new hand");
@@ -1885,7 +1886,7 @@ describe("solo deal replays", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
     expect(await screen.findByText(notice)).toBeTruthy();
     expect(calls(fetchMock, "/api/deals/replay").map(([url]) => url)).toEqual(["/api/deals/replay?vulnerability=NS"]);
-    expect(saved().currentGame).toMatchObject({ initialDeal: record.deal, dealer: "south", vulnerability: "NS" });
+    await waitFor(() => expect(saved().currentGame).toMatchObject({ initialDeal: record.deal, dealer: "south", vulnerability: "NS" }));
     expect(saved().rubber?.activeHandId).toBe(saved().currentHandId);
   });
 
@@ -2103,11 +2104,15 @@ describe("Solo hand account sync", () => {
       if (url === "/api/auth/me") return signedIn ? Response.json(signedIn) : new Response(null, { status: 401 });
       if (url.startsWith("/api/account/online-hands/") && init?.method === "PUT") return Response.json({ hands: [JSON.parse(init.body as string).hand] });
       if (url === "/api/account/bot-results" && init?.method === "POST") return Response.json(JSON.parse(init.body as string));
+      if (accountFull && url === "/api/account/online-hands" && init?.method !== "POST") return Response.json({ hands: [] });
+      if (accountFull && url === "/api/account/bot-results" && init?.method !== "POST") return Response.json({ results: [] });
+      if (url === "/api/account/characters" && accountFull) return init?.method === "POST" ? Response.json({ error: "too-many-characters" }, { status: 409 }) : Response.json({ characters: [] });
       throw new TypeError("offline");
     });
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
   }
+  let accountFull = false;
   const uploads = (fetchMock: ReturnType<typeof stubAccount>) => fetchMock.mock.calls.filter(([url, init]) => url.startsWith("/api/account/online-hands/") && init?.method === "PUT");
   const finishAgainstBots = (extra: object = {}) => {
     saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east" });
@@ -2154,6 +2159,42 @@ describe("Solo hand account sync", () => {
     const sent = fetchMock.mock.calls.filter(([url]) => url === "/api/account/bot-results").map(([, init]) => JSON.parse(init!.body as string));
     expect(sent).toEqual([{ results: [expect.objectContaining({ handId: "mf3k2x-ab12cd", partner: "bea", left: "cora" })] }]);
     expect(sent[0].results[0].owner).toBeUndefined();
+  });
+
+  it("names an own character at its seat", async () => {
+    stubAccount(null);
+    const gina = { id: "own-abc123", name: "Gentle Gina", blurb: "Never doubles.", skill: "advanced", traits: { ...TRAIT_PRESETS.normal, doubles: "cautious" }, updatedAt: 5 };
+    window.localStorage.setItem("contractplay.ownCharacters", JSON.stringify([gina]));
+    saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east", cast: { partner: gina.id, left: "custom", right: "custom" } });
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "mf3k2x-ab12cd", currentGame: gameAfterPlays(40), completedHands: [] }));
+    render(<App />);
+    await waitFor(() => expect(document.querySelector(".seat-west .online-seat-name")?.textContent).toBe("Gentle Gina"));
+  });
+
+  it("doesn't seat another account's character on a shared device", async () => {
+    stubAccount(null);
+    const theirs = { id: "own-abc123", name: "Their Gina", blurb: "", skill: "advanced", traits: TRAIT_PRESETS.normal, updatedAt: 5, owner: "someone-else" };
+    window.localStorage.setItem("contractplay.ownCharacters", JSON.stringify([theirs]));
+    saveSoloSetup(window.localStorage, { ...defaultSoloSetup, seat: "east", cast: { partner: theirs.id, left: "custom", right: "custom" } });
+    window.localStorage.setItem("contractplay.solo", JSON.stringify({ version: 1, currentHandId: "mf3k2x-ab12cd", currentGame: gameAfterPlays(40), completedHands: [] }));
+    render(<App />);
+    await waitFor(() => expect(document.querySelector(".seat-west")).not.toBeNull());
+    expect(document.querySelector(".seat-west .online-seat-name")).toBeNull();
+    expect(document.body.textContent).not.toContain("Their Gina");
+  });
+
+  it("says when the account can't take more characters", async () => {
+    accountFull = true;
+    try {
+      stubAccount(account);
+      window.localStorage.setItem("contractplay.ownCharacters", JSON.stringify([{ id: "own-abc123", name: "Gina", blurb: "", skill: "advanced", traits: TRAIT_PRESETS.normal, updatedAt: 5 }]));
+      storeCurrentGame(gameAfterPlays(4));
+      // A result alone opens Recent hands, with no finished hands to sync.
+      window.localStorage.setItem("contractplay.partnerResults", JSON.stringify([{ handId: "h1", partner: "bea", left: "custom", right: "custom", score: 0, declared: false, made: false }]));
+      render(<App />);
+      chooseMenu("Recent hands");
+      expect(await screen.findByText(/Your account already holds 24 characters/)).toBeTruthy();
+    } finally { accountFull = false; }
   });
 
   it("counts a hand against named opponents even with a custom partner", async () => {

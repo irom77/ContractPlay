@@ -1,6 +1,7 @@
-import type { GameState } from "@contractplay/core";
+import { TRAIT_PRESETS, type GameState } from "@contractplay/core";
+import type { OwnCharacter } from "@contractplay/persistence";
 import { describe, expect, it } from "vitest";
-import { loadPartnerResults, MAX_PARTNER_RESULTS, onlineCast, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
+import { castMemberName, editedSince, loadPartnerResults, MAX_PARTNER_RESULTS, onlineCast, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
 
 const memory = () => {
   const map = new Map<string, string>();
@@ -74,5 +75,39 @@ describe("online cast", () => {
       south: { kind: "bot", skill: "expert" }, west: { kind: "bot", skill: "intermediate", character: "cora" } } as const;
     expect(onlineCast(seats, "north")).toEqual({ left: "bea", partner: "custom", right: "cora" });
     expect(onlineCast(seats, "west")).toEqual({ left: "human", partner: "bea", right: "custom" });
+  });
+
+  const gina: OwnCharacter = { id: "own-abc123", name: "Gentle Gina", blurb: "Never doubles.", skill: "advanced",
+    traits: { ...TRAIT_PRESETS.normal, doubles: "cautious" }, updatedAt: 5 };
+
+  it("records a hand with an own character and its name", () => {
+    const withGina = { partner: gina.id, left: "custom", right: "custom" };
+    expect(partnerResultOf("h1", finished("north", 420), "south", withGina, {}, [gina]))
+      .toEqual({ handId: "h1", partner: gina.id, left: "custom", right: "custom", score: 420, declared: true, made: true, names: { [gina.id]: "Gentle Gina" } });
+    // A character this device no longer holds is a custom bot.
+    expect(partnerResultOf("h1", finished("north", 420), "south", withGina, {}, [])).toBeUndefined();
+    expect(partnerResultOf("h2", finished("north", 420), "south", { ...cast, right: gina.id }, {}, [gina])?.names).toEqual({ [gina.id]: "Gentle Gina" });
+  });
+
+  it("counts own characters as partners and opponents", () => {
+    const results = [result("h1", gina.id, 100), { ...result("h2", "bea", -50), left: gina.id, right: gina.id }];
+    expect(partnerStats(results).map((stats) => stats.partner)).toEqual([gina.id, "bea"]);
+    expect(opponentStats(results)).toEqual([{ opponent: gina.id, hands: 1, average: -50 }]);
+  });
+
+  it("names a deleted character from its results", () => {
+    const results = [{ ...result("h1", gina.id, 100), names: { [gina.id]: "Gina" } }, { ...result("h2", gina.id, 100), names: { [gina.id]: "Gentle Gina" } }];
+    expect(castMemberName(gina.id, [gina], results)).toBe("Gentle Gina");
+    expect(castMemberName("tess", [], results)).toBe("Timid Tess");
+    expect(castMemberName(gina.id, [{ ...gina, deleted: true }], results)).toBe("Gentle Gina (deleted)");
+    expect(castMemberName(gina.id, [], [result("h3", gina.id, 0)])).toBe("Your character (deleted)");
+  });
+
+  it("notes play edits since older hands", () => {
+    const results = [{ ...result("h1", gina.id, 100), at: 1 }, { ...result("h2", "bea", 0), left: gina.id, at: 10 }];
+    expect(editedSince(gina.id, [{ ...gina, playEditedAt: 5 }], results)).toBe(true);
+    expect(editedSince(gina.id, [{ ...gina, playEditedAt: 0 }], results)).toBe(false);
+    expect(editedSince(gina.id, [gina], results)).toBe(false);
+    expect(editedSince(gina.id, [{ ...gina, playEditedAt: 5 }], [result("h3", gina.id, 0)])).toBe(true);
   });
 });

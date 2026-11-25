@@ -1,3 +1,5 @@
+import { TRAIT_PRESETS } from "@contractplay/core";
+import type { OwnCharacter } from "@contractplay/persistence";
 import { describe, expect, it } from "vitest";
 import { botSettingsAt, castCharacterAt, castHasCustom, castRoleOf, customCast, defaultSoloSetup, loadSoloSetup, saveSoloSetup } from "./soloSetup.js";
 
@@ -46,16 +48,41 @@ describe("solo setup storage", () => {
     expect([castRoleOf("north", "south"), castRoleOf("west", "south"), castRoleOf("east", "south"), castRoleOf("south", "south")])
       .toEqual(["partner", "left", "right", undefined]);
     const cast = { partner: "bea", left: "tess", right: "custom" };
-    expect(castCharacterAt(cast, "north", "south")?.name).toBe("Bold Bea");
-    expect(castCharacterAt(cast, "west", "south")?.name).toBe("Timid Tess");
-    expect(castCharacterAt(cast, "east", "south")).toBeUndefined();
+    expect(castCharacterAt(cast, "north", "south", [])?.name).toBe("Bold Bea");
+    expect(castCharacterAt(cast, "west", "south", [])?.name).toBe("Timid Tess");
+    expect(castCharacterAt(cast, "east", "south", [])).toBeUndefined();
     const setup = { cast, botSkill: "expert", botAggression: "normal" } as const;
-    expect(botSettingsAt(setup, "north", "south")).toEqual({ skill: "advanced", aggression: "aggressive" });
-    expect(botSettingsAt(setup, "west", "south")).toEqual({ skill: "beginner", aggression: "conservative" });
+    expect(botSettingsAt(setup, "north", "south", [])).toEqual({ skill: "advanced", aggression: "aggressive" });
+    expect(botSettingsAt(setup, "west", "south", [])).toEqual({ skill: "beginner", aggression: "conservative" });
     // A custom bot, and the bot playing the player's own cards on auto play, take the setup's own settings.
-    expect(botSettingsAt(setup, "east", "south")).toEqual({ skill: "expert", aggression: "normal" });
-    expect(botSettingsAt(setup, "south", "south")).toEqual({ skill: "expert", aggression: "normal" });
-    expect(castHasCustom(cast)).toBe(true);
-    expect(castHasCustom({ partner: "bea", left: "tess", right: "kim" })).toBe(false);
+    expect(botSettingsAt(setup, "east", "south", [])).toEqual({ skill: "expert", aggression: "normal" });
+    expect(botSettingsAt(setup, "south", "south", [])).toEqual({ skill: "expert", aggression: "normal" });
+    expect(castHasCustom(cast, [])).toBe(true);
+    expect(castHasCustom({ partner: "bea", left: "tess", right: "kim" }, [])).toBe(false);
+  });
+
+  const gina: OwnCharacter = { id: "own-abc123", name: "Gentle Gina", blurb: "Never doubles.", skill: "advanced",
+    traits: { ...TRAIT_PRESETS.normal, doubles: "cautious" }, updatedAt: 5 };
+  const withGina = { partner: gina.id, left: "tess", right: "custom" };
+
+  it("keeps an own character in the cast", () => {
+    const storage = memory();
+    saveSoloSetup(storage, { ...defaultSoloSetup, cast: withGina });
+    expect(loadSoloSetup(storage).cast).toEqual(withGina);
+    expect(loadSoloSetup(memory({ "contractplay.soloSetup": '{"cast":{"partner":"own-!"}}' })).cast).toEqual(customCast);
+  });
+
+  it("an own character plays with its own dials", () => {
+    const setup = { cast: withGina, botSkill: "expert", botAggression: "aggressive" } as const;
+    expect(castCharacterAt(withGina, "north", "south", [gina])?.name).toBe("Gentle Gina");
+    expect(botSettingsAt(setup, "north", "south", [gina])).toEqual({ skill: "advanced", aggression: "normal", traits: gina.traits });
+    expect(castHasCustom({ ...withGina, right: "kim" }, [gina])).toBe(false);
+  });
+
+  it("a missing own character plays as the custom bot", () => {
+    const setup = { cast: withGina, botSkill: "expert", botAggression: "aggressive" } as const;
+    expect(castCharacterAt(withGina, "north", "south", [])).toBeUndefined();
+    expect(botSettingsAt(setup, "north", "south", [{ ...gina, deleted: true }])).toEqual({ skill: "expert", aggression: "aggressive" });
+    expect(castHasCustom({ ...withGina, right: "kim" }, [])).toBe(true);
   });
 });

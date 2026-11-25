@@ -151,13 +151,19 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((screen.getByRole("combobox", { name: "Scoring" }) as HTMLSelectElement).value).toBe("rubber");
     expect((screen.getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
     expect((screen.getByRole("combobox", { name: "Your seat" }) as HTMLSelectElement).value).toBe("south");
-    expect((screen.getByRole("combobox", { name: "Bot aggressiveness" }) as HTMLSelectElement).value).toBe("normal");
     expect((screen.getByRole("combobox", { name: "Partner" }) as HTMLSelectElement).value).toBe("bea");
     expect((screen.getByRole("combobox", { name: "Left opponent" }) as HTMLSelectElement).value).toBe("cora");
-    expect((screen.getByRole("combobox", { name: "Right opponent" }) as HTMLSelectElement).value).toBe("custom");
+    expect((screen.getByRole("combobox", { name: "Right opponent" }) as HTMLSelectElement).value).toBe("own-gentlegina");
+    expect(screen.getAllByRole("option", { name: "Gentle Gina · Your character" })).toHaveLength(3);
     expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Bold Bea (Advanced): Competes on every hand. 14 hands together, +230 a hand.");
     expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Careful Cora (Intermediate): Won't bid without the goods. 16 hands against, +317 a hand.");
+    expect(screen.getByRole("list", { name: "Your bots" }).textContent).toContain("Gentle Gina (Advanced): Sound and patient; never doubles you for penalty. 3 hands against, -40 a hand.");
+    // Every seat is a character, so the custom bot's skill and aggressiveness are not asked for.
+    expect(screen.queryByRole("combobox", { name: "Bot skill" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Bot aggressiveness" })).toBeNull();
+    expect(screen.getByRole("button", { name: "New character" })).toBeTruthy();
   },
+
   "solo-auction": () => {
     expect(document.querySelector(".status-pill")!.textContent).toBe("Your call");
     const bidRows = within(screen.getByRole("group", { name: "Contract bids by level and strain" })).getAllByRole("button");
@@ -319,6 +325,17 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(waiting.disabled).toBe(true);
     expect(waiting.title).toMatch(/You are ready\. The next hand is dealt once East is ready too/);
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
+  },
+  "solo-characters": () => {
+    const editor = screen.getByRole("group", { name: "Edit Gentle Gina" });
+    expect((within(editor).getByLabelText("Name") as HTMLInputElement).value).toBe("Gentle Gina");
+    expect((within(editor).getByLabelText("Skill") as HTMLSelectElement).value).toBe("advanced");
+    expect(within(editor).getAllByRole("group").map((group) => group.querySelector("legend")?.textContent))
+      .toEqual(["Openings", "Competing", "Preempts", "Penalty doubles", "Leads", "Second hand"]);
+    const doubles = within(within(editor).getByRole("group", { name: "Penalty doubles" }));
+    expect((doubles.getByLabelText("Rarely") as HTMLInputElement).checked).toBe(true);
+    expect(doubles.getByText("Passes rather than double the opponents for penalty.")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Your characters" }).textContent).toContain("Gentle Gina");
   }
 };
 

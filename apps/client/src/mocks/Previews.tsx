@@ -33,7 +33,8 @@ function fixedConnection(view: TableView): typeof connectTable {
 function SoloPreviewScreen({ data }: { data: Extract<PreviewData, { kind: "solo" }> }) {
   const preview = useMemo(() => {
     const storage = memoryStorage({ "contractplay.scoring": data.scoring,
-      ...(data.partnerResults ? { "contractplay.partnerResults": JSON.stringify(data.partnerResults) } : {}) });
+      ...(data.partnerResults ? { "contractplay.partnerResults": JSON.stringify(data.partnerResults) } : {}),
+      ...(data.ownCharacters ? { "contractplay.ownCharacters": JSON.stringify(data.ownCharacters) } : {}) });
     saveSoloData(storage, data.data);
     return { storage, ...data.table };
   }, [data]);

@@ -21,6 +21,7 @@ import { loadIdentity, type Identity } from "./identity.js";
 import { currentAccount, type AccountSession } from "./auth.js";
 import { syncOnlineHands, uploadOnlineHand } from "./handHistory.js";
 import { syncBotResults, uploadBotResult } from "./botResultsSync.js";
+import { syncCharacters } from "./charactersSync.js";
 import { loadPartnerResults, onlineCast, partnerResultOf, recordPartnerResult, type PartnerResult } from "../partnerResults.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
@@ -198,7 +199,8 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
     return () => { active = false; };
   }, [props.account]);
   useEffect(() => {
-    if (account) void syncOnlineHands(storage, account).catch(() => {}).then(() => syncBotResults(storage, account)).catch(() => {});
+    if (account) void syncOnlineHands(storage, account).catch(() => {}).then(() => syncBotResults(storage, account)).catch(() => {})
+      .then(() => syncCharacters(storage, account)).catch(() => {});
   }, [storage, account]);
   if (!identity && !account) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
   if (account === undefined) return <main className="app-shell"><p role="status">Restoring your session…</p></main>;

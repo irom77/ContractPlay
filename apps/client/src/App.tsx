@@ -33,8 +33,8 @@ import {
 import { exportPbn } from "@contractplay/pbn";
 import { newestHands, retainHandHistory } from "./handHistoryRetention.js";
 import sampleBoardSetUrl from "./fixtures/bridge-training-ruffing-short-hand-level-1.pbn?url&no-inline";
-import { deleteSavedHand, isSyncableSoloHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
-import { botCharacter, checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
+import { deleteSavedHand, isSyncableSoloHand, loadSoloData, parseBoardSetBackup, saveSoloData, serializeBoardSetBackup, upsertBoardSetLibrary, type BoardSet, type BoardSetLibraryEntry, type OwnCharacter, type PbnMetadata, type SavedHand, type SoloData, type StorageLike } from "@contractplay/persistence";
+import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
@@ -54,11 +54,13 @@ import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
 import { botSettingsAt, castCharacterAt, castHasCustom, loadSoloSetup, saveSoloSetup, soloSetupStored, type BotCast, type SoloScoring } from "./soloSetup.js";
 import { BotCastFields } from "./table/BotCastFields.js";
-import { loadPartnerResults, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
+import { castMemberName, editedNote, loadPartnerResults, opponentStats, opponentSummary, partnerResultOf, partnerStats, partnerSummary, recordPartnerResult, type PartnerResult } from "./partnerResults.js";
 import { compassSideNames, handsOnCard, Scorecard, weTheySideNames } from "./table/Scorecard.js";
 import { currentAccount } from "./online/auth.js";
 import { syncOnlineHands, uploadSoloHand } from "./online/handHistory.js";
 import { syncBotResults, uploadBotResult } from "./online/botResultsSync.js";
+import { CharacterLimitError, syncCharacters, uploadCharacters } from "./online/charactersSync.js";
+import { applyCharacters, changedCharacters, charactersFor, loadOwnCharacters, saveOwnCharacters } from "./ownCharacters.js";
 import { serviceUrl } from "./online/connection.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
@@ -103,6 +105,8 @@ export type SoloPreview = Readonly<{
   cast?: BotCast;
   /** One of the game menu's dialogs is open. */
   dialog?: MenuDialog;
+  /** The editor is open on this own character. */
+  editingCharacter?: string;
   /** Review this saved hand at this action. */
   review?: Readonly<{ handId: string; cursor: number }>;
   /** Show the original table's play of the current board at this action. */
@@ -143,6 +147,18 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [botAggression, setBotAggression] = useState<Aggression>(initialSetup.botAggression);
   const [cast, setCast] = useState<BotCast>(initialSetup.cast);
   const [partnerResults, setPartnerResults] = useState<readonly PartnerResult[]>(() => loadPartnerResults(persistence.storage));
+  // Every character stored on this device; the player sees and plays only their own (see `charactersFor`).
+  const [storedCharacters, setStoredCharacters] = useState<readonly OwnCharacter[]>(() => loadOwnCharacters(persistence.storage));
+  const [accountPlayerId, setAccountPlayerId] = useState<string>();
+  // Which account's characters to show matters only once some belong to an account, so only then is the account asked for.
+  const anySynced = storedCharacters.some((character) => character.owner !== undefined);
+  useEffect(() => {
+    if (frozen || !anySynced || serviceUrl() === undefined) return;
+    let active = true;
+    void currentAccount().then((account) => { if (active) setAccountPlayerId(account?.playerId); }).catch(() => {});
+    return () => { active = false; };
+  }, [frozen, anySynced]);
+  const ownCharacters = useMemo(() => charactersFor(storedCharacters, accountPlayerId), [storedCharacters, accountPlayerId]);
   const [auctionShown, setAuctionShown] = useState(false);
   const [fullscreen, toggleFullscreen] = useFullscreen(() => setMessage("Full screen is not available here."));
   const [pbnInput, setPbnInput] = useState("");
@@ -198,6 +214,13 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       // Results with named bots follow the account too; a failure here just waits for the next sync.
       const results = await syncBotResults(persistence.storage, account).catch(() => undefined);
       if (active && results) setPartnerResults(results);
+      const characters = await syncCharacters(persistence.storage, account).catch((error: unknown) => {
+        if (active && error instanceof CharacterLimitError) {
+          setMessage("Your account already holds 24 characters, so your newest ones are kept only in this browser. Delete some to make room.");
+        }
+        return loadOwnCharacters(persistence.storage);
+      });
+      if (active) setStoredCharacters(characters);
     }).catch(() => { if (active) setMessage("Online history could not sync. Your local hands are still available; reopen Recent hands to retry."); });
     return () => { active = false; };
   }, [dialog, frozen, persistence]);
@@ -304,15 +327,26 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   useEffect(() => {
     if (frozen || !game || !currentHandId || !playAgainstBots || resultCountedFor.current === game) return;
     resultCountedFor.current = game;
-    const result = partnerResultOf(currentHandId, game, userSeat, cast, { at: Date.now() });
+    const result = partnerResultOf(currentHandId, game, userSeat, cast, { at: Date.now() }, ownCharacters);
     if (!result) return;
     setPartnerResults(recordPartnerResult(persistence.storage, result));
     if (serviceUrl() === undefined) return;
     void currentAccount().then(async (account) => {
       if (account) setPartnerResults(await uploadBotResult(persistence.storage, account, result));
     }).catch(() => {});
-  }, [frozen, game, currentHandId, playAgainstBots, userSeat, cast, persistence]);
-  const castRecords = useMemo(() => ({ partners: partnerStats(partnerResults), opponents: opponentStats(partnerResults) }), [partnerResults]);
+  }, [frozen, game, currentHandId, playAgainstBots, userSeat, cast, persistence, ownCharacters]);
+  // The player's own characters: kept here, and sent to the account for a signed-in player (a failure waits for the next sync).
+  const saveOwn = (next: OwnCharacter[]) => {
+    const changed = changedCharacters(ownCharacters, next);
+    if (frozen) { setStoredCharacters(applyCharacters(storedCharacters, changed)); return; }
+    // Into the stored list as it is now, so a sync that just landed isn't overwritten.
+    setStoredCharacters(saveOwnCharacters(persistence.storage, applyCharacters(loadOwnCharacters(persistence.storage), changed)));
+    if (serviceUrl() === undefined) return;
+    void currentAccount().then(async (account) => {
+      if (account) setStoredCharacters(await uploadCharacters(persistence.storage, account, changed));
+    }).catch(() => {});
+  };
+  const castRecords = useMemo(() => ({ partners: partnerStats(partnerResults), opponents: opponentStats(partnerResults), results: partnerResults }), [partnerResults]);
   const partnerRecords = castRecords.partners;
 
   // Hands played against bots on dealt or replayed deals go to the archive; imported, board-set and repeated ones do not.
@@ -353,8 +387,8 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       if (cancelled) return;
       const actorSeat = turnState.currentActor;
       // Each seat's bot is its cast character, or the custom bot (as is the bot playing for the player on auto play).
-      const settings = botSettingsAt({ cast, botSkill, botAggression }, actorSeat, userSeat);
-      const bot = createBot({ skill: settings.skill, biddingStyle, aggression: settings.aggression });
+      const settings = botSettingsAt({ cast, botSkill, botAggression }, actorSeat, userSeat, ownCharacters);
+      const bot = createBot({ skill: settings.skill, biddingStyle, aggression: settings.aggression, ...(settings.traits ? { traits: settings.traits } : {}) });
       const action = turnState.phase === "auction"
         ? { type: "bid" as const, seat: actorSeat, bid: await bot.chooseBid(turnState.hands[actorSeat], turnState.auction, actorSeat) }
         : { type: "play" as const, seat: actorSeat, card: await bot.chooseCard(playContextFor(turnState, actorSeat)) };
@@ -364,7 +398,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     };
     void decide();
     return () => { cancelled = true; };
-  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill, botAggression, cast]);
+  }, [frozen, game, playAgainstBots, botsFinishing, temporaryTrick, userSeat, biddingStyle, botSkill, botAggression, cast, ownCharacters]);
 
   const actor = game?.currentActor;
   const selectedHand = reviewHandId ? newestHands(soloData.completedHands).find((hand) => hand.id === reviewHandId) : undefined;
@@ -853,7 +887,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     {scoring === "single" || !rubberUnderway ? <label>{scoring === "rubber" ? "First dealer" : "Dealer"}<select aria-label="Dealer" value={dealer} onChange={(event) => setDealer(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label> : null}
     {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
-    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} records={castRecords} />{castHasCustom(cast) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+    {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} records={castRecords} own={ownCharacters} onOwnChange={saveOwn} initialEditing={preview?.editingCharacter} />{castHasCustom(cast, ownCharacters) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
@@ -877,13 +911,11 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       <button className="review-link" aria-label={`Review ${savedHandName(hand)}, played ${playedOn(hand)}`} onClick={() => openReview(hand)}><strong>{savedHandName(hand)}</strong><span>Played {playedOn(hand)}</span></button>
       <div className="recent-actions">{(!hand.record || hand.record.event === "Previous attempts") && !hand.pbnMetadata && hand.game.score ? <button onClick={() => replaySavedDeal(hand)} aria-label={`Play this deal again from ${savedHandName(hand)}`}>Play this deal again</button> : null}<button onClick={() => downloadHand(hand.id)} aria-label={`Export PBN of ${savedHandName(hand)}`}>Export PBN</button><button onClick={() => removeHand(hand.id)} aria-label={`Delete ${savedHandName(hand)}`}>Delete</button></div>
     </li>)}</ul> : <p className="quiet-copy">Finished hands will be saved here for review.</p>}
-    {partnerRecords.length ? <><h3>Your partners</h3><ul className="recent-list partner-results" aria-label="Your partners">{partnerRecords.map((stats) => {
-      const character = botCharacter(stats.partner);
-      return <li key={stats.partner}><div className="review-link"><strong>{character?.name ?? stats.partner}</strong>
-        <span>{partnerSummary(stats)}{stats.declared ? ` · made ${stats.made} of ${stats.declared} contracts you declared` : ""}</span></div></li>;
-    })}</ul></> : null}
+    {partnerRecords.length ? <><h3>Your partners</h3><ul className="recent-list partner-results" aria-label="Your partners">{partnerRecords.map((stats) =>
+      <li key={stats.partner}><div className="review-link"><strong>{castMemberName(stats.partner, ownCharacters, partnerResults)}</strong>
+        <span>{partnerSummary(stats)}{stats.declared ? ` · made ${stats.made} of ${stats.declared} contracts you declared` : ""}{editedNote(stats.partner, ownCharacters, partnerResults)}</span></div></li>)}</ul></> : null}
     {castRecords.opponents.length ? <><h3>Your opponents</h3><ul className="recent-list partner-results" aria-label="Your opponents">{castRecords.opponents.map((stats) =>
-      <li key={stats.opponent}><div className="review-link"><strong>{botCharacter(stats.opponent)?.name ?? stats.opponent}</strong><span>{opponentSummary(stats)}</span></div></li>)}</ul></> : null}
+      <li key={stats.opponent}><div className="review-link"><strong>{castMemberName(stats.opponent, ownCharacters, partnerResults)}</strong><span>{opponentSummary(stats)}{editedNote(stats.opponent, ownCharacters, partnerResults)}</span></div></li>)}</ul></> : null}
     {boardSetLibrary.length ? <><h3>Imported board sets</h3><ul className="recent-list">{boardSetLibrary.map((entry) => <li key={entry.id}>
       <div className="review-link"><strong>{entry.name}</strong><span>{entry.completed ? `Complete · ${entry.records.length} boards` : `${entry.progress} of ${entry.records.length} played`}</span></div>
       <div className="recent-actions"><button type="button" onClick={() => resumeBoardSet(entry)}>Resume</button><button type="button" onClick={() => resumeBoardSet(entry, true)}>Restart</button><button type="button" onClick={() => { void exportBoardSet(entry); }}>Export backup</button><button type="button" onClick={() => deleteBoardSet(entry)}>Delete</button></div>
@@ -953,7 +985,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     : liveTurn && activeQueued && !canAct ? `Queued: ${cardLabel(activeQueued.card)}`
     // Against bots, your own turns read as they do online.
     : liveTurn && playAgainstBots && canAct ? (phase === "auction" ? "Your call" : actor === userSeat ? "Your play" : actor === contract?.declarer ? "Play declarer's hand" : "Play from dummy")
-    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? `${castCharacterAt(cast, shownActor!, userSeat)?.name ?? "Bot"} · ` : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
+    : liveTurn ? `${botsFinishing || (playAgainstBots && shownActor !== userSeat && !userControlsDeclaringSide) ? `${castCharacterAt(cast, shownActor!, userSeat, ownCharacters)?.name ?? "Bot"} · ` : ""}${seatNames[shownActor!]} to ${phase === "auction" ? "bid" : "play"}` : phaseLabel;
 
   // The same game menu as at an online table: the hand's actions first, then this device's settings and hands, and
   // dealing again (which abandons a hand in progress) set apart at the end.
@@ -1074,7 +1106,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
           bottomSeat={bottomSeat}
           botSeats={playAgainstBots ? seats.filter((seat) => seat !== userSeat) : undefined}
           seatLabel={(seat) => {
-            const character = playAgainstBots ? castCharacterAt(cast, seat, userSeat) : undefined;
+            const character = playAgainstBots ? castCharacterAt(cast, seat, userSeat, ownCharacters) : undefined;
             return character ? <span className="online-seat-label bot-name-tag" title={`${character.name}: ${character.blurb}`}><span className="online-seat-name">{character.name}</span></span> : null;
           }}
           actingSeat={canAct ? actor : undefined}
@@ -1103,7 +1135,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
             onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { key: callsKey, index }),
             text: (index) => {
               const seat = shownGame.auction[index]!.seat;
-              return explainBid(shownGame.auction, index, biddingStyle, playAgainstBots && seat !== userSeat ? botSettingsAt({ cast, botSkill, botAggression }, seat, userSeat).skill : "expert");
+              return explainBid(shownGame.auction, index, biddingStyle, playAgainstBots && seat !== userSeat ? botSettingsAt({ cast, botSkill, botAggression }, seat, userSeat, ownCharacters).skill : "expert");
             }
           }}
           tools={tableTools}

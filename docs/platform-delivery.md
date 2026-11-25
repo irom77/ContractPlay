@@ -80,6 +80,8 @@ The production D1 database is provisioned and its migrations are applied. Resend
 
    **Results with named bots need migration `0004_bot_results.sql`** (table `bot_results`). Apply it with the `--remote` command above. Until it is applied, `/api/account/bot-results` answers 503: players' records still build up in their browsers and go to their accounts at the next sync after it is applied. Each account keeps its newest 2,000 results; they are personal records sent by the player's own devices, checked for shape only, and never ranked or shared.
 
+   **Players' own characters need migration `0005_bot_characters.sql`** (table `bot_characters`). Apply it with the same `--remote` command. Until it is applied, `/api/account/characters` answers 503: characters stay in players' browsers and go to their accounts at the next sync after it is applied. Each account holds at most 24 live characters (the editor allows 12) and its newest 76 deletions, which are kept so a deletion reaches the player's other devices. They are checked for shape only and never shown to other players.
+
 3. **Set the app origin.** `vars.AUTH_PUBLIC_ORIGIN` is currently `https://contractplay.niuk.workers.dev`. It must match the browser app's exact HTTPS origin, with no path, query, or fragment. Change it when enabling a custom domain; old-host sessions do not transfer across origins. Keep `AUTH_ALLOW_INSECURE_LOCALHOST` unset in production.
 
 4. **Choose one mail provider and an approved sender.** Set `vars.AUTH_EMAIL_FROM` to a sender your provider permits. No sender is supplied by the repository, and a `workers.dev` app hostname is not a sending domain.

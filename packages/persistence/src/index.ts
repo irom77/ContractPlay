@@ -284,3 +284,4 @@ export function exportSavedHand(data: SoloData, id: string): string | undefined 
 }
 
 export { botResultFields, isBotResult, MAX_BOT_RESULTS, type BotResult } from "./botResults.js";
+export { isBotTraits, isOwnCharacter, isOwnCharacterId, MAX_CHARACTER_BLURB, MAX_CHARACTER_NAME, MAX_OWN_CHARACTERS, MAX_STORED_CHARACTERS, ownCharacterFields, type OwnCharacter } from "./ownCharacters.js";

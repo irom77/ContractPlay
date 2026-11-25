@@ -1,5 +1,5 @@
 import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS, summarizeRubber, SUITS, type Bid, type Card, type Deal, type GameAction, type HandRecord, type GameState, type Rank, type Rubber, type Seat, type TravellerRow } from "@contractplay/core";
-import type { SavedHand, SoloData } from "@contractplay/persistence";
+import type { OwnCharacter, SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { PartnerResult } from "../partnerResults.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
@@ -134,7 +134,7 @@ export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
   | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard }
   | { kind: "auth"; sent: boolean }
-  | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[] };
+  | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
 
 export type PreviewScreen = { id: string; title: string; detail: string; build(): PreviewData };
 
@@ -307,6 +307,19 @@ function partnerHistory(): PartnerResult[] {
   ];
 }
 
+/** The player's own character in the previews: sound and patient, never doubling for penalty. */
+const GINA: OwnCharacter = { id: "own-gentlegina", name: "Gentle Gina", blurb: "Sound and patient; never doubles you for penalty.", skill: "advanced",
+  traits: { openings: "cautious", competing: "cautious", preempts: "cautious", doubles: "cautious", leads: "standard", secondHand: "cautious" }, updatedAt: 1 };
+
+/** The fixed history plus three hands against Gentle Gina. */
+const historyWithGina = (): PartnerResult[] => [...partnerHistory(),
+  ...[-110, 50, -60].map((score, index) => ({ handId: `gina-${index}`, partner: "kim", left: GINA.id, right: "wes", score, declared: false, made: false, names: { [GINA.id]: GINA.name } }))];
+
+/** Solo before the first hand, with Bold Bea, Careful Cora and Gentle Gina around the player. */
+const newDealWithGina = (extra: Omit<SoloPreview, "storage"> = {}): PreviewData => ({
+  ...solo(null, { userSeat: "south", cast: { partner: "bea", left: "cora", right: GINA.id }, ...extra }, { completedHands: [], rubber: { hands: [] } }) as Extract<PreviewData, { kind: "solo" }>,
+  partnerResults: historyWithGina(), ownCharacters: [GINA] });
+
 function solo(game: GameState | null, table: Omit<SoloPreview, "storage">, extra: Partial<SoloData> = {}): PreviewData {
   return {
     kind: "solo",
@@ -364,8 +377,8 @@ const onlineReplayResult: PreviewScreen = {
 
 export const soloScreens: readonly PreviewScreen[] = [
   {
-    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner (14 hands together so far), Careful Cora on your left (16 hands against), and a custom bot on your right with its own skill and aggressiveness.",
-    build: () => ({ ...solo(null, { userSeat: "south", cast: { partner: "bea", left: "cora", right: "custom" } }, { completedHands: [], rubber: { hands: [] } }), partnerResults: partnerHistory() })
+    id: "solo-setup", title: "Solo: new deal", detail: "Solo play before the first hand: rubber scoring, bots as opponents, your seat, and your bots: Bold Bea as partner (14 hands together so far), Careful Cora on your left (16 hands against), and on your right Gentle Gina, a character you made yourself (3 hands against). Below them, Your characters lists her with Edit and Delete, and New character.",
+    build: () => newDealWithGina()
   },
   {
     id: "solo-auction", title: "Solo: your call against bots", detail: "You are South against bots; partner opened 1♠ and East passed.",
@@ -455,6 +468,10 @@ const laterScreens: readonly PreviewScreen[] = [
       for (const seat of ["south", "north"] as const) state = run(state, { type: "message", player: player(seat), message: { type: "deal" }, at: AT });
       return view(state, "north", people);
     }
+  },
+  {
+    id: "solo-characters", title: "Solo: your characters", detail: "Editing Gentle Gina, a character you made: her name, description and skill, and a setting on each of six dials (openings, competing, preempts, penalty doubles, leads, second hand), each with what it means. Gina is sound and patient: she never doubles you for penalty.",
+    build: () => newDealWithGina({ editingCharacter: GINA.id })
   }
 ];
 
@@ -466,7 +483,7 @@ export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...so
  * stay as they are. Every screen belongs to exactly one group.
  */
 export const previewCategories: readonly { name: string; ids: readonly string[] }[] = [
-  { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "email-sign-in", "email-link-sent"] },
+  { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "solo-characters", "email-sign-in", "email-link-sent"] },
   { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction"] },
   { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-bot-declares", "solo-replayed-deal"] },
   { name: "Menus, claims & auto play", ids: ["game-menu", "auto-play", "claim-answer", "solo-auto-play", "solo-claim", "solo-menu", "solo-settings", "solo-hands"] },

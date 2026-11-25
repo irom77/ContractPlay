@@ -683,4 +683,15 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .bot-cast-blurbs { display: grid; gap: 3px; grid-column: 1 / -1; flex: 1 0 100%; margin: 0; padding-left: 1.1em; line-height: 1.35; }
 .bot-cast-blurbs strong { color: inherit; }
 .partner-record { color: var(--gold, #f2c14e); font-weight: 600; }
+.own-characters { grid-column: 1 / -1; flex: 1 0 100%; display: grid; gap: 6px; }
+.own-characters h3 { margin: 4px 0 0; font-size: 0.95rem; }
+.own-characters ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.own-characters li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.own-character-editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 10px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; }
+.own-character-editor > label { display: grid; gap: 3px; }
+.trait-dial { margin: 0; padding: 6px 8px; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 6px; }
+.trait-dial legend { padding: 0 4px; font-weight: 600; }
+.trait-dial label { display: inline-flex; align-items: center; gap: 3px; margin-right: 10px; }
+.trait-dial p { margin: 4px 0 0; font-size: 0.85rem; }
+.own-character-actions, .own-character-editor .form-error { grid-column: 1 / -1; display: flex; gap: 8px; }
 .recent-panel h3 { margin: 14px 0 4px; }
