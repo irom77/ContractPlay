@@ -198,6 +198,20 @@ export function remainingTricks(state: GameState): number {
   return 13 - state.completedTricks.length;
 }
 
+/** Tricks each partnership has won this hand, counting a claim's tricks once the hand ends on one. */
+export function tricksWonBySide(state: Pick<GameState, "contract" | "completedTricks" | "claim">): { ns: number; ew: number } {
+  if (!state.contract) return { ns: 0, ew: 0 };
+  const trump = state.contract.strain === "notrump" ? undefined : state.contract.strain;
+  let ns = state.completedTricks.filter((trick) => partnership(trickWinner(trick, trump)) === 0).length;
+  let ew = state.completedTricks.length - ns;
+  if (state.claim) {
+    const rest = 13 - state.completedTricks.length - state.claim.tricks;
+    if (partnership(state.claim.seat) === 0) { ns += state.claim.tricks; ew += rest; }
+    else { ew += state.claim.tricks; ns += rest; }
+  }
+  return { ns, ew };
+}
+
 /** The seat a claim made on this turn is recorded under: declarer when declarer or dummy is to act, else the actor. */
 export function claimSeatFor(state: GameState): Seat | undefined {
   if (state.phase !== "play" || !state.contract) return undefined;

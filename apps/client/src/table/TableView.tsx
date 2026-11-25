@@ -1,5 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from "react";
-import { cardId, SUITS, trickWinner, type Bid, type Card, type Seat, type TrickCard } from "@contractplay/core";
+import { cardId, SUITS, trickWinner, tricksWonBySide, type Bid, type Card, type Seat, type TrickCard } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import { highCardPoints } from "@contractplay/bots";
 import {
@@ -106,10 +106,7 @@ export function TableView({
   // A hand spread along the top shares its height with the corners, so it fits between the tools and the status card.
   const handOnTop = fixedPlayHands && game.hands[seats[(seats.indexOf(bottomSeat) + 2) % 4]!].length > 0;
   const sideDummySpan = sideDummy && dummySeat ? Math.max(1, ...SUITS.map((suit) => game.hands[dummySeat].filter((card) => card.suit === suit).length)) : undefined;
-  const completedNsTricks = contract
-    ? game.completedTricks.filter((trick) => samePartnership(trickWinner(trick, trump), "north")).length
-    : 0;
-  const completedEwTricks = game.completedTricks.length - completedNsTricks;
+  const { ns: completedNsTricks, ew: completedEwTricks } = tricksWonBySide(game);
   const positionOf = (seat: Seat) => tablePositions[(seats.indexOf(seat) - seats.indexOf(bottomSeat) + 4) % 4]!;
   const canAct = actingSeat !== undefined;
   // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.

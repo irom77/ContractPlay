@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createDeck, deal, type Card, type Seat } from "./cards.js";
-import { applyAction, claimSeatFor, createGameState, playContextFor, remainingTricks, redoAction, replayActions, rewindTo, undoAction } from "./game.js";
+import { applyAction, claimSeatFor, createGameState, playContextFor, remainingTricks, tricksWonBySide, redoAction, replayActions, rewindTo, undoAction } from "./game.js";
 import { trickWinner } from "./rules.js";
 
 const initial = () => createGameState({ deal: deal(createDeck()), dealer: "north", vulnerability: "None" });
@@ -190,6 +190,18 @@ describe("claims", () => {
     const result = applyAction(state, { type: "claim", seat: defender, tricks: 2 });
     if (!result.ok) throw new Error(result.error.message);
     expect(result.state.score?.tricksTaken).toBe(10);
+  });
+
+  it("counts claimed tricks in each side's trick total", () => {
+    let state = toPlay();
+    while (state.completedTricks.length === 0) state = playOne(state);
+    state = playOne(playOne(state));
+    const before = tricksWonBySide(state);
+    expect(before.ns + before.ew).toBe(1);
+    const defender = state.currentActor;
+    const result = applyAction(state, { type: "claim", seat: defender, tricks: 2 });
+    if (!result.ok) throw new Error(result.error.message);
+    expect(tricksWonBySide(result.state)).toEqual({ ns: 10, ew: 3 });
   });
 
   it("refuses dummy's seat, an off-turn defender, and an out-of-range count", () => {
