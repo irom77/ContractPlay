@@ -83,6 +83,12 @@ describe("account characters", () => {
     expect((await call("POST", { characters: many.slice(0, 24) })).status).toBe(200);
   });
 
+  it("holds the limit when requests race", async () => {
+    const batch = (prefix: string) => Array.from({ length: 13 }, (_, i) => character(`own-${prefix}${String(i).padStart(5, "0")}`, 1));
+    await Promise.all([call("POST", { characters: batch("a") }), call("POST", { characters: batch("b") }), call("POST", { characters: batch("c") })]);
+    expect((await store.listCharacters(accountId)).filter((entry) => !entry.deleted).length).toBeLessThanOrEqual(24);
+  });
+
   it("needs the signed-in player, and keeps accounts apart", async () => {
     expect((await call("GET", undefined, { Cookie: "" })).status).toBe(401);
     expect((await call("GET", undefined, { "X-Expected-Player-ID": "stale" })).status).toBe(409);

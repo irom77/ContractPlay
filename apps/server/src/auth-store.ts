@@ -153,13 +153,18 @@ export class AuthStore {
 
   /**
    * Adds characters or newer edits of them (an older edit never replaces a newer one), keeping the account's newest
-   * `deletions` tombstones; live characters are never trimmed (the route caps how many there are).
+   * `deletions` tombstones; live characters are never trimmed. A character that would take the account past `live`
+   * live characters is not stored: the count is made inside the write, so racing requests can't pass the limit together.
    */
-  async upsertCharacters(accountId: string, characters: readonly OwnCharacter[], deletions: number): Promise<void> {
+  async upsertCharacters(accountId: string, characters: readonly OwnCharacter[], deletions: number, live: number): Promise<void> {
     if (characters.length === 0) return;
     await this.db.batch([
-      ...characters.map((character) => this.db.prepare("INSERT INTO bot_characters (account_id, character_id, updated_at, deleted, data_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(account_id, character_id) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, data_json = excluded.data_json WHERE excluded.updated_at > bot_characters.updated_at")
-        .bind(accountId, character.id, character.updatedAt, character.deleted ? 1 : 0, JSON.stringify(character))),
+      ...characters.map((character) => this.db.prepare(
+        "INSERT INTO bot_characters (account_id, character_id, updated_at, deleted, data_json) SELECT ?1, ?2, ?3, ?4, ?5 " +
+        // A deletion always goes in; a live character only while the account's other live characters number fewer than the limit.
+        "WHERE ?4 = 1 OR (SELECT COUNT(*) FROM bot_characters WHERE account_id = ?1 AND deleted = 0 AND character_id <> ?2) < ?6 " +
+        "ON CONFLICT(account_id, character_id) DO UPDATE SET updated_at = excluded.updated_at, deleted = excluded.deleted, data_json = excluded.data_json WHERE excluded.updated_at > bot_characters.updated_at")
+        .bind(accountId, character.id, character.updatedAt, character.deleted ? 1 : 0, JSON.stringify(character), live)),
       this.db.prepare("DELETE FROM bot_characters WHERE account_id = ?1 AND deleted = 1 AND character_id NOT IN (SELECT character_id FROM bot_characters WHERE account_id = ?1 AND deleted = 1 ORDER BY updated_at DESC, character_id DESC LIMIT ?2)")
         .bind(accountId, deletions)
     ]);

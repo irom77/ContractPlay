@@ -37,7 +37,8 @@ export async function charactersRoute(request: Request, env: Env): Promise<Respo
     const merged = new Map((await store.listCharacters(account.id)).map((character) => [character.id, character]));
     for (const character of incoming) if ((merged.get(character.id)?.updatedAt ?? -1) < character.updatedAt) merged.set(character.id, character);
     if ([...merged.values()].filter((character) => !character.deleted).length > MAX_ACCOUNT_CHARACTERS) return json({ error: "too-many-characters" }, 409);
-    await store.upsertCharacters(account.id, incoming, MAX_STORED_CHARACTERS - MAX_ACCOUNT_CHARACTERS);
+    // The check above answers the usual case clearly; the write enforces the limit even when requests race.
+    await store.upsertCharacters(account.id, incoming, MAX_STORED_CHARACTERS - MAX_ACCOUNT_CHARACTERS, MAX_ACCOUNT_CHARACTERS);
     return list(store, account.id);
   } catch {
     return json({ error: "unavailable" }, 503);
