@@ -22,6 +22,7 @@ function hand(id = "online-ABC234-1", at = 1) {
   }
   return { id, game, name: "My hand", savedAt: new Date(at).toISOString() };
 }
+const soloHand = (id = "mf3k2x-ab12cd", at = 1) => hand(id, at);
 const list = async () => (await (await call()).json()) as { hands: Array<ReturnType<typeof hand> & { onlineHistory: unknown }> };
 beforeAll(async () => { await env.DB.exec(migration.replace(/\n/g, " ")); });
 beforeEach(async () => {
@@ -69,7 +70,7 @@ describe("account online hand history", () => {
   });
 
   it("rejects malformed hands, wrong ids, excessive batches, and oversized serialized bodies", async () => {
-    for (const invalid of [{}, { ...hand(), savedAt: "invalid" }, { ...hand(), id: "solo-1" }, { ...hand(), game: { ...hand().game, phase: "play" } }, { ...hand(), name: "x".repeat(70_000) }]) {
+    for (const invalid of [{}, { ...hand(), savedAt: "invalid" }, { ...hand(), id: "Solo 1" }, { ...hand(), game: { ...hand().game, phase: "play" } }, { ...hand(), name: "x".repeat(70_000) }]) {
       expect((await call("/import", "POST", { hands: [invalid] })).status).toBe(400);
     }
     expect((await call("/online-ABC234-2", "PUT", { hand: hand() })).status).toBe(400);
@@ -88,5 +89,35 @@ describe("account online hand history", () => {
     for (let i = 0; i < 27; i++) await call(`/online-ABC234-${i}`, "PUT", { hand: hand(`online-ABC234-${i}`, i) });
     const hands = (await list()).hands;
     expect(hands).toHaveLength(25); expect(hands[0]?.id).toBe("online-ABC234-26"); expect(hands.at(-1)?.id).toBe("online-ABC234-2");
+  });
+  it("archives a dealt solo hand without online provenance", async () => {
+    expect((await call("/mf3k2x-ab12cd", "PUT", { hand: soloHand() })).status).toBe(200);
+    const [saved] = (await list()).hands;
+    expect(saved).toEqual(JSON.parse(JSON.stringify(soloHand())));
+    expect(saved).not.toHaveProperty("onlineHistory");
+  });
+  it("keeps a replayed solo hand's record and refuses imported ones", async () => {
+    const base = soloHand();
+    const record = { dealer: "north", vulnerability: "None", deal: base.game.initialDeal, field: [] };
+    const replay = { dealId: "d1", firstPlayedAt: 1, rescored: false, original: { multiplicity: 1, artificial: false } };
+    expect((await call("/mf3k2x-ab12cd", "PUT", { hand: { ...base, record: { ...record, replay } } })).status).toBe(200);
+    expect((await list()).hands[0]).toMatchObject({ record: { replay: { dealId: "d1" } } });
+    expect((await call("/mf3k2x-pbn001", "PUT", { hand: { ...soloHand("mf3k2x-pbn001"), pbnMetadata: { tags: [{ name: "Event", value: "Club" }] } } })).status).toBe(400);
+    expect((await call("/mf3k2x-set001", "PUT", { hand: { ...soloHand("mf3k2x-set001"), record } })).status).toBe(400);
+    expect((await call("/import", "POST", { hands: [soloHand("Solo 1")] })).status).toBe(400);
+    expect((await call("/mf3k2x-ab12cd", "PUT", { hand: soloHand("mf3k2x-zzzzzz") })).status).toBe(400);
+    expect((await list()).hands).toHaveLength(1);
+  });
+  it("keeps separate 25-hand caps for solo and online hands", async () => {
+    for (let i = 0; i < 27; i++) await call(`/online-ABC234-${i}`, "PUT", { hand: hand(`online-ABC234-${i}`, i) });
+    for (let i = 0; i < 27; i++) await call(`/t${i}-abc`, "PUT", { hand: soloHand(`t${i}-abc`, 100 + i) });
+    let hands = (await list()).hands;
+    expect(hands).toHaveLength(50);
+    expect(hands.filter(h => h.id.startsWith("online-")).map(h => h.id)).toEqual(Array.from({ length: 25 }, (_, i) => `online-ABC234-${26 - i}`));
+    expect(hands.filter(h => !h.id.startsWith("online-")).map(h => h.id)).toEqual(Array.from({ length: 25 }, (_, i) => `t${26 - i}-abc`));
+    await call("/online-ABC234-99", "PUT", { hand: hand("online-ABC234-99", 200) });
+    hands = (await list()).hands;
+    expect(hands.filter(h => !h.id.startsWith("online-"))).toHaveLength(25);
+    expect(hands[0]?.id).toBe("online-ABC234-99");
   });
 });

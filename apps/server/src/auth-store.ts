@@ -133,13 +133,16 @@ export class AuthStore {
     await this.db.batch([
       ...hands.map((hand) => this.db.prepare(`INSERT INTO online_hands (account_id, hand_id, completed_at, data_json) VALUES (?, ?, ?, ?) ON CONFLICT(account_id, hand_id) ${replace ? "DO UPDATE SET completed_at = excluded.completed_at, data_json = excluded.data_json" : "DO NOTHING"}`)
         .bind(accountId, hand.id, hand.completedAt, JSON.stringify(hand.data))),
-      this.db.prepare("DELETE FROM online_hands WHERE account_id = ? AND hand_id NOT IN (SELECT hand_id FROM online_hands WHERE account_id = ? ORDER BY completed_at DESC, hand_id DESC LIMIT 25)")
-        .bind(accountId, accountId)
+      // Online and solo hands keep separate 25-hand limits, so neither pushes the other out.
+      ...["LIKE", "NOT LIKE"].map((match) => this.db.prepare(`DELETE FROM online_hands WHERE account_id = ? AND hand_id ${match} 'online-%' AND hand_id NOT IN (SELECT hand_id FROM online_hands WHERE account_id = ? AND hand_id ${match} 'online-%' ORDER BY completed_at DESC, hand_id DESC LIMIT 25)`)
+        .bind(accountId, accountId))
     ]);
   }
 
   async listHands(accountId: string): Promise<StoredHand[]> {
-    const { results } = await this.db.prepare("SELECT hand_id, completed_at, data_json FROM online_hands WHERE account_id = ? ORDER BY completed_at DESC, hand_id DESC LIMIT 25")
+    // The newest 25 online hands and the newest 25 solo hands, merged newest first.
+    const newest = (match: string) => `SELECT * FROM (SELECT hand_id, completed_at, data_json FROM online_hands WHERE account_id = ?1 AND hand_id ${match} 'online-%' ORDER BY completed_at DESC, hand_id DESC LIMIT 25)`;
+    const { results } = await this.db.prepare(`${newest("LIKE")} UNION ALL ${newest("NOT LIKE")} ORDER BY completed_at DESC, hand_id DESC`)
       .bind(accountId).all<{ hand_id: string; completed_at: number; data_json: string }>();
     return results.map((row) => ({ id: row.hand_id, completedAt: row.completed_at, data: JSON.parse(row.data_json) }));
   }

@@ -1,4 +1,4 @@
-import { isSavedHand, type SavedHand } from "@contractplay/persistence";
+import { isHandRecord, isSavedHand, isSoloHandId, isSyncableSoloHand, type SavedHand } from "@contractplay/persistence";
 import { authenticatedAccount, authRequestAllowed } from "./auth.js";
 import { AuthStore } from "./auth-store.js";
 
@@ -28,16 +28,23 @@ async function readBody(request: Request): Promise<unknown> {
   try { return JSON.parse(new TextDecoder().decode(bytes)); } catch { return undefined; }
 }
 
-/** Uploads are personal review archives. No browser assertion can create a competitive result. */
+/**
+ * Uploads are personal review archives. No browser assertion can create a competitive result.
+ * Online hands carry an `online-` id; solo hands carry solo play's own id and only come from dealt or archive-replayed deals.
+ */
 function archive(value: unknown): SavedHand | undefined {
   if (new TextEncoder().encode(JSON.stringify(value)).length > MAX_HAND_BYTES || !isSavedHand(value)
-    || !/^online-[A-Za-z0-9_-]{1,100}$/.test(value.id) || !Number.isFinite(Date.parse(value.savedAt))
-    || (value.name !== undefined && value.name.length > 256)) return undefined;
-  // Pick known archive fields; ignore caller ownership, provenance, and tournament result assertions.
-  return { id: value.id, game: value.game, savedAt: value.savedAt,
+    || !Number.isFinite(Date.parse(value.savedAt)) || (value.name !== undefined && value.name.length > 256)) return undefined;
+  const fields = { id: value.id, game: value.game, savedAt: value.savedAt,
     ...(value.name === undefined ? {} : { name: value.name }),
-    ...(value.playerSeat === undefined ? {} : { playerSeat: value.playerSeat }),
-    onlineHistory: { source: "user-imported", competitive: false } };
+    ...(value.playerSeat === undefined ? {} : { playerSeat: value.playerSeat }) };
+  if (/^online-[A-Za-z0-9_-]{1,100}$/.test(value.id)) {
+    // Pick known archive fields; ignore caller ownership, provenance, and tournament result assertions.
+    return { ...fields, onlineHistory: { source: "user-imported", competitive: false } };
+  }
+  // Imported files and board sets never reach the server; a replay keeps its record so review shows the original table.
+  if (!isSyncableSoloHand(value) || (value.record !== undefined && !isHandRecord(value.record))) return undefined;
+  return { ...fields, ...(value.record === undefined ? {} : { record: value.record }) };
 }
 
 export async function handHistoryRoute(request: Request, env: Env): Promise<Response> {
@@ -52,7 +59,7 @@ export async function handHistoryRoute(request: Request, env: Env): Promise<Resp
     const path = new URL(request.url).pathname.slice("/api/account/online-hands".length);
     if (request.method === "GET" && path === "") return json({ hands: (await store.listHands(account.id)).map(hand => hand.data) });
     const importing = request.method === "POST" && path === "/import";
-    const updating = request.method === "PUT" && /^\/online-[A-Za-z0-9_-]{1,100}$/.test(path);
+    const updating = request.method === "PUT" && (/^\/online-[A-Za-z0-9_-]{1,100}$/.test(path) || (path.startsWith("/") && isSoloHandId(path.slice(1))));
     if (!importing && !updating) return json({ error: "method-not-allowed" }, 405);
     let body: unknown;
     try { body = await readBody(request); } catch (error) { return json({ error: "payload-too-large" }, error instanceof RangeError ? 413 : 400); }
