@@ -336,6 +336,27 @@ describe("your own characters", () => {
     service.push(view);
     expect(loadPartnerResults(storage)).toEqual([expect.objectContaining({ handId: "online-ABC234-1", partner: GINA.id, online: true, names: { [GINA.id]: GINA.name } })]);
   });
+
+  it("waits for account character sync before recording a finished hand", async () => {
+    let finishCharacterSync!: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn((url: string) => url === "/api/account/characters"
+      ? new Promise<Response>((resolve) => { finishCharacterSync = resolve; })
+      : Promise.resolve(Response.json(url === "/api/account/bot-results" ? { results: [] } : { hands: [] }))));
+    try {
+      const service = setup({ account: { playerId: "account-owner", displayName: "Bob" } });
+      const finished = playCards(oneNoTrump(), 52);
+      service.push(tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: {
+        north: human("Bob"), east: { kind: "bot", skill: "advanced", character: "bea" },
+        south: { kind: "bot", skill: "advanced", custom: { id: GINA.id, name: GINA.name, traits: GINA.traits } }, west: bot
+      }, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal }));
+      await waitFor(() => expect(finishCharacterSync).toBeTypeOf("function"));
+      expect(loadPartnerResults(service.storage)).toEqual([]);
+      await act(async () => { finishCharacterSync(Response.json({ characters: [GINA] })); });
+      await waitFor(() => expect(loadPartnerResults(service.storage)).toEqual([expect.objectContaining({
+        handId: "online-ABC234-1", partner: GINA.id, online: true, names: { [GINA.id]: GINA.name }
+      })]));
+    } finally { vi.unstubAllGlobals(); }
+  });
 });
 
 describe("OnlineTable play", () => {

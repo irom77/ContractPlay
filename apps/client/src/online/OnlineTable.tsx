@@ -211,13 +211,19 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const accountIdentity = "playerId" in identity ? identity : undefined;
   const playerId = accountIdentity?.playerId;
   const [ownCharacters, setOwnCharacters] = useState<readonly OwnCharacter[]>(() => charactersFor(loadOwnCharacters(storage), playerId));
+  const [charactersSyncedFor, setCharactersSyncedFor] = useState<string>();
   useEffect(() => {
     let active = true;
     const reload = () => { if (active) setOwnCharacters(charactersFor(loadOwnCharacters(storage), playerId)); };
     reload();
-    if (accountIdentity) void syncCharacters(storage, accountIdentity).then(reload).catch(reload);
+    if (accountIdentity) {
+      setCharactersSyncedFor(undefined);
+      const synced = () => { reload(); if (active) setCharactersSyncedFor(accountIdentity.playerId); };
+      void syncCharacters(storage, accountIdentity).then(synced).catch(synced);
+    }
     return () => { active = false; };
   }, [storage, accountIdentity]);
+  const charactersReady = playerId === undefined || charactersSyncedFor === playerId;
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -323,10 +329,17 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       if (saved && account) void uploadOnlineHand(storage, account, saved).catch(() => {
         setNotice({ text: "Online history could not sync. This hand is saved locally; reopen Recent hands to retry." });
       });
-      const result = saved ? recordOnlineResult(storage, view, saved, ownCharacters) : undefined;
-      if (result && account) void uploadBotResult(storage, account, result).catch(() => {});
     }
   }, [view, storage, identity]);
+
+  useEffect(() => {
+    const game = view?.game;
+    if (!charactersReady || !view?.revealed || game?.phase !== "complete") return;
+    const account = "playerId" in identity ? identity : undefined;
+    const saved = saveToHistory(storage, view, account);
+    const result = saved ? recordOnlineResult(storage, view, saved, ownCharacters) : undefined;
+    if (result && account) void uploadBotResult(storage, account, result).catch(() => {});
+  }, [view, storage, identity, ownCharacters, charactersReady]);
 
   useEffect(() => {
     if (!turn) return;
