@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { cardId, emptyRubber, forcedCard, partnership, summarizeRubber, type Bid, type GameAction, type PlayContext, type Seat, type TrickCard } from "@contractplay/core";
-import { loadSoloData, saveSoloData, type SavedHand, type StorageLike } from "@contractplay/persistence";
+import { loadSoloData, saveSoloData, type OwnCharacter, type SavedHand, type StorageLike } from "@contractplay/persistence";
 import type { PublicGame, RefusalReason, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractplay/bots";
 import { createHandName, savedHandName } from "../handNames.js";
@@ -22,6 +22,7 @@ import { currentAccount, type AccountSession } from "./auth.js";
 import { syncOnlineHands, uploadOnlineHand } from "./handHistory.js";
 import { syncBotResults, uploadBotResult } from "./botResultsSync.js";
 import { syncCharacters } from "./charactersSync.js";
+import { charactersFor, loadOwnCharacters } from "../ownCharacters.js";
 import { loadPartnerResults, onlineCast, partnerResultOf, recordPartnerResult, type PartnerResult } from "../partnerResults.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
@@ -199,8 +200,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
     return () => { active = false; };
   }, [props.account]);
   useEffect(() => {
-    if (account) void syncOnlineHands(storage, account).catch(() => {}).then(() => syncBotResults(storage, account)).catch(() => {})
-      .then(() => syncCharacters(storage, account)).catch(() => {});
+    if (account) void syncOnlineHands(storage, account).then(() => syncBotResults(storage, account)).catch(() => {});
   }, [storage, account]);
   if (!identity && !account) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
   if (account === undefined) return <main className="app-shell"><p role="status">Restoring your session…</p></main>;
@@ -208,6 +208,16 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
 }
 
 function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity | AccountSession }) {
+  const accountIdentity = "playerId" in identity ? identity : undefined;
+  const playerId = accountIdentity?.playerId;
+  const [ownCharacters, setOwnCharacters] = useState<readonly OwnCharacter[]>(() => charactersFor(loadOwnCharacters(storage), playerId));
+  useEffect(() => {
+    let active = true;
+    const reload = () => { if (active) setOwnCharacters(charactersFor(loadOwnCharacters(storage), playerId)); };
+    reload();
+    if (accountIdentity) void syncCharacters(storage, accountIdentity).then(reload).catch(reload);
+    return () => { active = false; };
+  }, [storage, accountIdentity]);
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
@@ -676,7 +686,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     );
   }
 
-  return <SeatingPanel view={view} totals={totals} rubberSummary={rubberSummary} rubberHand={rubberHand} scorecard={scorecard()} statusLine={statusLine} backButton={backButton} copyNote={copyNote}
+  return <SeatingPanel view={view} own={ownCharacters} totals={totals} rubberSummary={rubberSummary} rubberHand={rubberHand} scorecard={scorecard()} statusLine={statusLine} backButton={backButton} copyNote={copyNote}
     onShowResult={game && view.revealed && !view.handInProgress ? () => setSeatingAfter(undefined) : undefined}
     onCopy={() => {
       const link = `${location.origin}${location.pathname}#/table/${view.id}`;

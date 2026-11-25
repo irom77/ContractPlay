@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { RubberHand, RubberSummary, Seat, SkillLevel } from "@contractplay/core";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
+import type { OwnCharacter } from "@contractplay/persistence";
 import { ContractOutcome } from "../table/ResultSummary.js";
 import { botCharacter } from "@contractplay/core";
-import { aggressionNames, botName, claimText, contractText, onlineBotOptions, seatNames, seats, setBotFor, skillNames } from "../table/labels.js";
+import { aggressionNames, botName, claimText, contractText, onlineBotOptions, seatNames, seats, setBotFor, skillNames, traitSummary } from "../table/labels.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
@@ -30,8 +31,9 @@ export function DealButton({ view, newRubber, className = "primary-button", send
 }
 
 /** Between hands, or for anyone unseated: the four seats with their controls, the totals, the last result, and Deal. */
-export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecard, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
+export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, scorecard, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
   view: TableViewData; totals: string;
+  own: readonly OwnCharacter[];
   /** A rubber table's rubber, shown as its scoresheet, and the last hand's line on it. */
   rubberSummary?: RubberSummary | undefined; rubberHand?: RubberHand | undefined;
   /** A rubber table's scorecard. */
@@ -44,8 +46,8 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecar
   const [botChoices, setBotChoices] = useState<Record<Seat, string>>({ north: "intermediate", east: "intermediate", south: "intermediate", west: "intermediate" });
   const yourSeat = view.yourSeat;
   const betweenHands = !view.handInProgress;
-  const botSelect = (value: string, onChange: (choice: string) => void) =>
-    <select aria-label="Bot" value={value} onChange={(event) => onChange(event.target.value)}>{onlineBotOptions}</select>;
+  const botSelect = (value: string, onChange: (choice: string) => void, seated?: { value: string; name: string }) =>
+    <select aria-label="Bot" value={value} onChange={(event) => onChange(event.target.value)}>{onlineBotOptions(own, seated)}</select>;
 
   const controls = (seat: Seat, info: SeatInfo): React.ReactNode => {
     if (!betweenHands) return null;
@@ -53,13 +55,16 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecar
       if (!yourSeat) return <button className="primary-button" type="button" onClick={() => send({ type: "sit", seat })}>Sit here</button>;
       return <>
         {botSelect(botChoices[seat], (choice) => setBotChoices((chosen) => ({ ...chosen, [seat]: choice })))}
-        <button className="secondary-button" type="button" onClick={() => send(setBotFor(seat, botChoices[seat]))}>Add bot</button>
+        <button className="secondary-button" type="button" onClick={() => send(setBotFor(seat, botChoices[seat], own))}>Add bot</button>
       </>;
     }
     if (info.kind === "bot") {
       if (!yourSeat) return null;
+      const ownId = info.custom?.id && own.some((character) => !character.deleted && character.id === info.custom?.id) ? info.custom.id : undefined;
+      const choice = info.custom ? ownId ?? "seated" : botCharacter(info.character)?.id ?? info.skill;
+      const seated = info.custom && !ownId ? { value: "seated", name: info.custom.name } : undefined;
       return <>
-        {botSelect(botCharacter(info.character)?.id ?? info.skill, (choice) => send(setBotFor(seat, choice)))}
+        {botSelect(choice, (selected) => send(setBotFor(seat, selected, own)), seated)}
         <button className="secondary-button" type="button" onClick={() => send({ type: "clearSeat", seat })}>Remove bot</button>
       </>;
     }
@@ -98,6 +103,7 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecar
                 <div className="online-seat-head">
                   <span className="quiet-copy">{seatNames[seat]}</span>
                   <strong>{occupant}</strong>
+                  {info.kind === "bot" && info.custom ? <span className="quiet-copy">{traitSummary(info.custom.traits)}</span> : null}
                   {info.kind === "human" && info.away ? <span className="online-badge">away</span> : null}
                   {view.host === seat ? <span className="online-badge">host</span> : null}
                   {seat === yourSeat ? <span className="online-badge">you</span> : null}
@@ -132,7 +138,8 @@ export function HandResultSummary({ game, rubberHand }: { game: PublicGame; rubb
 }
 
 /** "Bot · Advanced" for a table bot; "Bold Bea · Advanced · Aggressive" for a named one. */
-function botOccupant(info: { skill: SkillLevel; character?: string | undefined }): string {
+function botOccupant(info: { skill: SkillLevel; character?: string | undefined; custom?: { name: string } | undefined }): string {
+  if (info.custom) return `${info.custom.name} · ${skillNames[info.skill]} · Player's character`;
   const character = botCharacter(info.character);
   return character ? `${character.name} · ${skillNames[character.skill]} · ${aggressionNames[character.aggression]}` : `${botName(info)} · ${skillNames[info.skill]}`;
 }

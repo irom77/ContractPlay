@@ -1,23 +1,33 @@
-import { AGGRESSIONS, BOT_CHARACTERS, botCharacter, type Aggression, type BotTraits, type TraitLevel, type Bid, type Card, type Contract, type Seat, type SkillLevel, type Suit } from "@contractplay/core";
-import type { PublicGame } from "@contractplay/protocol";
+import { AGGRESSIONS, BOT_CHARACTERS, TRAIT_NAMES, botCharacter, type Aggression, type BotTraits, type TraitLevel, type Bid, type Card, type Contract, type Seat, type SkillLevel, type Suit } from "@contractplay/core";
+import type { CustomBot, PublicGame } from "@contractplay/protocol";
+import type { OwnCharacter } from "@contractplay/persistence";
 import type { ReactElement } from "react";
 
 export const seatNames: Record<Seat, string> = { north: "North", east: "East", south: "South", west: "West" };
 export const aggressionNames: Record<Aggression, string> = { conservative: "Conservative", normal: "Normal", aggressive: "Aggressive" };
 export const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
-/** A bot seat's name: its character's name for a named bot, otherwise "Bot". */
-export const botName = (info: { character?: string | undefined }): string => botCharacter(info.character)?.name ?? "Bot";
+/** A bot seat's name: its own character, named bot, or "Bot". */
+export const botName = (info: { character?: string | undefined; custom?: { name: string } | undefined }): string =>
+  info.custom?.name ?? botCharacter(info.character)?.name ?? "Bot";
 /**
  * The choices for an online table's bot seat: a plain bot of each skill, playing at the table's aggressiveness, then the
  * named bots at their own. Values are skill levels and character ids, which never collide.
  */
-export const onlineBotOptions = <>
-  <optgroup label="Table bot">{(Object.keys(skillNames) as SkillLevel[]).map((skill) => <option key={skill} value={skill}>{skillNames[skill]}</option>)}</optgroup>
-  <optgroup label="Named bots">{BOT_CHARACTERS.map((character) =>
-    <option key={character.id} value={character.id}>{character.name} · {skillNames[character.skill]} · {aggressionNames[character.aggression]}</option>)}</optgroup>
-</>;
-/** The setBot message for a choice from `onlineBotOptions`. */
-export function setBotFor(seat: Seat, choice: string): { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string } {
+export function onlineBotOptions(own: readonly OwnCharacter[], seated?: { value: string; name: string }) {
+  return <>
+    {seated ? <option value={seated.value} disabled>{seated.name}</option> : null}
+    <optgroup label="Table bot">{(Object.keys(skillNames) as SkillLevel[]).map((skill) => <option key={skill} value={skill}>{skillNames[skill]}</option>)}</optgroup>
+    <optgroup label="Named bots">{BOT_CHARACTERS.map((character) =>
+      <option key={character.id} value={character.id}>{character.name} · {skillNames[character.skill]} · {aggressionNames[character.aggression]}</option>)}</optgroup>
+    {own.length ? <optgroup label="Your characters">{own.filter((character) => !character.deleted).map((character) =>
+      <option key={character.id} value={character.id}>{character.name} · {skillNames[character.skill]} · Your character</option>)}</optgroup> : null}
+  </>;
+}
+/** The setBot message for a choice from the online bot picker. */
+export function setBotFor(seat: Seat, choice: string, own: readonly OwnCharacter[] = []): { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string; custom?: CustomBot } {
+  const ownCharacter = own.find((character) => !character.deleted && character.id === choice);
+  if (ownCharacter) return { type: "setBot", seat, skill: ownCharacter.skill,
+    custom: { id: ownCharacter.id, name: ownCharacter.name, skill: ownCharacter.skill, traits: { ...ownCharacter.traits } } };
   const character = botCharacter(choice);
   return character ? { type: "setBot", seat, skill: character.skill, character: character.id } : { type: "setBot", seat, skill: choice as SkillLevel };
 }
@@ -49,6 +59,11 @@ export const traitWords: Record<keyof BotTraits, { label: string; levels: Record
     standard: { word: "By the book", meaning: asSkill },
     bold: { word: "High", meaning: "Wins the trick second hand when it can." } } }
 };
+/** A compact description of the dials that differ from the standard settings. */
+export function traitSummary(traits: BotTraits): string {
+  const changed = TRAIT_NAMES.flatMap((name) => traits[name] === "standard" ? [] : [`${name === "leads" ? "Opening leads" : traitWords[name].label}: ${traitWords[name].levels[traits[name]].word}`]);
+  return changed.length ? changed.join(" · ") : "Standard on every dial";
+}
 /** The options for a bot aggressiveness select, Conservative to Aggressive. */
 export const aggressionOptions = AGGRESSIONS.map((value) => <option key={value} value={value}>{aggressionNames[value]}</option>);
 /** The review/result line for a claim, counting the claimer's tricks among the tricks that remained. */

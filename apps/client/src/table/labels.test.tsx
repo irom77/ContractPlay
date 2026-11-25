@@ -1,10 +1,26 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Card, Rank, Suit } from "@contractplay/core";
-import { cardFace, claimText, handSuitOrder, isRedSuit, sortHand, suitGapShare } from "./labels.js";
+import { TRAIT_PRESETS, type BotTraits, type Card, type Rank, type Suit } from "@contractplay/core";
+import type { OwnCharacter } from "@contractplay/persistence";
+import { botName, cardFace, claimText, handSuitOrder, isRedSuit, setBotFor, sortHand, suitGapShare, traitSummary } from "./labels.js";
 
 afterEach(cleanup);
+
+const gina: OwnCharacter = { id: "own-abc123", name: "Gentle Gina", blurb: "", skill: "advanced", traits: TRAIT_PRESETS.conservative, updatedAt: 1 };
+
+describe("online own-character labels", () => {
+  it("summarizes only non-standard dials in their standard order", () => {
+    expect(traitSummary(TRAIT_PRESETS.normal)).toBe("Standard on every dial");
+    expect(traitSummary({ ...TRAIT_PRESETS.normal, preempts: "bold", leads: "cautious" } as BotTraits)).toBe("Preempts: Wild · Opening leads: Passive");
+  });
+
+  it("builds setBot messages and names custom seats", () => {
+    expect(setBotFor("east", gina.id, [gina])).toEqual({ type: "setBot", seat: "east", skill: "advanced",
+      custom: { id: gina.id, name: "Gentle Gina", skill: "advanced", traits: gina.traits } });
+    expect(botName({ custom: { name: "Gentle Gina", traits: gina.traits } })).toBe("Gentle Gina");
+  });
+});
 
 /** Cards from "spades.hearts.diamonds.clubs" rank strings, e.g. "AK.Q..32". */
 const hand = (text: string): Card[] => {

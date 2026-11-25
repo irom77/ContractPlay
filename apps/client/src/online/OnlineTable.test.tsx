@@ -2,7 +2,7 @@
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type HandRecord, type Seat } from "@contractplay/core";
+import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, TRAIT_PRESETS, type GameAction, type GameState, type HandRecord, type Seat } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { ClientMessage, PublicGame, RefusalReason, SeatInfo, TableView } from "@contractplay/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -87,6 +87,7 @@ function playCards(game: GameState, count: number): GameState {
 }
 
 const seatedNorth = { north: human("Bob"), east: bot, south: bot, west: bot };
+const GINA = { id: "own-gentlegina", name: "Gentle Gina", blurb: "Patient and sound", skill: "advanced" as const, traits: TRAIT_PRESETS.conservative, updatedAt: 1 };
 
 /** What the screen showed at one commit, read in the commit itself, before passive effects run. */
 type Frame = { trickCards: number; enabledCards: number; result: boolean; table: boolean };
@@ -294,6 +295,33 @@ describe("OnlineTable seating", () => {
     const suggested = document.querySelector(".hinted-card");
     expect(suggested?.getAttribute("aria-label")).toMatch(/^Play /);
     expect(document.querySelector(".hint-controls [role=status]")?.textContent).toBeTruthy();
+  });
+});
+
+describe("your own characters", () => {
+  it("offers them for a bot seat and seats one", async () => {
+    const user = userEvent.setup();
+    const storage = memoryStorage();
+    storage.setItem("contractplay.ownCharacters", JSON.stringify([GINA]));
+    const service = setup({ storage });
+    service.push(tableView({ yourSeat: "north", seats: { north: human("Bob"), east: bot, south: bot, west: empty } }));
+    const west = within(screen.getByRole("group", { name: "West seat" }));
+    await user.selectOptions(west.getByLabelText("Bot"), GINA.id);
+    await user.click(west.getByRole("button", { name: "Add bot" }));
+    expect(service.sent).toEqual([{ type: "setBot", seat: "west", skill: "advanced",
+      custom: { id: GINA.id, name: "Gentle Gina", skill: "advanced", traits: GINA.traits } }]);
+  });
+
+  it("shows another player's character by name and dials", () => {
+    const service = setup();
+    const custom: SeatInfo = { kind: "bot", skill: "advanced", custom: { name: "Odd Otto", traits: { ...TRAIT_PRESETS.normal, preempts: "bold" } } };
+    service.push(tableView({ yourSeat: "north", seats: { north: human("Bob"), east: bot, south: bot, west: custom } }));
+    const west = within(screen.getByRole("group", { name: "West seat" }));
+    expect(west.getByText("Odd Otto · Advanced · Player's character", { selector: "strong" })).toBeTruthy();
+    expect(west.getByText("Preempts: Wild")).toBeTruthy();
+    const picker = west.getByLabelText("Bot") as HTMLSelectElement;
+    expect(picker.value).toBe("seated");
+    expect(picker.selectedOptions[0]?.textContent).toBe("Odd Otto");
   });
 });
 

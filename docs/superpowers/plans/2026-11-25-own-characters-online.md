@@ -126,7 +126,7 @@
   - The occupant of a custom seat reads `"Gentle Gina · Advanced · Player's character"`, with `traitSummary` on a quiet line under it.
   - In the picker, the custom seat's value is its id when it is in `own`, otherwise `"seated"`.
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - In `labels.test.tsx`:
     - `traitSummary(TRAIT_PRESETS.normal)` is `"Standard on every dial"`.
     - `traitSummary({ ...TRAIT_PRESETS.normal, preempts: "bold", leads: "cautious" })` is `"Preempts: Wild · Opening leads: Passive"`, in `TRAIT_NAMES` order with `traitWords` labels.
@@ -136,13 +136,13 @@
     - **`offers them for a bot seat and seats one`:** store Gina in `contractplay.ownCharacters` with no owner. On the seating screen, choose `"Gentle Gina · Advanced · Your character"` for the open West seat and press Add bot. The sent message equals `{type:"setBot", seat:"west", skill:"advanced", custom:{id:GINA.id, name:"Gentle Gina", skill:"advanced", traits:GINA.traits}}`.
     - **`shows another player's character by name and dials`:** a view whose west seat is `{kind:"bot", skill:"advanced", custom:{name:"Odd Otto", traits:{...normal, preempts:"bold"}}}` shows `"Odd Otto · Advanced · Player's character"` and `"Preempts: Wild"`. The seat's Bot picker shows "Odd Otto" as its value (Review Focus 5).
 
-- [ ] **Step 2: Run** `pnpm --filter @contractplay/client exec vitest run src/table/labels.test.tsx src/online/OnlineTable.test.tsx`. Expected: FAIL on the new tests.
+- [x] **Step 2: Run** `pnpm --filter @contractplay/client exec vitest run src/table/labels.test.tsx src/online/OnlineTable.test.tsx`. Expected: FAIL on the new tests.
 
-- [ ] **Step 3: Implement.** `OnlineTable` loads `charactersFor(loadOwnCharacters(storage), account?.playerId)`, reloads it after its `syncCharacters` resolves, and passes it to `SeatingPanel`.
+- [x] **Step 3: Implement.** `OnlineTable` loads `charactersFor(loadOwnCharacters(storage), account?.playerId)`, reloads it after its `syncCharacters` resolves, and passes it to `SeatingPanel`.
 
-- [ ] **Step 4: Run** the same command. Expected: PASS.
+- [x] **Step 4: Run** the same command. Expected: PASS.
 
-- [ ] **Step 5: Commit** `Seat your own characters at online tables`.
+- [x] **Step 5: Commit** `Seat your own characters at online tables`.
 
 ### Task 4: Results with them online
 
