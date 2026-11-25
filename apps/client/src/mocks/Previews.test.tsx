@@ -102,6 +102,10 @@ const expectations: Record<string, () => Promise<void> | void> = {
     // All 52 cards face-up at their seats around the result, each hand with its high-card points.
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
     expect(document.querySelectorAll(".hcp-badge")).toHaveLength(4);
+    // The whole auction stays beside the hands, and a call there can still be explained.
+    expect(screen.getByRole("group", { name: "North calls" }).textContent).toBe("1♠4♠");
+    expect(screen.getByRole("group", { name: "South calls" }).textContent).toBe("3♠Pass");
+    expect(screen.getAllByRole("button", { name: "Explain East's Pass" })).toHaveLength(2);
   },
   "rubber-score": () => {
     const dialog = screen.getByRole("dialog", { name: "Scores" });
@@ -194,6 +198,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/We: \+120 for making 4♠[\s\S]*We win game 1/);
     expect(within(card).getByRole("button", { name: "Next deal" })).toBeTruthy();
     for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
+    for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("group", { name: `${seat} calls` })).toBeTruthy();
   },
   "solo-rubber-won": () => {
     const card = within(screen.getByRole("region", { name: "Hand result" })).getByRole("region", { name: "Scorecard" });

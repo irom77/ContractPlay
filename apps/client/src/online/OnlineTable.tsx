@@ -459,6 +459,20 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const game = view.game;
   const holding = hold !== undefined && hold.handNumber === view.handNumber;
 
+  // Clicking a call at the table, live or on the finished deal, explains it at the caller's skill (expert for a person).
+  const explainCallFor = (game: PublicGame) => {
+    const shown = explainedCall?.handNumber === view.handNumber && explainedCall.auctionLength === game.auction.length ? explainedCall.index : undefined;
+    return {
+      shown,
+      onToggle: (index: number) => setExplainedCall(shown === index ? undefined : { handNumber: view.handNumber, auctionLength: game.auction.length, index }),
+      text: (index: number) => {
+        const info = view.seats[game.auction[index]!.seat];
+        const skill = info.kind === "bot" ? info.skill : info.kind === "human" && info.standIn ? info.standIn : "expert";
+        return explainBid(game.auction, index, view.style, skill);
+      }
+    };
+  };
+
   if (yourSeat && game && (isLive(game) || holding)) {
     const live = isLive(game);
     const mine = view.seats[yourSeat];
@@ -468,9 +482,6 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     const canHintNow = live && !standIn && decider === yourSeat;
     const visibleBidHint = hintsOn && canHintNow && game.phase === "auction" && bidHint?.view === view ? bidHint : undefined;
     const visiblePlayHint = hintsOn && canHintNow && game.phase === "play" && playHint?.view === view ? playHint : undefined;
-    const shownExplanation = explainedCall?.handNumber === view.handNumber && explainedCall.auctionLength === game.auction.length
-      ? explainedCall.index
-      : undefined;
     const inputDisabled = waiting || status !== "open" || holding;
     const act = (action: GameAction) => {
       if (inputDisabled) return;
@@ -563,16 +574,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             onPlay={(seat, card) => act({ type: "play", seat, card })}
             hintedBid={visibleBidHint?.bid}
             hintedCards={visiblePlayHint?.cardIds}
-            explainCall={{
-              shown: shownExplanation,
-              onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { handNumber: view.handNumber, auctionLength: game.auction.length, index }),
-              text: (index) => {
-                const callSeat = game.auction[index]!.seat;
-                const info = view.seats[callSeat];
-                const skill = info.kind === "bot" ? info.skill : info.kind === "human" && info.standIn ? info.standIn : "expert";
-                return explainBid(game.auction, index, view.style, skill);
-              }
-            }}
+            explainCall={explainCallFor(game)}
             matchScore={score}
             tools={<><GameMenu items={menuItems} defaultOpen={menuOpen} /><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
             overlay={<>
@@ -627,6 +629,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             displayedTrick={[]}
             showCalls={false}
             onToggleCalls={() => undefined}
+            explainCall={explainCallFor(game)}
             lastTrickOpen={false}
             onToggleLastTrick={() => undefined}
             showBottomHand={false}

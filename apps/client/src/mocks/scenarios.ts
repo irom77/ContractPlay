@@ -213,7 +213,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points, and the contract with the rubber scorecard in the middle: North–South's 120 below the line wins game 1 (dotted line, arrow to them), the last hand's points explained, and Deal.",
+    id: "result", title: "Hand result", detail: "All 52 cards played: every hand face-up at its seat with its high-card points and its calls from the auction (click one for its meaning), and the contract with the rubber scorecard in the middle: North–South's 120 below the line wins game 1 (dotted line, arrow to them), the last hand's points explained, and Deal.",
     build: () => playUntilView({ north: "Alex" }, "north", (game) => game.phase === "complete")
   },
   {
@@ -379,7 +379,7 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "hands" })
   },
   {
-    id: "solo-result", title: "Solo: hand result with scorecard", detail: "4♠ made: the whole deal face-up, and the scorecard: They (East–West) have 60 below from 2♥, We (North–South) add 120 to win game 1, and the breakdown explains the hand.",
+    id: "solo-result", title: "Solo: hand result with scorecard", detail: "4♠ made: the whole deal face-up with each seat's calls, and the scorecard: They (East–West) have 60 below from 2♥, We (North–South) add 120 to win game 1, and the breakdown explains the hand.",
     build: () => solo(soloGame(8, (game) => game.phase === "complete"), { userSeat: "north" })
   },
   {

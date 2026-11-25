@@ -299,6 +299,9 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .hands-revealed .pos-left { justify-items: start; }
 .hands-revealed .pos-right { justify-items: end; }
 .hands-revealed .pos-right .seat-head { flex-direction: row-reverse; }
+/* A side seat's calls wrap to the hand's width instead of widening the seat towards the result panel. */
+.hands-revealed .has-revealed-hand > .seat-auction-calls { display: flex; flex-wrap: wrap; max-width: none; contain: inline-size; justify-self: stretch; }
+.hands-revealed .pos-right > .seat-auction-calls { justify-content: flex-end; }
 .hands-revealed .pos-left .dummy-table-hand, .hands-revealed .pos-right .dummy-table-hand { --h: var(--side-h); --step: var(--side-step); }
 .hcp-badge { flex: none; border-radius: 999px; padding: calc(.25 * var(--u)) calc(1 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-s); font-weight: 800; white-space: nowrap; }
 .hands-revealed .score-panel { z-index: 5; gap: var(--u); min-width: 0; width: max-content; max-width: calc(100% - 2 * (var(--side-room) + 2 * var(--u))); padding: calc(2 * var(--u)) calc(3 * var(--u)); --side-room: calc(4 * var(--u) + var(--side-h) * .7 + 4 * var(--side-step)); }

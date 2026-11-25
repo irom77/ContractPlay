@@ -156,8 +156,8 @@ export function TableView({
           const position = positionOf(seat);
           const hasPlayed = phase === "play" && game.currentTrick.some((play) => play.seat === seat);
           const isActor = shownActor === seat && liveTurn;
-          // The result table keeps the felt to the deal and the score; the auction stays in the hand's review.
-          const seatCalls = showCalls && !revealed ? game.auction.map((entry, index) => ({ ...entry, index })).filter((entry) => entry.seat === seat) : [];
+          // A finished deal keeps each seat's calls beside its face-up hand, so the bidding can be reviewed with the cards and score.
+          const seatCalls = showCalls || revealed ? game.auction.map((entry, index) => ({ ...entry, index })).filter((entry) => entry.seat === seat) : [];
           const explainedHere = seatCalls.find(({ index }) => index === shownExplanation);
           const vulnerable = game.vulnerability === "Both" || (game.vulnerability === "NS" && samePartnership(seat, "north")) || (game.vulnerability === "EW" && samePartnership(seat, "east"));
           const isDealer = game.dealer === seat;
@@ -172,6 +172,11 @@ export function TableView({
           const isDummy = dummyVisible && seat === dummySeat;
           const isBot = botSeats?.includes(seat) ?? false;
           const points = revealed ? highCardPoints([...revealed[seat]]) : undefined;
+          const callChips = seatCalls.length ? <span className="seat-auction-calls" role="group" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
+            ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
+            : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null;
+          // Beside a face-up hand at a side seat, the calls get their own row under the name, as wide as the hand.
+          const callsInHead = !(revealed && (position === "left" || position === "right"));
           const seatCanPlay = fixedPlayHands ? canAct && phase === "play" && shownActor === seat : playFromDummy && seat === dummySeat;
           return <div key={seat} className={`seat seat-${seat} pos-${position} ${isActor ? "active-seat" : ""} ${hasPlayed ? "played-seat" : ""} ${vulnerable ? "vulnerable-seat" : ""} ${isDealer ? "dealer-seat" : ""} ${seatHasCards && !revealed ? "has-dummy" : ""} ${revealed ? "has-revealed-hand" : ""} ${showBacks ? "has-backs" : ""} ${seatHasCards && fixedPlayHands ? "has-fixed-hand" : ""} ${seatHasCards && seatCanPlay ? "playable-dummy" : ""} ${explainedHere ? "explaining-seat" : ""}`}>
             {/* The head row: one line beside a hand spread along the top or bottom, invisible (display: contents) elsewhere. */}
@@ -179,10 +184,9 @@ export function TableView({
             <span className={`seat-compass ${isDummy ? "dummy-compass" : ""} ${isBot ? "bot-compass" : ""}`} role="img" aria-label={`${seatNames[seat]}${isBot ? ", bot" : ""}${isDummy ? ", dummy" : ""}${isDealer ? ", dealer" : ""}${vulnerable ? ", vulnerable" : ""}${showBacks ? `, ${held} cards` : ""}`} title={`${seatNames[seat]}${isBot ? " · bot" : ""}${isDummy ? " · dummy" : ""}${isDealer ? " · dealer" : ""}${vulnerable ? " · vulnerable" : ""}`}>{seat[0]!.toUpperCase()}{isDealer && phase === "auction" ? <span className="dealer-mark" aria-hidden="true">D</span> : null}</span>
             {seatLabel?.(seat)}
             {points !== undefined ? <span className="hcp-badge" title="High-card points: A 4, K 3, Q 2, J 1">{points} HCP</span> : null}
-            {seatCalls.length ? <span className="seat-auction-calls" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
-              ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
-              : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null}
+            {callsInHead ? callChips : null}
             </div>
+            {callsInHead ? null : callChips}
             {explainedHere && explainCall ? <p className="call-meaning" role="status"><strong className={callChipClass(explainedHere.bid)}>{compactCallLabel(explainedHere.bid)}</strong> {explainCall.text(explainedHere.index)}</p> : null}
             {showBacks ? <div className="hidden-hand" aria-hidden="true">{Array.from({ length: held }, (_, index) => <span className="card-back" key={index} />)}</div> : null}
             {seatHasCards ? <section className={`dummy-table-hand ${fixedPlayHands ? "fixed-seat-hand" : ""}`} aria-label={`${seatNames[seat]}'s ${seat === dummySeat && !revealed ? "dummy " : ""}hand`}>
