@@ -50,6 +50,11 @@ export type TableState = Readonly<{
    * tricks completed: it may not claim again until a trick completes. Stale once the hand or trick count moves on.
    */
   claimBlocked?: Readonly<{ side: 0 | 1; hand: number; tricks: number }>;
+  /**
+   * Players who have confirmed they are ready for the next hand since the last one ended. The next hand is dealt once
+   * every seated human who is present and playing their own seat has confirmed; every deal clears it.
+   */
+  nextHandReady?: readonly PlayerId[];
   /** Present (true) until a human first connects. A state without it counts as visited. */
   unvisited?: true;
 }>;
@@ -135,7 +140,7 @@ export const withoutKeys = (state: TableState, ...keys: (keyof TableState)[]): T
   Object.fromEntries(Object.entries(state).filter(([k]) => !(keys as string[]).includes(k))) as TableState;
 
 /** The state with no hand on the table, as before the first deal; a replay goes with its hand. */
-export const withoutGame = (state: TableState): TableState => withoutKeys(state, "game", "replay");
+export const withoutGame = (state: TableState): TableState => withoutKeys(state, "game", "replay", "nextHandReady");
 
 /** The state with no pending claim and no rejection notice. */
 export const withoutClaim = (state: TableState): TableState =>

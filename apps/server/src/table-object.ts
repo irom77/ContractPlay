@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, parseClientMessage } from "@contractplay/protocol";
 import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
-import { BOT_PAUSE_MS, botToAct, botWake, canDeal, chooseBotAction, createTable, isReplayHand, nextWake, reduce, replayVulnerability, summaryOf, viewFor } from "@contractplay/table";
+import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, dealsNow, createTable, isReplayHand, nextWake, reduce, replayVulnerability, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
 import { AuthStore } from "./auth-store.js";
@@ -297,7 +297,7 @@ export class TableObject extends DurableObject<Env> {
       const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, state.handNumber);
       if (!board) return { state, refused: "not-ready" };
       beforeReduce = { ...state, sessionBoard: { ...board, index: state.handNumber } };
-    } else if (event.type === "message" && event.message.type === "deal" && retries > 0 && isReplayHand(state) && canDeal(state, event.player)) {
+    } else if (event.type === "message" && event.message.type === "deal" && retries > 0 && isReplayHand(state) && dealsNow(state, event.player)) {
       const replay = await this.pickReplay(state);
       // The archive read let other messages in; this event was judged against a state that is gone, so judge it again.
       // Identity, not revision: connect and disconnect change the state without bumping it, and every change goes through save.

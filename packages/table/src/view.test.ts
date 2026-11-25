@@ -2,7 +2,7 @@ import { SEATS, cardId } from "@contractplay/core";
 import type { Card, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import type { TableState } from "./state.js";
-import { afterOnePassedOut, fourHumans, newTable, playOut, replayRecord, seededRandom, sendOk, tableInPlay, tableWithBots } from "./test-helpers.js";
+import { afterOnePassedOut, fourHumans, newTable, othersReady, playOut, replayRecord, seededRandom, sendOk, tableInPlay, tableWithBots } from "./test-helpers.js";
 import { summaryOf, viewFor } from "./view.js";
 
 /** Every card object found anywhere in a JSON value. */
@@ -113,7 +113,7 @@ describe("viewFor", () => {
     const boarded: TableState = { ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } };
     // The board injected before the deal is never shown.
     for (const viewer of ["p0", "mallory", undefined]) expect(JSON.stringify(viewFor(boarded, viewer))).not.toContain("deal-1");
-    let started = sendOk(boarded, "p1", { type: "deal" });
+    let started = sendOk(othersReady(boarded, "p1"), "p1", { type: "deal" });
     const notice = { firstPlayedAt: 1_700_000_000_000 };
     const midHand = (state: TableState): void => {
       for (const viewer of ["p0", "mallory", undefined]) {

@@ -424,8 +424,21 @@ const authScreens: readonly PreviewScreen[] = [
   }
 ];
 
-/** Every preview, online screens first, then solo play and account sign-in. */
-export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens, ...authScreens];
+/** Screens added after the sign-in ones, kept at the end so every earlier `#/mocks/N` link stays put. */
+const laterScreens: readonly PreviewScreen[] = [
+  {
+    id: "result-waiting", title: "Online: waiting for the next deal", detail: "A hand has ended at a table of three people and a bot. You (North) and your partner Maria pressed Deal; the next hand waits until Priya (East) is ready too, so nobody's look at the result is cut short.",
+    build: () => {
+      const people: People = { north: "Alex", south: "Maria", east: "Priya" };
+      let state = playUntil(bid(dealt(table("Friday club", people, ["west"])), 8), (game) => game.phase === "complete");
+      for (const seat of ["south", "north"] as const) state = run(state, { type: "message", player: player(seat), message: { type: "deal" }, at: AT });
+      return view(state, "north", people);
+    }
+  }
+];
+
+/** Every preview, online screens first, then solo play and account sign-in, then later additions. */
+export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens, ...authScreens, ...laterScreens];
 
 /**
  * The preview picker's groups, by what a screen shows rather than where it sits in the list, so `#/mocks/N` numbers
@@ -436,7 +449,7 @@ export const previewCategories: readonly { name: string; ids: readonly string[] 
   { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction"] },
   { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-bot-declares", "solo-replayed-deal"] },
   { name: "Menus, claims & auto play", ids: ["game-menu", "auto-play", "claim-answer", "solo-auto-play", "solo-claim", "solo-menu", "solo-settings", "solo-hands"] },
-  { name: "Results & scoring", ids: ["result", "rubber-score", "rubber-won", "duplicate-session", "solo-result", "solo-rubber-won", "solo-field-result", "solo-replay-result", "online-replay-result"] },
+  { name: "Results & scoring", ids: ["result", "rubber-score", "rubber-won", "duplicate-session", "solo-result", "solo-rubber-won", "solo-field-result", "solo-replay-result", "online-replay-result", "result-waiting"] },
   { name: "Reviewing hands", ids: ["solo-review", "solo-original-play"] }
 ];
 

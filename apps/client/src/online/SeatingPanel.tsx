@@ -8,6 +8,27 @@ export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
 const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
 
+/**
+ * Deals the next hand, or after a finished one, confirms the viewer is ready for it: the server deals once every
+ * present human has confirmed, so nobody's look at the result is cut short. Shows who it still waits for.
+ */
+export function DealButton({ view, newRubber, className = "primary-button", send }: {
+  view: TableViewData; newRubber: boolean; className?: string; send(message: Outgoing): void;
+}) {
+  const label = newRubber ? "Deal a new rubber" : "Deal";
+  const you = view.yourSeat;
+  if (!you) return null;
+  const others = (view.nextHand?.waitingOn ?? []).filter((seat) => seat !== you);
+  const names = others.map((seat) => seatNames[seat]).join(" and ");
+  const youReady = view.nextHand?.ready.includes(you) ?? false;
+  const [text, title] = !view.canDeal
+    ? [label, "Every seat needs a player or a bot before the next deal"]
+    : youReady && others.length ? [`Waiting for ${names}`, `You are ready. The next hand is dealt once ${names} ${others.length > 1 ? "are" : "is"} ready too`]
+    : others.length ? ["Ready", `Confirm you are ready. The next hand is dealt once ${names} ${others.length > 1 ? "are" : "is"} ready too`]
+    : [label, "Deal the next hand"];
+  return <button className={className} type="button" aria-live="polite" disabled={!view.canDeal || (youReady && others.length > 0)} title={title} onClick={() => send({ type: "deal" })}>{text}</button>;
+}
+
 /** Between hands, or for anyone unseated: the four seats with their controls, the totals, the last result, and Deal. */
 export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecard, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
   view: TableViewData; totals: string;
@@ -86,7 +107,7 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecar
               </div>;
             })}
           </div>
-          {yourSeat ? <button className="primary-button online-deal" type="button" disabled={!view.canDeal} onClick={() => send({ type: "deal" })}>{rubberSummary?.winner ? "Deal a new rubber" : "Deal"}</button> : null}
+          <DealButton view={view} newRubber={!!rubberSummary?.winner} className="primary-button online-deal" send={send} />
         </div>
         {statusLine}
       </section>

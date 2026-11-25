@@ -41,6 +41,7 @@ import { FullscreenButton, useFullscreen } from "./table/FullscreenButton.js";
 import { createHandName, savedHandName } from "./handNames.js";
 import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
+import { useDealAnimation } from "./table/DealAnimation.js";
 import { bottomSeatFor } from "./table/bottomSeat.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled, forcedPlayStorageKey } from "./table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard.js";
@@ -156,6 +157,8 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [handsStarted, setHandsStarted] = useState(() => soloData.handsStarted ?? 0);
   const [replayPending, setReplayPending] = useState(false);
   const replayPendingRef = useRef(false);
+  // A new hand is shuffled and dealt on the felt before its cards appear; the hand on the table at start-up is not.
+  const dealing = useDealAnimation(currentHandId || undefined);
   const currentHandIdRef = useRef(currentHandId);
   currentHandIdRef.current = currentHandId;
   // The rubber as it stands, for a new hand dealt once a replay request has been answered.
@@ -1041,6 +1044,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
           showBottomHand={showBottomHand}
           // Once the last trick has cleared, the whole deal is laid face-up around the result.
           revealedHands={displayedTrick.length ? undefined : shownGame.initialDeal}
+          dealing={dealing && !isReviewing}
           cardsDisabled={!!temporaryTrick || pickingClaim || soloClaimPending}
           queueSeats={canAct ? [] : queueOwnerSeats}
           queuedCard={activeQueued}

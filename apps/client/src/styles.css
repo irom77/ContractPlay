@@ -604,3 +604,36 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .preview-reveal { border-radius: 99px; padding: 4px 10px; color: var(--gold); font: 800 12px/1.4 inherit; cursor: pointer; opacity: .75; }
 .preview-reveal:hover { opacity: 1; }
 @media (max-width: 560px) { .preview-detail { display: none; } .preview-jump { width: 110px; } }
+
+/* ---------- Shuffle and deal: a new hand ---------- */
+/* The deck is riffled twice in the middle (two packets fan out and interleave back), then eight cards are pitched to the
+   seats. Hands, calls and the bidding box fade in as the last cards land. DEAL_ANIMATION_MS in DealAnimation.tsx is the total. */
+.deal-animation { position: absolute; z-index: 6; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.deal-deck { position: relative; --h: calc(14 * var(--u)); --w: calc(var(--h) * .7); width: var(--w); height: var(--h); }
+.shuffle-card, .deal-card { position: absolute; inset: 0; border: 1px solid #b3aea2; border-radius: calc(var(--h) * .08); box-shadow: 0 calc(var(--h) * .02) calc(var(--h) * .06) #0008;
+  background: repeating-linear-gradient(45deg, rgba(255, 255, 255, .16) 0 12%, transparent 12% 24%), #1f55b5; background-clip: padding-box; }
+.shuffle-card { --side: -1; z-index: var(--i); transform: translateY(calc(var(--i) * -.18 * var(--u)));
+  animation: deal-riffle .55s cubic-bezier(.45, 0, .2, 1) calc(var(--i) * 14ms) 2 both, deal-deck-out .15s ease 1.1s forwards; }
+.shuffle-card.riffle-right { --side: 1; }
+@keyframes deal-riffle {
+  0%, 100% { transform: translate(0, calc(var(--i) * -.18 * var(--u))) rotate(0deg); }
+  38%, 52% { transform: translate(calc(var(--side) * .66 * var(--w)), calc(var(--layer) * -.3 * var(--u))) rotate(calc(var(--side) * 13deg)); }
+}
+@keyframes deal-deck-out { to { opacity: 0; } }
+.deal-card { --dx: 0; --dy: 0; z-index: 20; opacity: 0; animation: deal-pitch .4s cubic-bezier(.2, .7, .3, 1) calc(1.15s + var(--k) * 70ms) both; }
+.deal-to-bottom { --dy: calc(30 * var(--u)); }
+.deal-to-top { --dy: calc(-30 * var(--u)); }
+.deal-to-left { --dx: calc(-42 * var(--u)); }
+.deal-to-right { --dx: calc(42 * var(--u)); }
+@keyframes deal-pitch {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(1); }
+  12% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(200deg) scale(.7); }
+}
+.table-panel.dealing :is(.hand-zone, .hidden-hand, .dummy-table-hand, .seat-auction-calls, .bid-picker) { animation: deal-reveal .35s ease 1.6s backwards; }
+@keyframes deal-reveal { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .deal-animation { display: none; }
+  .table-panel.dealing :is(.hand-zone, .hidden-hand, .dummy-table-hand, .seat-auction-calls, .bid-picker) { animation: none; }
+}

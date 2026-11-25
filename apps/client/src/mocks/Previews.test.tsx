@@ -259,6 +259,14 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByRole("region", { name: "Email sign-in" })).toBeTruthy();
     expect(screen.getByText("Check your email for a sign-in link.")).toBeTruthy();
     expect(screen.queryByLabelText("Email")).toBeNull();
+  },
+  "result-waiting": () => {
+    const result = screen.getByRole("region", { name: "Hand result" });
+    // North and South have confirmed; the next hand waits for East, and the result stays on the table meanwhile.
+    const waiting = within(result).getByRole("button", { name: "Waiting for East" }) as HTMLButtonElement;
+    expect(waiting.disabled).toBe(true);
+    expect(waiting.title).toMatch(/You are ready\. The next hand is dealt once East is ready too/);
+    for (const seat of ["North", "East", "South", "West"]) expect(screen.getByRole("region", { name: `${seat}'s hand` }).querySelectorAll(".table-card")).toHaveLength(13);
   }
 };
 

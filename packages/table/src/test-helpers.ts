@@ -2,7 +2,7 @@ import { createBot } from "@contractplay/bots";
 import { SEATS, applyAction, createDeck, deal, playContextFor } from "@contractplay/core";
 import type { GameAction, HandRecord, Seat } from "@contractplay/core";
 import type { ClientMessage, TableScoring } from "@contractplay/protocol";
-import { chooseBotAction, deciderOf } from "./hand.js";
+import { chooseBotAction, deciderOf, readyNeeded } from "./hand.js";
 import { reduce } from "./reduce.js";
 import { createTable, type Outcome, type PlayerId, type TableState } from "./state.js";
 
@@ -27,6 +27,12 @@ export function sendOk(state: TableState, player: PlayerId, message: Exclude<Cli
   const out = send(state, player, message, at, random);
   if (out.refused) throw new Error(`unexpectedly refused: ${out.refused}`);
   return out.state;
+}
+
+/** Every other present human confirms they are ready for the next hand, so `player`'s deal then deals it. */
+export function othersReady(state: TableState, player: PlayerId): TableState {
+  for (const other of readyNeeded(state)) if (other !== player) state = sendOk(state, other, { type: "deal" });
+  return state;
 }
 
 /** A table with `alice` at north and bots in the other seats, ready to deal. */

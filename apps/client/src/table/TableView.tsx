@@ -22,6 +22,7 @@ import {
   suitGapShare,
   suitSymbols
 } from "./labels.js";
+import { DealAnimation } from "./DealAnimation.js";
 
 const tablePositions = ["bottom", "left", "top", "right"] as const;
 const liveTurnPhase = (phase: PublicGame["phase"]) => phase === "auction" || phase === "play";
@@ -65,6 +66,8 @@ export type TableViewProps = {
   matchScore?: { ns: number; ew: number } | undefined;
   /** Once the hand is over: the whole deal, laid face-up at each seat with its high-card points. Nothing is playable. */
   revealedHands?: Readonly<Record<Seat, readonly Card[]>> | undefined;
+  /** A new hand has just been dealt: a deck is shuffled and dealt in the middle, and the cards and calls appear once it is done. */
+  dealing?: boolean | undefined;
   tools?: React.ReactNode;               // menu + fullscreen (top-left)
   overlay?: React.ReactNode;             // score panel, review/history controls, hint controls, messages
 };
@@ -78,7 +81,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, exposedSeat,
-  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, tools, overlay
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, dealing = false, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -128,7 +131,7 @@ export function TableView({
   const tableCard = (card: Card, className: string, label: string) => <span className={`${className} ${isRedSuit(card.suit) ? "red-card" : ""}`} key={cardId(card)} role="img" aria-label={label}>{cardFace(card)}</span>;
 
   return (
-    <section className="table-panel" aria-label={ariaLabel}>
+    <section className={`table-panel${dealing ? " dealing" : ""}`} aria-label={ariaLabel}>
       <div className={`table-surface ${revealed ? "hands-revealed" : ""} ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
         {tableWatermark}
         <div className={`table-status${contract ? " has-contract" : ""}`}>
@@ -223,6 +226,7 @@ export function TableView({
           </div> : null}
         </section>
 
+        {dealing ? <DealAnimation /> : null}
         {overlay}
       </div>
 

@@ -1,10 +1,10 @@
 import { SEATS, createDeck, deal, validatePlay } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { botToAct, botWake, isReplayHand, replayVulnerability } from "./hand.js";
+import { botToAct, botWake, dealsNow, isReplayHand, readyNeeded, replayVulnerability } from "./hand.js";
 import { viewFor } from "./view.js";
 import { reduce } from "./reduce.js";
-import { afterOnePassedOut, fourHumans, newTable, playOut, replayRecord, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
+import { afterOnePassedOut, fourHumans, othersReady, newTable, playOut, replayRecord, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
 import type { TableState } from "./state.js";
 
 const act = (state: TableState, action: GameAction) =>
@@ -25,7 +25,7 @@ describe("replayed hands", () => {
     const t = afterOnePassedOut("duplicate");
     expect(isReplayHand(t)).toBe(true);
     expect(replayVulnerability(t)).toBeUndefined();
-    const started = sendOk({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    const started = sendOk(othersReady({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1"), "p1", { type: "deal" });
     expect(started.handNumber).toBe(2);
     expect(started.game?.initialDeal).toEqual(replayRecord.deal);
     expect(started.game).toMatchObject({ dealer: "west", vulnerability: "Both" });
@@ -35,7 +35,7 @@ describe("replayed hands", () => {
     let done = started;
     for (let k = 0; k < 4; k++) done = sendOk(done, `p${SEATS.indexOf(done.game!.currentActor)}`, act(done, pass(done.game!.currentActor)));
     expect(isReplayHand(done)).toBe(false);
-    const fresh = sendOk(done, "p2", { type: "deal" }, 1, seededRandom(5));
+    const fresh = sendOk(othersReady(done, "p2"), "p2", { type: "deal" }, 1, seededRandom(5));
     expect(fresh.handNumber).toBe(3);
     expect(fresh.game!.initialDeal).not.toEqual(replayRecord.deal);
     expect("replay" in fresh).toBe(false);
@@ -44,7 +44,7 @@ describe("replayed hands", () => {
   it("keeps the record's dealer but the rubber's vulnerability and dealer rotation at a rubber table", () => {
     const t = afterOnePassedOut("rubber");
     expect(replayVulnerability(t)).toBe("None");
-    const started = sendOk({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    const started = sendOk(othersReady({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1"), "p1", { type: "deal" });
     expect(started.game?.initialDeal).toEqual(replayRecord.deal);
     expect(started.game).toMatchObject({ dealer: "west", vulnerability: "None" });
     expect(started.rubber).toMatchObject({ lastDealer: "east", activeHandId: "hand-2" });
@@ -52,12 +52,12 @@ describe("replayed hands", () => {
     let done = started;
     for (let k = 0; k < 4; k++) done = sendOk(done, `p${SEATS.indexOf(done.game!.currentActor)}`, act(done, pass(done.game!.currentActor)));
     // The rotation carries on from East (hand 1's next dealer), not from the replay's West.
-    expect(sendOk(done, "p0", { type: "deal" }, 1, seededRandom(5)).game!.dealer).toBe("south");
+    expect(sendOk(othersReady(done, "p0"), "p0", { type: "deal" }, 1, seededRandom(5)).game!.dealer).toBe("south");
   });
 
   it("drops the replay when the host cancels the hand, so its results are never shown", () => {
     const t = afterOnePassedOut("duplicate");
-    const started = sendOk({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    const started = sendOk(othersReady({ ...t, replayBoard: { index: 1, dealId: "deal-1", record: replayRecord } }, "p1"), "p1", { type: "deal" });
     const cancelled = sendOk(started, "p0", { type: "cancelHand" });
     expect("replay" in cancelled).toBe(false);
     expect(viewFor(cancelled, "p0").replay).toBeUndefined();
@@ -65,7 +65,7 @@ describe("replayed hands", () => {
 
   it("ignores a replay board for another hand", () => {
     const t = afterOnePassedOut("duplicate");
-    const started = sendOk({ ...t, replayBoard: { index: 0, dealId: "deal-1", record: replayRecord } }, "p1", { type: "deal" });
+    const started = sendOk(othersReady({ ...t, replayBoard: { index: 0, dealId: "deal-1", record: replayRecord } }, "p1"), "p1", { type: "deal" });
     expect(started.game!.initialDeal).not.toEqual(replayRecord.deal);
     expect("replay" in started).toBe(false);
     expect("replayBoard" in started).toBe(false);
@@ -105,7 +105,7 @@ describe("dealing", () => {
     const random = seededRandom(1);
     const seen: [string, string][] = [];
     for (let i = 0; i < 5; i++) {
-      t = sendOk(t, "p0", { type: "deal" }, 1, random);
+      t = sendOk(othersReady(t, "p0"), "p0", { type: "deal" }, 1, random);
       expect(t.handNumber).toBe(i + 1);
       seen.push([t.game!.dealer, t.game!.vulnerability]);
       // everyone passes: passed-out
@@ -125,7 +125,7 @@ describe("dealing", () => {
     for (let k = 0; k < 4; k++) t = sendOk(t, `p${k}`, act(t, pass(t.game!.currentActor)));
     expect(t.game!.phase).toBe("passed-out");
     expect(viewFor(t, "p1").canDeal).toBe(true);
-    t = sendOk(t, "p1", { type: "deal" }, 1, seededRandom(3));
+    t = sendOk(othersReady(t, "p1"), "p1", { type: "deal" }, 1, seededRandom(3));
     expect(t.handNumber).toBe(2);
     expect(t.game!.dealer).toBe("east");
   });
@@ -349,7 +349,7 @@ describe("rubber scoring", () => {
     expect(t.scoring).toBe("rubber");
     const seen: [string, string][] = [];
     for (let i = 0; i < 3; i++) {
-      t = sendOk(t, "p0", { type: "deal" }, 1, seededRandom(i + 1));
+      t = sendOk(othersReady(t, "p0"), "p0", { type: "deal" }, 1, seededRandom(i + 1));
       seen.push([t.game!.dealer, t.game!.vulnerability]);
       expect(t.rubber!.activeHandId).toBe(`hand-${i + 1}`);
       t = passOut(t);
@@ -386,5 +386,69 @@ describe("rubber scoring", () => {
     expect(dealt.rubber).toBeUndefined();
     expect(viewFor(dealt, "p0").scoring).toBe("duplicate");
     expect(viewFor(dealt, "p0").rubber).toBeUndefined();
+  });
+});
+
+describe("ready for the next hand", () => {
+  const passedOut = (start: TableState): TableState => {
+    let t = start;
+    for (let k = 0; k < 4; k++) {
+      const s = t.seats[t.game!.currentActor];
+      t = sendOk(t, s.kind === "human" ? s.player : "", act(t, pass(t.game!.currentActor)));
+    }
+    return t;
+  };
+
+  it("deals the first hand at once, then waits for every seated human to confirm the next", () => {
+    const first = sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(2));
+    expect(first.handNumber).toBe(1);
+    let t = passedOut(first);
+    expect(readyNeeded(t)).toEqual(["p0", "p1", "p2", "p3"]);
+    t = sendOk(t, "p2", { type: "deal" });
+    expect(t.handNumber).toBe(1);
+    expect(t.nextHandReady).toEqual(["p2"]);
+    expect(viewFor(t, "p0").nextHand).toEqual({ ready: ["south"], waitingOn: ["north", "east", "west"] });
+    // A second confirmation changes nothing.
+    const again = send(t, "p2", { type: "deal" });
+    expect(again.refused).toBeUndefined();
+    expect(again.state).toBe(t);
+    t = sendOk(sendOk(t, "p0", { type: "deal" }), "p3", { type: "deal" });
+    expect(t.handNumber).toBe(1);
+    expect(dealsNow(t, "p1")).toBe(true);
+    t = sendOk(t, "p1", { type: "deal" }, 1, seededRandom(3));
+    expect(t.handNumber).toBe(2);
+    expect("nextHandReady" in t).toBe(false);
+    expect(viewFor(t, "p0").nextHand).toBeUndefined();
+  });
+
+  it("does not wait for bots, away players, or seats a bot is standing in for", async () => {
+    let t = await playOut(sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(4)));
+    expect(readyNeeded(t)).toEqual(["alice"]);
+    expect(sendOk(t, "alice", { type: "deal" }, 1, seededRandom(5)).handNumber).toBe(2);
+
+    t = passedOut(sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(2)));
+    t = { ...t, awaySince: { p3: 5 }, seats: { ...t.seats, east: { kind: "human", player: "p1", name: "P1", since: 1, standIn: "advanced" } } };
+    expect(readyNeeded(t)).toEqual(["p0", "p2"]);
+    t = sendOk(t, "p0", { type: "deal" });
+    expect(viewFor(t, "p0").nextHand).toEqual({ ready: ["north"], waitingOn: ["south"] });
+    expect(sendOk(t, "p2", { type: "deal" }, 1, seededRandom(3)).handNumber).toBe(2);
+  });
+
+  it("deals on a repeated confirmation once the players it waited for have gone away", () => {
+    let t = passedOut(sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(2)));
+    t = sendOk(t, "p0", { type: "deal" });
+    t = { ...t, awaySince: { p1: 5, p2: 5, p3: 5 } };
+    expect(viewFor(t, "p0").nextHand).toEqual({ ready: ["north"], waitingOn: [] });
+    expect(sendOk(t, "p0", { type: "deal" }, 1, seededRandom(3)).handNumber).toBe(2);
+  });
+
+  it("forgets confirmations when the hand is cancelled", () => {
+    let t = passedOut(sendOk(fourHumans(), "p0", { type: "deal" }, 1, seededRandom(2)));
+    t = sendOk(t, "p1", { type: "deal" });
+    t = sendOk(othersReady(t, "p0"), "p0", { type: "deal" }, 1, seededRandom(3));
+    const cancelled = sendOk(t, "p0", { type: "cancelHand" });
+    expect("nextHandReady" in cancelled).toBe(false);
+    // With no hand on the table there is nothing to look over, so the next deal is immediate.
+    expect(sendOk(cancelled, "p1", { type: "deal" }, 1, seededRandom(4)).handNumber).toBe(3);
   });
 });

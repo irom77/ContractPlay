@@ -2,7 +2,7 @@ import { SEATS } from "@contractplay/core";
 import type { Deal, HandRecord, Seat } from "@contractplay/core";
 import type { PublicGame, SeatInfo, TableSummary, TableView } from "@contractplay/protocol";
 import { sideOf } from "./claim.js";
-import { canDeal } from "./hand.js";
+import { canDeal, readyNeeded } from "./hand.js";
 import { betweenHands, scoringOf, seatOf, type PlayerId, type SeatState, type TableState } from "./state.js";
 
 const seatInfo = (state: TableState, s: SeatState): SeatInfo =>
@@ -52,6 +52,18 @@ function replayOf(state: TableState): TableView["replay"] {
   return betweenHands(state) ? { firstPlayedAt, rescored, original, record: shown } : { firstPlayedAt };
 }
 
+/** Between hands after one has been played: the seats that have confirmed the next hand and those it still waits for. */
+function nextHandOf(state: TableState): TableView["nextHand"] {
+  if (!state.game || !betweenHands(state)) return undefined;
+  const ready = state.nextHandReady ?? [];
+  const needed = readyNeeded(state);
+  const seatsWhere = (test: (player: PlayerId) => boolean) => SEATS.filter((seat) => {
+    const s = state.seats[seat];
+    return s.kind === "human" && test(s.player);
+  });
+  return { ready: seatsWhere((player) => ready.includes(player)), waitingOn: seatsWhere((player) => needed.includes(player) && !ready.includes(player)) };
+}
+
 /** The only function that builds game data for a client. */
 export function viewFor(state: TableState, player: PlayerId | undefined, session?: NonNullable<TableView["session"]>): TableView {
   const yourSeat = seatOf(state, player);
@@ -59,6 +71,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined, session
   const game = yourSeat ? publicGame(state, yourSeat) : undefined;
   const pending = state.pendingClaim;
   const replay = replayOf(state);
+  const nextHand = nextHandOf(state);
   const waitingOn = pending ? pending.responders.filter((seat) => !pending.accepted.includes(seat)) : [];
   return {
     ...summaryOf(state),
@@ -72,6 +85,7 @@ export function viewFor(state: TableState, player: PlayerId | undefined, session
     ...(state.claimRejected ? { claimRejected: { ...state.claimRejected } } : {}),
     ...(session ? { session } : {}),
     ...(replay ? { replay } : {}),
+    ...(nextHand ? { nextHand } : {}),
     ...(yourSeat && state.game && betweenHands(state) ? { revealed: state.game.initialDeal } : {})
   };
 }

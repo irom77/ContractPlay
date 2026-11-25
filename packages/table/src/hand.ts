@@ -25,6 +25,25 @@ export function canDeal(state: TableState, player: PlayerId | undefined): boolea
   return seatOf(state, player) !== undefined && tableReady(state) && betweenHands(state);
 }
 
+/**
+ * The players whose confirmation the next hand waits for: seated humans who are present and play their own seat.
+ * None before the first hand, which is dealt as soon as anyone asks; an away player or a stand-in never holds a deal up.
+ */
+export function readyNeeded(state: TableState): PlayerId[] {
+  if (!state.game || !betweenHands(state)) return [];
+  return SEATS.flatMap((seat) => {
+    const s = state.seats[seat];
+    return s.kind === "human" && s.standIn === undefined && state.awaySince[s.player] === undefined ? [s.player] : [];
+  });
+}
+
+/** Whether this player's deal request deals the hand now, rather than only confirming they are ready for it. */
+export function dealsNow(state: TableState, player: PlayerId | undefined): boolean {
+  if (!canDeal(state, player)) return false;
+  const ready = state.nextHandReady ?? [];
+  return readyNeeded(state).every((needed) => needed === player || ready.includes(needed));
+}
+
 /** Whether the next hand is a replay: every second hand (2nd, 4th, …) at a table outside a duplicate session. */
 export const isReplayHand = (state: TableState): boolean => !state.sessionId && (state.handNumber + 1) % 2 === 0;
 
@@ -36,13 +55,18 @@ export function replayVulnerability(state: TableState): Vulnerability | undefine
 export function dealHand(state: TableState, player: PlayerId, at: number, random: () => number): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (!canDeal(state, player)) return refuse(state, "not-ready");
+  if (!dealsNow(state, player)) {
+    // A finished hand stays on the table until every present human has confirmed, so nobody's review is cut short.
+    const ready = state.nextHandReady ?? [];
+    return ready.includes(player) ? { state } : accept(state, { nextHandReady: [...ready, player] });
+  }
   const handNumber = state.handNumber + 1;
   const sessionBoard = state.sessionBoard?.index === handNumber - 1 ? state.sessionBoard : undefined;
   if (state.sessionId && !sessionBoard) return refuse(state, "not-ready");
   const replayBoard = !state.sessionId && state.replayBoard?.index === handNumber - 1 ? state.replayBoard : undefined;
   const replay = replayBoard ? { replay: { dealId: replayBoard.dealId, record: replayBoard.record } } : {};
   // Every deal drops the injected board and the last hand's replay; a replayed hand then gets its own.
-  const base = withoutKeys(state, "replayBoard", "replay");
+  const base = withoutKeys(state, "replayBoard", "replay", "nextHandReady");
   const deal = sessionBoard?.deal ?? replayBoard?.record.deal ?? dealCards(shuffle(createDeck(), random));
   if (scoringOf(state) === "rubber") {
     // Rubber deals rotate the dealer from North and take vulnerability from games won; a won rubber starts a new one.

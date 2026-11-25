@@ -257,9 +257,15 @@ describe("deal replays at online tables", () => {
     for (let n = 0; n < 100; n++) { const s = await state(id); if (done(s)) return s; await new Promise((r) => setTimeout(r, 10)); }
     throw new Error("state not reached");
   };
+  /** After a hand: East, South and West confirm they are ready, so North's deal then deals the next hand. */
+  async function othersReady(id: string, clients: Awaited<ReturnType<typeof seatedFour>>) {
+    for (const { client } of clients.slice(1)) client.send({ type: "deal" });
+    await waitFor(id, (s) => (s.nextHandReady?.length ?? 0) === 3);
+  }
   /** Deals a hand and has everyone pass it out; resolves with the finished state. */
   async function playPassedOut(id: string, clients: Awaited<ReturnType<typeof seatedFour>>) {
     const before = await state(id);
+    if (before.game) await othersReady(id, clients);
     clients[0]!.client.send({ type: "deal" });
     let current = await waitFor(id, (s) => s.handNumber === before.handNumber + 1);
     const dealt = current;
@@ -349,6 +355,23 @@ describe("deal replays at online tables", () => {
     expect(after.replayBoard).toBeUndefined();
   });
 
+  it("only picks a replay for the confirmation that deals, not for one that waits for other players", async () => {
+    await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "online", playedAt: 0 });
+    const id = await table();
+    const clients = await seatedFour(id);
+    await playPassedOut(id, clients);
+    const pick = vi.spyOn(DealArchive.prototype, "pickReplay");
+    onTestFinished(() => { pick.mockRestore(); });
+    await othersReady(id, clients);
+    expect(pick).not.toHaveBeenCalled();
+    expect((await state(id)).handNumber).toBe(1);
+    clients[0]!.client.send({ type: "deal" });
+    const settled = await waitFor(id, (s) => s.handNumber === 2);
+    expect(pick).toHaveBeenCalledTimes(1);
+    expect(settled.replay).toBeDefined();
+    expect("nextHandReady" in settled).toBe(false);
+  });
+
   it("judges a deal again when the table changed while its replay was being picked", async () => {
     await new DealArchive(env.DB).record({ deal: deal(createDeck().reverse()), dealer: "east", vulnerability: "None", actions: passedOut("east"), source: "online", playedAt: 0 });
     const id = await table();
@@ -367,6 +390,7 @@ describe("deal replays at online tables", () => {
       return found;
     });
     onTestFinished(() => { pick.mockRestore(); });
+    await othersReady(id, clients);
     clients[0]!.client.send({ type: "deal" });
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(calls).toBe(1);
@@ -393,6 +417,7 @@ describe("deal replays at online tables", () => {
       return undefined;
     });
     onTestFinished(() => { pick.mockRestore(); });
+    await othersReady(id, clients);
     clients[0]!.client.send({ type: "deal" });
     await new Promise((resolve) => setTimeout(resolve, 300));
     expect(calls).toBe(3);
@@ -417,6 +442,7 @@ describe("deal replays at online tables", () => {
       return found;
     });
     onTestFinished(() => { pick.mockRestore(); });
+    await othersReady(id, clients);
     const before = await state(id);
     clients[0]!.client.send({ type: "deal" });
     const settled = await waitFor(id, (s) => s.handNumber === 2);

@@ -19,6 +19,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 
 ## Online multiplayer
 
+- [x] Wait for every present human to confirm before dealing the next online hand, and open each new hand (solo and online) with a shuffle-and-deal animation.
 - [ ] Add a player feedback form for feature requests, improvements, and other suggestions, and collect and display star ratings.
 - [ ] Repeat the two-window check on the deployed address and confirm the Workers free-plan CPU limit holds for bot decisions (if not, the paid Workers plan is the owner's decision).
 - [ ] Set up `bridge.romaniuk.us` as the public address for online multiplayer. A CNAME at Squarespace will not work; a Workers custom domain needs the zone on Cloudflare. Steps for the owner: add `romaniuk.us` to Cloudflare (Free plan) and check the imported records, especially email (MX, TXT); switch the name servers in Squarespace Domains to the two Cloudflare gives (registration stays at Squarespace); once active, add `bridge.romaniuk.us` under Workers & Pages → `contractplay` → Settings → Domains & Routes → Custom domain. Then record the custom domain in `apps/server` wrangler configuration so deploys keep it.

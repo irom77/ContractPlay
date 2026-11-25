@@ -4,7 +4,7 @@ import { botToAct, chooseBotAction } from "./hand.js";
 import { nextWake } from "./presence.js";
 import { reduce } from "./reduce.js";
 import { EMPTY_TABLE_MS, HOST_AWAY_MS, IDLE_MS, UNVISITED_TABLE_MS, type TableEvent, type TableState } from "./state.js";
-import { fourHumans, newTable, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
+import { fourHumans, newTable, othersReady, playOut, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
 import { viewFor } from "./view.js";
 
 const random = seededRandom(1);
@@ -100,7 +100,7 @@ describe("stand-ins", () => {
     let t = connectedFour();
     t = sendOk(t, "p0", { type: "deal" }, 100, seededRandom(2));
     for (let k = 0; k < 4; k++) t = sendOk(t, `p${k}`, act(t, pass(t.game!.currentActor)), 100);
-    t = sendOk(t, "p1", { type: "deal" }, 1000, seededRandom(3));
+    t = sendOk(othersReady(t, "p1"), "p1", { type: "deal" }, 1000, seededRandom(3));
     expect(t.game!.currentActor).toBe("east");
     expect(t.host).toBe("p0");
     expect(send(t, "p0", { type: "handToBot", seat: "east" }, 1000 + IDLE_MS - 1).refused).toBe("not-allowed");

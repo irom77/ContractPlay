@@ -678,6 +678,23 @@ describe("OnlineTable play", () => {
     expect((within(result).getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("asks each player to confirm the next hand, and shows who it still waits for", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const finished = playCards(oneNoTrump(), 52);
+    const after = (nextHand: { ready: Seat[]; waitingOn: Seat[] }) => tableView({ handNumber: 1, revision: 70, yourSeat: "north", seats: seatedNorth, canDeal: true, game: publicGame(finished, []), revealed: finished.initialDeal, nextHand });
+    service.push(after({ ready: ["south"], waitingOn: ["north", "east"] }));
+    const ready = within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Ready" }) as HTMLButtonElement;
+    expect(ready.title).toBe("Confirm you are ready. The next hand is dealt once East is ready too");
+    await user.click(ready);
+    expect(service.sent).toEqual([{ type: "deal" }]);
+    service.push(after({ ready: ["north", "south"], waitingOn: ["east"] }));
+    expect((within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Waiting for East" }) as HTMLButtonElement).disabled).toBe(true);
+    // East went away: nobody is left to wait for, so Deal deals.
+    service.push(after({ ready: ["north", "south"], waitingOn: [] }));
+    expect((within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Deal" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   describe("a replayed deal", () => {
     const firstPlayedAt = new Date(2026, 10, 12, 14, 32).getTime();
     const notice = "Replayed deal · first played 12 Nov 2026, 14:32 · some of you may have played it before.";

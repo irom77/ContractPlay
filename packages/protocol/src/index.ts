@@ -1,7 +1,7 @@
 import { RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -29,7 +29,12 @@ export type TableView = TableSummary & {
   totals: { ns: number; ew: number };
   /** A rubber table's rubber: the hands scored so far, with the hand being played for it. */
   rubber?: Rubber;
+  /**
+   * `canDeal`: the viewer may send `deal`. After a hand has been played, `deal` confirms the viewer is ready and the
+   * next hand is dealt once every present human has; `nextHand` lists the seats that have confirmed and those still awaited.
+   */
   host?: Seat; yourSeat?: Seat; canDeal: boolean;
+  nextHand?: { ready: Seat[]; waitingOn: Seat[] };
   game?: PublicGame;
   revealed?: Deal;
   /**

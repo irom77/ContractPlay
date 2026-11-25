@@ -11,6 +11,7 @@ import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { bottomSeatFor } from "../table/bottomSeat.js";
 import { TableView } from "../table/TableView.js";
+import { useDealAnimation } from "../table/DealAnimation.js";
 import { ClaimPanel } from "../table/ClaimPanel.js";
 import { DraggableBanner } from "../table/DraggableBanner.js";
 import { handsOnCard, playerSideNames, Scorecard } from "../table/Scorecard.js";
@@ -21,7 +22,7 @@ import { currentAccount, type AccountSession } from "./auth.js";
 import { syncOnlineHands, uploadOnlineHand } from "./handHistory.js";
 import { NameGate } from "./Lobby.js";
 import { savedHandFrom } from "./savedHand.js";
-import { HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.js";
+import { DealButton, HandResultSummary, SeatingPanel, type Outgoing } from "./SeatingPanel.js";
 import { FieldResult } from "../table/FieldResult.js";
 import { replayNotice } from "../replays.js";
 
@@ -196,6 +197,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
   const [fullscreen, toggleFullscreen] = useFullscreen(() => setNotice({ text: "Full screen is not available here." }));
+  // A hand dealt while the table is open is shuffled and dealt on the felt first.
+  const dealing = useDealAnimation(view?.game && view.handInProgress ? `${view.id}:${view.handNumber}` : undefined, view !== undefined);
   // True from sending a call or card until the service answers with any view or refusal.
   const [waiting, setWaiting] = useState(false);
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
@@ -537,6 +540,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             game={game}
             bottomSeat={bottomSeatFor(game, yourSeat, !!game.contract && cardDecider(game, view.seats, game.contract.declarer) === yourSeat)}
             actingSeat={actingSeat}
+            dealing={dealing}
             displayedTrick={displayedTrick}
             showCalls={game.phase !== "play" || auctionShown}
             onToggleCalls={() => setAuctionShown((shown) => !shown)}
@@ -601,7 +605,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     const resultClosed = closedResult === view.handNumber;
     // Once a rubber is won: deal a new one, or go back to seating or the lobby. Close puts the card away to see the hands.
     const resultActions = <>
-      {yourSeat ? <button className="primary-button" type="button" disabled={!view.canDeal} title={view.canDeal ? "Deal the next hand" : "Every seat needs a player or a bot before the next deal"} onClick={() => send({ type: "deal" })}>{rubberSummary?.winner ? "Deal a new rubber" : "Deal"}</button> : null}
+      <DealButton view={view} newRubber={!!rubberSummary?.winner} send={send} />
       <button className="secondary-button" type="button" onClick={openSeating}>{yourSeat ? "Seating" : "Take a seat"}</button>
       {rubberSummary?.winner ? <button className="secondary-button" type="button" onClick={onLeave}>Back to lobby</button> : null}
       {rubberSummary?.winner && yourSeat ? <button className="secondary-button" type="button" disabled={status !== "open" || leaving} onClick={() => { setLeaving(true); send({ type: "leave" }); }}>Leave the table</button> : null}
