@@ -6,6 +6,7 @@ import { explainBid, highCardPoints, suggestBid, suggestPlay } from "@contractpl
 import { createHandName, savedHandName } from "../handNames.js";
 import { retainHandHistory } from "../handHistoryRetention.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
+import { FullscreenButton, useFullscreen } from "../table/FullscreenButton.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { bottomSeatFor } from "../table/bottomSeat.js";
@@ -194,6 +195,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const [{ view, hold }, setReceived] = useState<Received>({});
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
   const [notice, setNotice] = useState<{ text: string }>();
+  const [fullscreen, toggleFullscreen] = useFullscreen(() => setNotice({ text: "Full screen is not available here." }));
   // True from sending a call or card until the service answers with any view or refusal.
   const [waiting, setWaiting] = useState(false);
   const [lastTrickOpen, setLastTrickOpen] = useState(false);
@@ -568,7 +570,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
               }
             } : undefined}
             matchScore={score}
-            tools={<GameMenu items={menuItems} defaultOpen={menuOpen} />}
+            tools={<><GameMenu items={menuItems} defaultOpen={menuOpen} /><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
             overlay={<>
               {view.session ? <p className="session-progress" role="status">{sessionLabel(view.session)}</p> : null}
               {claimPanel}
@@ -630,7 +632,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             botSeats={botSeatsOf(view.seats)}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat} onHandToBot={undefined} seat={seat} />}
             matchScore={score}
-            tools={<GameMenu items={resultMenu} />}
+            tools={<><GameMenu items={resultMenu} /><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
             overlay={<>
               {resultClosed ? null : <section className={`score-panel result-panel ${rubberSummary ? "scorecard-panel" : ""}`} aria-label="Hand result">
                 <HandResultSummary game={game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />

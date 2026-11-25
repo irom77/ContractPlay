@@ -881,6 +881,18 @@ describe("OnlineTable connection", () => {
       expect(details.open).toBe(false);
     });
 
+    it("sits a full-screen toggle beside the menu", async () => {
+      const service = setup();
+      service.push(live(newGame()));
+      let fullscreenElement: Element | null = null;
+      Object.defineProperty(document, "fullscreenElement", { configurable: true, get: () => fullscreenElement });
+      document.documentElement.requestFullscreen = vi.fn(() => { fullscreenElement = document.documentElement; return Promise.resolve(); });
+      fireEvent.click(screen.getByRole("button", { name: "Full screen" }));
+      expect(await screen.findByRole("button", { name: "Exit full screen" })).toBeTruthy();
+      expect(document.documentElement.requestFullscreen).toHaveBeenCalledTimes(1);
+      delete (document as { fullscreenElement?: unknown }).fullscreenElement;
+    });
+
     it("opens recent hands from the menu", async () => {
       const user = userEvent.setup();
       const service = setup();

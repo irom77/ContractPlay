@@ -37,7 +37,7 @@ import { checkClaim, createBot, explainBid, highCardPoints, suggestBid, suggestP
 import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio, createBoardSetId, isBoardSetFile } from "./boardSet.js";
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
-import { isFullscreen, setFullscreen } from "./nativeWindow.js";
+import { FullscreenButton, useFullscreen } from "./table/FullscreenButton.js";
 import { createHandName, savedHandName } from "./handNames.js";
 import { cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
@@ -134,7 +134,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [botSkill, setBotSkill] = useState<SkillLevel>(initialSetup.botSkill);
   const [biddingStyle, setBiddingStyle] = useState<"SAYC" | "2/1">(initialSetup.biddingStyle);
   const [auctionShown, setAuctionShown] = useState(false);
-  const [fullscreen, setFullscreenState] = useState(false);
+  const [fullscreen, toggleFullscreen] = useFullscreen(() => setMessage("Full screen is not available here."));
   const [pbnInput, setPbnInput] = useState("");
   const [currentPbnMetadata, setCurrentPbnMetadata] = useState<PbnMetadata | undefined>(() => soloData.currentPbnMetadata);
   const [message, setMessage] = useState("");
@@ -805,35 +805,10 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   }
 
   useEffect(() => {
-    const sync = () => { void isFullscreen().then(setFullscreenState).catch(() => undefined); };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if ((event.target as HTMLElement | null)?.closest?.("input, textarea, select")) return;
-      if (event.key === "f" || event.key === "F") {
-        event.preventDefault();
-        void toggleFullscreen();
-      } else if (event.key === "Escape") {
-        setDialog(undefined);
-        if (!isNativeClient()) return;
-        void setFullscreen(false).then(setFullscreenState).catch(() => undefined);
-      }
-    };
-    sync();
-    document.addEventListener("fullscreenchange", sync);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setDialog(undefined); };
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("fullscreenchange", sync);
-      document.removeEventListener("keydown", onKey);
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, []);
-
-  async function toggleFullscreen() {
-    try {
-      setFullscreenState(await setFullscreen(!(await isFullscreen())));
-    } catch {
-      setMessage("Full screen is not available here.");
-    }
-  }
 
   const online = serviceUrl() !== undefined;
   const goOnline = () => { location.hash = "#/online"; };
@@ -873,11 +848,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       <div className="recent-actions"><button type="button" onClick={() => resumeBoardSet(entry)}>Resume</button><button type="button" onClick={() => resumeBoardSet(entry, true)}>Restart</button><button type="button" onClick={() => { void exportBoardSet(entry); }}>Export backup</button><button type="button" onClick={() => deleteBoardSet(entry)}>Delete</button></div>
     </li>)}</ul></> : null}
   </section>;
-  const fullscreenButton = <button className="icon-button" type="button" aria-label={fullscreen ? "Exit full screen" : "Full screen"} aria-pressed={fullscreen} title={`${fullscreen ? "Exit full screen" : "Full screen"} (F)`} onClick={() => { void toggleFullscreen(); }}>
-    <svg viewBox="0 0 24 24" aria-hidden="true">{fullscreen
-      ? <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
-      : <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />}</svg>
-  </button>;
+  const fullscreenButton = <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} />;
   const version = <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>;
   const dialogTitles: Record<MenuDialog, string> = { settings: "Settings", rubber: "Scores", hands: "Recent hands", about: "ContractPlay" };
   // The scorecard calls the user's partnership "We" against bots; otherwise the compass sides.
