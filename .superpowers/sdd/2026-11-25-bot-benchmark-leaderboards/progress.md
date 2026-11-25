@@ -28,3 +28,15 @@
 ## Rulings
 - Keep tasks sequential because the plan has shared server and client integration files, despite independent domain work at Task 1.
 - Do not publish/push until full workspace release checks pass; production push is a deployment side effect.
+- Baseline setup: `pnpm install --frozen-lockfile` completed. `pnpm test` passed: 63 client/package test files (1,980 tests) plus 11 server test files (131 tests); Workerd printed a disconnected-pipe diagnostic during server teardown despite exit 0.
+- Plan/spec/ledger seed commit: `9bb753588fb39109d874a41ed46cd81467800de5`.
+- Ruling: rotation input must support `maxTables` within the existing 2–8 session range; cohorts larger than `4 * maxTables` are split into deterministic bounded batches and profiles not in a batch receive fair seeded byes across the full rotation. This lets a 12-profile cohort fit under a 3-table cap and costs some delay before every profile meets every other profile.
+- Ruling: the pure rating API consumes explicit profile-level observations and a required versioned transform; Task 4 owns the bridge-specific conversion from partnership/duplicate raw results into those observations. This keeps Glicko independent of D1 and prevents Task 1 from locking an uncalibrated partnership formula; costs an additional integration contract to define in Task 4.
+- Ruling: keep Task 1 rotation domain capable of a single four-profile table (the plan's minimum); Task 3 must satisfy the existing duplicate engine's two-table minimum by generating a distinct mirrored seat assignment in a second table, which may reuse profile versions across tables. This preserves support for small rosters and costs repeated bot workloads per duplicate board.
+
+## Task 1 complete
+- Implementation commit: `6585e64b4599c93a189c2d8aa381b2c6307acf06`.
+- Independent review: Approved. 37 focused tests and 2,148 workspace tests passed; package build/typecheck and lint passed.
+- Updated plan signatures to include `maxTables`, the required versioned score transform, the result wrapper, and the small-cohort mirror requirement. Task 2 will build the benchmark workspace package before server tests.
+- Task 1: minor (deferred): baseline Workerd teardown diagnostic and ESLint module-format warning appear despite successful exit; recheck during final release validation.
+- Task 3 must persist rotation version/seed/index/assignments and mirror a single-table rotation for small cohorts. Task 4 must attribute profile observations from partnership results, count underlying boards once, and provide calibrated directed observations.

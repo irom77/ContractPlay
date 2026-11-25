@@ -47,8 +47,8 @@
 ## Interfaces
 
 - `BenchmarkProfileId` is a stable string. `BenchmarkProfileSnapshot` contains `{ profileId, version, skill, aggression, biddingStyle, engineVersion }` and is immutable once referenced by a job.
-- `createRotation(profiles, seed, roundIndex)` returns table seat assignments with exactly four profile snapshots per table and deterministic compass-seat/partner rotation.
-- `ratingPeriodUpdate(ratings, periodResults, algorithmVersion)` returns immutable rating snapshots `{ rating, deviation, volatility, eligible, sampleBoards }`; raw IMP and matchpoint results remain stored independently.
+- `createRotation(profiles, seed, roundIndex, maxTables)` returns table seat assignments with exactly four profile snapshots per table and deterministic compass-seat/partner rotation; `maxTables` is validated against the existing 2–8 session limit. Four-to-seven-profile cohorts yield one rotation table, so the coordinator mirrors it for duplicate execution's two-table minimum.
+- `ratingPeriodUpdate(ratings, periodResults, algorithmVersion, transform)` returns a versioned result `{ algorithmVersion, scoreTransformVersion, ratings, observations }`; the transform must validate and map raw scores to fractional results. Raw IMP and matchpoint results remain stored independently.
 - `BenchmarkStore` owns roster/cohort/job/result/rating D1 operations. `BenchmarkCoordinator` owns claiming one bounded unit of work and scheduling the next alarm.
 - Admin routes accept profile/cohort/job configuration only after server-side admin authorization. Public routes return roster status, leaderboard snapshots, and completed replay data with the same hidden-information policy as existing tables.
 
@@ -66,14 +66,14 @@
 - Consumes: existing `SkillLevel`, `Aggression`, `TableStyle`, and `Seat` types from core/protocol.
 - Produces: the `BenchmarkProfileSnapshot`, `createRotation`, score aggregation, provisional eligibility, and Glicko-2 rating-period APIs specified above.
 
-- [ ] **Step 1: Write profile identity tests** covering stable profile IDs, immutable version snapshots, and active/retired roster eligibility.
-- [ ] **Step 2: Run the focused package tests** with the workspace's existing Vitest setup and confirm the expected missing-module failures.
-- [ ] **Step 3: Implement platform-neutral profile types and validation** in `profiles.ts`; built-in skill/aggression combinations receive stable IDs, while a changed strategy version receives a distinct identity.
-- [ ] **Step 4: Write deterministic rotation tests** asserting four unique seats per table, reproducibility for a seed, and balanced seat/partner exposure across a complete rotation cycle.
-- [ ] **Step 5: Implement bounded deterministic rotation generation** in `rotation.ts`; reject fewer than four profiles and assignments that exceed configured table limits.
-- [ ] **Step 6: Write rating tests** using published Glicko-2 reference cases plus project cases for initial `{rating: 1500, deviation: 350, volatility: 0.06}`, no-result periods, provisional profiles, and eligibility only at `sampleBoards >= 20 && deviation < 100`.
-- [ ] **Step 7: Implement versioned Glicko-2 rating periods** in `ratings.ts`; require an explicit validated transform from raw session score to fractional score and preserve raw metrics alongside rating output.
-- [ ] **Step 8: Build and test the package** with `pnpm --filter @contractplay/benchmark build` and `pnpm --filter @contractplay/benchmark test`.
+- [x] **Step 1: Write profile identity tests** covering stable profile IDs, immutable version snapshots, and active/retired roster eligibility.
+- [x] **Step 2: Run the focused package tests** with the workspace's existing Vitest setup and confirm the expected missing-module failures.
+- [x] **Step 3: Implement platform-neutral profile types and validation** in `profiles.ts`; built-in skill/aggression combinations receive stable IDs, while a changed strategy version receives a distinct identity.
+- [x] **Step 4: Write deterministic rotation tests** asserting four unique seats per table, reproducibility for a seed, and balanced seat/partner exposure across a complete rotation cycle.
+- [x] **Step 5: Implement bounded deterministic rotation generation** in `rotation.ts`; reject fewer than four profiles and assignments that exceed configured table limits.
+- [x] **Step 6: Write rating tests** using published Glicko-2 reference cases plus project cases for initial `{rating: 1500, deviation: 350, volatility: 0.06}`, no-result periods, provisional profiles, and eligibility only at `sampleBoards >= 20 && deviation < 100`.
+- [x] **Step 7: Implement versioned Glicko-2 rating periods** in `ratings.ts`; require an explicit validated transform from raw session score to fractional score and preserve raw metrics alongside rating output.
+- [x] **Step 8: Build and test the package** with `pnpm --filter @contractplay/benchmark build` and `pnpm --filter @contractplay/benchmark test`.
 
 ### Task 2: Benchmark D1 schema, repository, and protected admin boundary
 
@@ -92,7 +92,7 @@
 - [ ] **Step 4: Add server-side admin authorization** for benchmark routes using authenticated accounts and a deployment-configured account-ID allowlist; return 401 for unauthenticated requests and 403 for signed-in non-admins. Never accept an admin identity from request data.
 - [ ] **Step 5: Implement validated route handlers** for profile/cohort CRUD, bounded PBN upload parsing (board facts only), job start/pause/resume/cancel, and public leaderboard/result reads.
 - [ ] **Step 6: Register environment types and route dispatch** without changing the existing table/session public API.
-- [ ] **Step 7: Run focused server tests** with `pnpm --filter @contractplay/server test -- benchmark-store benchmark-routes` and confirm invalid input, unauthorized calls, and retries are handled as specified.
+- [ ] **Step 7: Build the benchmark dependency and run focused server tests** with `pnpm --filter @contractplay/benchmark build` and `pnpm --filter @contractplay/server test -- benchmark-store benchmark-routes`; ensure a clean checkout builds the domain package before server tests and confirm invalid input, unauthorized calls, and retries are handled as specified.
 
 ### Task 3: Scheduled bounded coordinator and bot-only duplicate execution
 
