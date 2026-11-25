@@ -47,6 +47,10 @@ describe("parseClientMessage", () => {
     expect(parse({ type: "sit" })).toBeUndefined();
     expect(parse({ type: "sit", seat: 3 })).toBeUndefined();
     expect(parse({ type: "setBot", seat: "east", skill: "godlike" })).toBeUndefined();
+    expect(parse({ type: "setBot", seat: "east", skill: "beginner", character: "nobody" })).toBeUndefined();
+    expect(parse({ type: "setBot", seat: "east", skill: "beginner", character: 7 })).toBeUndefined();
+    // A named bot plays at its own skill, whatever skill was sent.
+    expect(parse({ type: "setBot", seat: "east", skill: "beginner", character: "kim" })).toEqual({ type: "setBot", seat: "east", skill: "expert", character: "kim" });
     expect(parse({ type: "hello", version: "1", secret, name: "Ann" })).toBeUndefined();
     expect(parse({ type: "hello", version: 1, secret, name: 7 })).toBeUndefined();
     expect(parse({ type: "act", handNumber: "1", revision: 1, action: { type: "bid", seat: "north", bid: "pass" } })).toBeUndefined();

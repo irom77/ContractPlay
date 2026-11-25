@@ -151,9 +151,25 @@ describe("OnlineTable seating", () => {
     expect(screen.queryAllByRole("button", { name: "Sit here" })).toHaveLength(0);
     expect(screen.getAllByRole("button", { name: "Add bot" })).toHaveLength(3);
     const west = within(screen.getByRole("group", { name: "West seat" }));
-    await user.selectOptions(west.getByLabelText("Bot skill"), "expert");
+    await user.selectOptions(west.getByLabelText("Bot"), "expert");
     await user.click(west.getByRole("button", { name: "Add bot" }));
-    expect(service.sent).toEqual([{ type: "setBot", seat: "west", skill: "expert" }]);
+    const east = within(screen.getByRole("group", { name: "East seat" }));
+    await user.selectOptions(east.getByLabelText("Bot"), "bea");
+    await user.click(east.getByRole("button", { name: "Add bot" }));
+    expect(service.sent).toEqual([{ type: "setBot", seat: "west", skill: "expert" }, { type: "setBot", seat: "east", skill: "advanced", character: "bea" }]);
+  });
+
+  it("names a named bot at its seat and lets it be swapped for another or for a table bot", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const bea = { kind: "bot" as const, skill: "advanced" as const, character: "bea" };
+    service.push(tableView({ yourSeat: "north", host: "north", seats: { north: human("Bob"), east: bea, south: bot, west: bot } }));
+    const east = within(screen.getByRole("group", { name: "East seat" }));
+    expect(east.getByText("Bold Bea · Advanced · Aggressive", { selector: "strong" })).toBeTruthy();
+    expect((east.getByLabelText("Bot") as HTMLSelectElement).value).toBe("bea");
+    await user.selectOptions(east.getByLabelText("Bot"), "cora");
+    await user.selectOptions(east.getByLabelText("Bot"), "expert");
+    expect(service.sent).toEqual([{ type: "setBot", seat: "east", skill: "intermediate", character: "cora" }, { type: "setBot", seat: "east", skill: "expert" }]);
   });
 
   it("offers Remove bot, a skill change, Leave seat, and Free seat as allowed", async () => {
@@ -162,7 +178,7 @@ describe("OnlineTable seating", () => {
     service.push(tableView({ yourSeat: "north", seats: { north: human("Bob"), east: bot, south: human("Ann", { away: true }), west: human("Cy") } }));
     const east = within(screen.getByRole("group", { name: "East seat" }));
     await user.click(east.getByRole("button", { name: "Remove bot" }));
-    await user.selectOptions(east.getByLabelText("Bot skill"), "beginner");
+    await user.selectOptions(east.getByLabelText("Bot"), "beginner");
     await user.click(within(screen.getByRole("group", { name: "South seat" })).getByRole("button", { name: "Free seat" }));
     expect(within(screen.getByRole("group", { name: "West seat" })).queryByRole("button", { name: "Free seat" })).toBeNull();
     await user.click(within(screen.getByRole("group", { name: "North seat" })).getByRole("button", { name: "Leave seat" }));
@@ -422,6 +438,13 @@ describe("OnlineTable play", () => {
     expect(screen.getByText("away")).toBeTruthy();
     expect(screen.getByText("bot playing for Cy")).toBeTruthy();
     expect(screen.getByText("Bot")).toBeTruthy();
+  });
+
+  it("shows a named bot by its name beside its seat", () => {
+    const service = setup();
+    service.push(inHand(newGame(), ["north"], { seats: { north: human("Bob"), east: { kind: "bot", skill: "expert", character: "dex" }, south: bot, west: bot } }));
+    expect(document.querySelector(".seat-east .online-seat-name")?.textContent).toBe("Daring Dex");
+    expect(document.querySelector(".seat-west .online-seat-name")?.textContent).toBe("Bot");
   });
 
   it("holds a completed trick for two seconds", () => {

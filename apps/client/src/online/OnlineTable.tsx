@@ -15,7 +15,7 @@ import { useDealAnimation } from "../table/DealAnimation.js";
 import { ClaimPanel } from "../table/ClaimPanel.js";
 import { DraggableBanner } from "../table/DraggableBanner.js";
 import { handsOnCard, playerSideNames, Scorecard } from "../table/Scorecard.js";
-import { cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
+import { botName, cardLabel, claimRejectedText, compactCallLabel, pendingClaimText, isCallAvailable, partnerOf, samePartnership, seatNames, seats as seatOrder } from "../table/labels.js";
 import { connectTable as defaultConnect, type ConnectionStatus, type TableConnection } from "./connection.js";
 import { loadIdentity, type Identity } from "./identity.js";
 import { currentAccount, type AccountSession } from "./auth.js";
@@ -440,7 +440,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     ? [{ id: "rubber", label: "Scores", title: "The rubber scorecard: above and below the line, games, totals, and the last hand's points", onSelect: () => setRubberShown(true) }]
     : [];
   // The scorecard heads each column with the partnership's players; a passed-out hand just ended scores nothing.
-  const sideNames = playerSideNames((seat) => { const info = view.seats[seat]; return info.kind === "human" ? info.name : info.kind === "bot" ? "Bot" : undefined; });
+  const sideNames = playerSideNames((seat) => { const info = view.seats[seat]; return info.kind === "human" ? info.name : info.kind === "bot" ? botName(info) : undefined; });
   const cardHands = rubberSummary ? handsOnCard(view.rubber ?? emptyRubber(), rubberSummary) : [];
   const justPassedOut = !view.handInProgress && view.game?.phase === "passed-out";
   const scorecard = (actions?: React.ReactNode) => rubberSummary
@@ -677,7 +677,7 @@ function botSeatsOf(seats: Readonly<Record<Seat, SeatInfo>>): Seat[] {
 function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatInfo; isHost: boolean; onHandToBot: (() => void) | undefined }) {
   if (info.kind === "empty") return null;
   return <span className="online-seat-label">
-    <span className="online-seat-name">{info.kind === "bot" ? "Bot" : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name}</span>
+    <span className="online-seat-name">{info.kind === "bot" ? botName(info) : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name}</span>
     {info.kind === "human" && info.autoPlay ? <span className="online-badge">auto play</span> : null}
     {info.kind === "human" && info.away ? <span className="online-badge">away</span> : null}
     {isHost ? <span className="online-badge">host</span> : null}

@@ -5,7 +5,8 @@ import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@co
 export type PlayerId = string;
 export type SeatState =
   | { kind: "empty" }
-  | { kind: "bot"; skill: SkillLevel }
+  /** `character`: a named bot, playing at its own skill and aggressiveness rather than the table's. */
+  | { kind: "bot"; skill: SkillLevel; character?: string }
   | { kind: "human"; player: PlayerId; name: string; since: number; standIn?: SkillLevel;
       /** The stand-in was asked for by the player (Auto play) and lasts only until the hand ends. */
       autoPlay?: true };

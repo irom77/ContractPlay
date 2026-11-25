@@ -1,5 +1,5 @@
-import { applyAction, createDeck, createGameState, deal as dealCards, emptyRubber, nextRubberDeal, playContextFor, recordRubberHand, rewindTo, SEATS, shuffle } from "@contractplay/core";
-import type { GameAction, GameState, Seat, SkillLevel, Vulnerability } from "@contractplay/core";
+import { applyAction, botCharacter, createDeck, createGameState, deal as dealCards, emptyRubber, nextRubberDeal, playContextFor, recordRubberHand, rewindTo, SEATS, shuffle } from "@contractplay/core";
+import type { Aggression, GameAction, GameState, Seat, SkillLevel, Vulnerability } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
   BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, scoringOf, seatOf, withoutAutoPlay, withoutClaim, withoutGame, withoutKeys,
@@ -171,6 +171,13 @@ function botSkill(state: TableState, seat: Seat): SkillLevel | undefined {
   return s.kind === "human" ? s.standIn : undefined;
 }
 
+/** How the bot deciding for a seat bids and plays: a named bot's own aggressiveness, otherwise the table's. */
+function botAggression(state: TableState, seat: Seat): Aggression {
+  const s = state.seats[deciderOf(state, seat)];
+  const character = s.kind === "bot" ? botCharacter(s.character) : undefined;
+  return character?.aggression ?? state.aggression ?? "normal";
+}
+
 export function botToAct(state: TableState): Seat | undefined {
   const game = state.game;
   if (!game || (game.phase !== "auction" && game.phase !== "play") || state.pendingClaim) return undefined;
@@ -182,7 +189,7 @@ export async function chooseBotAction(state: TableState): Promise<GameAction | u
   const game = state.game;
   if (seat === undefined || !game) return undefined;
   const skill = botSkill(state, seat)!;
-  const bot = createBot({ skill, biddingStyle: state.style, aggression: state.aggression ?? "normal" });
+  const bot = createBot({ skill, biddingStyle: state.style, aggression: botAggression(state, seat) });
   if (game.phase === "auction") return { type: "bid", seat, bid: await bot.chooseBid(game.hands[seat], game.auction, seat) };
   return { type: "play", seat, card: await bot.chooseCard(playContextFor(game, seat)) };
 }

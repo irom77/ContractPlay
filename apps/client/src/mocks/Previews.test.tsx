@@ -26,6 +26,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const user = userEvent.setup();
     await user.click(tables);
     expect(screen.getByText("SAYC · Rubber bridge · Conservative bots")).toBeTruthy();
+    expect(screen.getByText("Careful Cora")).toBeTruthy();
     await user.click(playToggle);
     const play = screen.getByRole("form", { name: "Play" });
     expect(within(play).getByLabelText("Bot aggressiveness")).toBeTruthy();
@@ -35,6 +36,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   seating: () => {
     expect(within(screen.getByRole("group", { name: "West seat" })).getByRole("button", { name: "Add bot" })).toBeTruthy();
+    const east = within(screen.getByRole("group", { name: "East seat" }));
+    expect(east.getByText("Bold Bea · Advanced · Aggressive", { selector: "strong" })).toBeTruthy();
+    expect((east.getByLabelText("Bot") as HTMLSelectElement).value).toBe("bea");
     expect(screen.getByRole("button", { name: "Deal" })).toBeTruthy();
   },
   auction: () => {

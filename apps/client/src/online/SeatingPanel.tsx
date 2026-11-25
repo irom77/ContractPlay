@@ -2,11 +2,11 @@ import { useState } from "react";
 import type { RubberHand, RubberSummary, Seat, SkillLevel } from "@contractplay/core";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import { ContractOutcome } from "../table/ResultSummary.js";
-import { claimText, contractText, seatNames, seats } from "../table/labels.js";
+import { botCharacter } from "@contractplay/core";
+import { aggressionNames, botName, claimText, contractText, onlineBotOptions, seatNames, seats, setBotFor, skillNames } from "../table/labels.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
-const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
 
 /**
  * Deals the next hand, or after a finished one, confirms the viewer is ready for it: the server deals once every
@@ -40,27 +40,26 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecar
   onShowResult?: (() => void) | undefined;
   send(message: Outgoing): void;
 }) {
-  const [botSkills, setBotSkills] = useState<Record<Seat, SkillLevel>>({ north: "intermediate", east: "intermediate", south: "intermediate", west: "intermediate" });
+  // Each open seat's bot choice: a skill level for a table bot, or a named bot's id.
+  const [botChoices, setBotChoices] = useState<Record<Seat, string>>({ north: "intermediate", east: "intermediate", south: "intermediate", west: "intermediate" });
   const yourSeat = view.yourSeat;
   const betweenHands = !view.handInProgress;
-  const skillSelect = (value: SkillLevel, onChange: (skill: SkillLevel) => void) =>
-    <select aria-label="Bot skill" value={value} onChange={(event) => onChange(event.target.value as SkillLevel)}>
-      {(Object.keys(skillNames) as SkillLevel[]).map((skill) => <option key={skill} value={skill}>{skillNames[skill]}</option>)}
-    </select>;
+  const botSelect = (value: string, onChange: (choice: string) => void) =>
+    <select aria-label="Bot" value={value} onChange={(event) => onChange(event.target.value)}>{onlineBotOptions}</select>;
 
   const controls = (seat: Seat, info: SeatInfo): React.ReactNode => {
     if (!betweenHands) return null;
     if (info.kind === "empty") {
       if (!yourSeat) return <button className="primary-button" type="button" onClick={() => send({ type: "sit", seat })}>Sit here</button>;
       return <>
-        {skillSelect(botSkills[seat], (skill) => setBotSkills((chosen) => ({ ...chosen, [seat]: skill })))}
-        <button className="secondary-button" type="button" onClick={() => send({ type: "setBot", seat, skill: botSkills[seat] })}>Add bot</button>
+        {botSelect(botChoices[seat], (choice) => setBotChoices((chosen) => ({ ...chosen, [seat]: choice })))}
+        <button className="secondary-button" type="button" onClick={() => send(setBotFor(seat, botChoices[seat]))}>Add bot</button>
       </>;
     }
     if (info.kind === "bot") {
       if (!yourSeat) return null;
       return <>
-        {skillSelect(info.skill, (skill) => send({ type: "setBot", seat, skill }))}
+        {botSelect(botCharacter(info.character)?.id ?? info.skill, (choice) => send(setBotFor(seat, choice)))}
         <button className="secondary-button" type="button" onClick={() => send({ type: "clearSeat", seat })}>Remove bot</button>
       </>;
     }
@@ -94,7 +93,7 @@ export function SeatingPanel({ view, totals, rubberSummary, rubberHand, scorecar
           <div className="online-seats">
             {seats.map((seat) => {
               const info = view.seats[seat];
-              const occupant = info.kind === "empty" ? "Open" : info.kind === "bot" ? `Bot · ${skillNames[info.skill]}` : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name;
+              const occupant = info.kind === "empty" ? "Open" : info.kind === "bot" ? botOccupant(info) : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name;
               return <div key={seat} role="group" aria-label={`${seatNames[seat]} seat`} className={`online-seat online-seat-${seat}`}>
                 <div className="online-seat-head">
                   <span className="quiet-copy">{seatNames[seat]}</span>
@@ -130,4 +129,10 @@ export function HandResultSummary({ game, rubberHand }: { game: PublicGame; rubb
     {game.claim ? <p className="claim-line">{claimText(game.claim, contract.declarer, 13 - game.completedTricks.length)}</p> : null}
     {rubberHand === undefined ? <p className="hand-points-line">{`${score.score >= 0 ? "NS" : "EW"} +${Math.abs(score.score)}`}</p> : null}
   </>;
+}
+
+/** "Bot · Advanced" for a table bot; "Bold Bea · Advanced · Aggressive" for a named one. */
+function botOccupant(info: { skill: SkillLevel; character?: string | undefined }): string {
+  const character = botCharacter(info.character);
+  return character ? `${character.name} · ${skillNames[character.skill]} · ${aggressionNames[character.aggression]}` : `${botName(info)} · ${skillNames[info.skill]}`;
 }

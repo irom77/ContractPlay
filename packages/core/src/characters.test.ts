@@ -1,4 +1,4 @@
-import { AGGRESSIONS } from "@contractplay/core";
+import { AGGRESSIONS } from "./bots.js";
 import { describe, expect, it } from "vitest";
 import { BOT_CHARACTERS, botCharacter } from "./characters.js";
 

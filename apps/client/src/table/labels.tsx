@@ -1,9 +1,26 @@
-import { AGGRESSIONS, type Aggression, type Bid, type Card, type Contract, type Seat, type Suit } from "@contractplay/core";
+import { AGGRESSIONS, BOT_CHARACTERS, botCharacter, type Aggression, type Bid, type Card, type Contract, type Seat, type SkillLevel, type Suit } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import type { ReactElement } from "react";
 
 export const seatNames: Record<Seat, string> = { north: "North", east: "East", south: "South", west: "West" };
 export const aggressionNames: Record<Aggression, string> = { conservative: "Conservative", normal: "Normal", aggressive: "Aggressive" };
+export const skillNames: Record<SkillLevel, string> = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced", expert: "Expert" };
+/** A bot seat's name: its character's name for a named bot, otherwise "Bot". */
+export const botName = (info: { character?: string | undefined }): string => botCharacter(info.character)?.name ?? "Bot";
+/**
+ * The choices for an online table's bot seat: a plain bot of each skill, playing at the table's aggressiveness, then the
+ * named bots at their own. Values are skill levels and character ids, which never collide.
+ */
+export const onlineBotOptions = <>
+  <optgroup label="Table bot">{(Object.keys(skillNames) as SkillLevel[]).map((skill) => <option key={skill} value={skill}>{skillNames[skill]}</option>)}</optgroup>
+  <optgroup label="Named bots">{BOT_CHARACTERS.map((character) =>
+    <option key={character.id} value={character.id}>{character.name} · {skillNames[character.skill]} · {aggressionNames[character.aggression]}</option>)}</optgroup>
+</>;
+/** The setBot message for a choice from `onlineBotOptions`. */
+export function setBotFor(seat: Seat, choice: string): { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string } {
+  const character = botCharacter(choice);
+  return character ? { type: "setBot", seat, skill: character.skill, character: character.id } : { type: "setBot", seat, skill: choice as SkillLevel };
+}
 /** The options for a bot aggressiveness select, Conservative to Aggressive. */
 export const aggressionOptions = AGGRESSIONS.map((value) => <option key={value} value={value}>{aggressionNames[value]}</option>);
 /** The review/result line for a claim, counting the claimer's tricks among the tricks that remained. */

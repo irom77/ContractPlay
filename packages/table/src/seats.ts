@@ -1,5 +1,5 @@
 import type { Seat, SkillLevel } from "@contractplay/core";
-import { SEATS } from "@contractplay/core";
+import { botCharacter, SEATS } from "@contractplay/core";
 import { accept, betweenHands, hostAfter, refuse, seatOf, without, withoutClaim, withoutGame, withoutHost, type Outcome, type PlayerId, type SeatState, type TableState } from "./state.js";
 
 function withSeat(state: TableState, seat: Seat, value: SeatState): TableState["seats"] {
@@ -28,11 +28,14 @@ export function leave(state: TableState, player: PlayerId): Outcome {
   return vacate(state, seat, player, { kind: "bot", skill: "intermediate" });
 }
 
-export function setBot(state: TableState, player: PlayerId, seat: Seat, skill: SkillLevel): Outcome {
+/** Seats a bot of this skill, or with `character` that named bot at its own skill. */
+export function setBot(state: TableState, player: PlayerId, seat: Seat, skill: SkillLevel, character?: string): Outcome {
   if (!seatOf(state, player)) return refuse(state, "not-seated");
   if (!betweenHands(state)) return refuse(state, "hand-in-progress");
   if (state.seats[seat].kind === "human") return refuse(state, "not-allowed");
-  return accept(state, { seats: withSeat(state, seat, { kind: "bot", skill }) });
+  const named = character === undefined ? undefined : botCharacter(character);
+  if (character !== undefined && !named) return refuse(state, "not-allowed");
+  return accept(state, { seats: withSeat(state, seat, named ? { kind: "bot", skill: named.skill, character: named.id } : { kind: "bot", skill }) });
 }
 
 export function clearSeat(state: TableState, player: PlayerId, seat: Seat): Outcome {

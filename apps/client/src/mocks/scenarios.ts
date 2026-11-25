@@ -43,8 +43,8 @@ function run(state: TableState, event: TableEvent): TableState {
   return outcome.state;
 }
 
-/** A table with these humans seated in this order (the first is host), bots in `bots`, and other seats open. */
-function table(name: string, people: People, bots: readonly Seat[] = []): TableState {
+/** A table with these humans seated in this order (the first is host), bots in `bots`, named bots in `named`, and other seats open. */
+function table(name: string, people: People, bots: readonly Seat[] = [], named: Partial<Record<Seat, string>> = {}): TableState {
   let state = createTable({ id: name.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 6), name, style: "SAYC", listed: true, at: AT });
   for (const [seat, person] of Object.entries(people) as [Seat, string][]) {
     state = run(state, { type: "connect", player: player(seat), name: person, at: AT });
@@ -52,6 +52,9 @@ function table(name: string, people: People, bots: readonly Seat[] = []): TableS
   }
   const host = player(Object.keys(people)[0] as Seat);
   for (const seat of bots) state = run(state, { type: "message", player: host, message: { type: "setBot", seat, skill: "intermediate" }, at: AT });
+  for (const [seat, character] of Object.entries(named) as [Seat, string][]) {
+    state = run(state, { type: "message", player: host, message: { type: "setBot", seat, skill: "intermediate", character }, at: AT });
+  }
   return state;
 }
 
@@ -143,18 +146,18 @@ const others = (seat: Seat) => SEATS.filter((s) => s !== seat);
 
 const onlineScreens: readonly PreviewScreen[] = [
   {
-    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats and conservative bots) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked. Renaming here changes only the preview.",
+    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats, conservative bots, and Careful Cora named at East) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked. Renaming here changes only the preview.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
-      const open = { ...table("Beginners welcome", { west: "Chris" }, ["east"]), aggression: "conservative" as const };
+      const open = { ...table("Beginners welcome", { west: "Chris" }, [], { east: "cora" }), aggression: "conservative" as const };
       return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(playing), summaryOf(open)] };
     }
   },
   {
-    id: "seating", title: "Seating", detail: "You host at South with a human partner and a bot; West is still open, so Deal waits.",
+    id: "seating", title: "Seating", detail: "You host at South with a human partner and Bold Bea, a named bot, at East; each bot seat offers a table bot of any skill or one of the twelve named bots. West is still open, so Deal waits.",
     build: () => {
       const people: People = { south: "Alex", north: "Maria" };
-      return view(table("Friday club", people, ["east"]), "south", people);
+      return view(table("Friday club", people, [], { east: "bea" }), "south", people);
     }
   },
   {

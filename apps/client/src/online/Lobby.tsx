@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { loadSoloData, type StorageLike } from "@contractplay/persistence";
 import type { Aggression } from "@contractplay/core";
 import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
-import { aggressionNames, aggressionOptions, seatNames, seats } from "../table/labels.js";
+import { aggressionNames, aggressionOptions, botName, seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
 import { castHasCustom, loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { BotCastFields } from "../table/BotCastFields.js";
@@ -58,7 +58,7 @@ function createErrorText(error: string): string {
 }
 
 function seatLabel(seat: SeatInfo): string {
-  return seat.kind === "human" ? seat.name : seat.kind === "bot" ? "Bot" : "Open";
+  return seat.kind === "human" ? seat.name : seat.kind === "bot" ? botName(seat) : "Open";
 }
 
 const defaultAuth = { currentAccount, requestMagicLink, signOut, updateDisplayName, syncHistory: syncOnlineHands };

@@ -1,4 +1,4 @@
-import type { Aggression, SkillLevel } from "@contractplay/core";
+import type { Aggression, SkillLevel } from "./bots.js";
 
 /**
  * The bot cast: one named character for each skill level and temperament, so players can get to know them and pick

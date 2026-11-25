@@ -19,7 +19,8 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [x] A cast of twelve named solo bots (one per skill level and temperament) to pick as partner and each opponent, named at their seats. Plan: `docs/superpowers/plans/2026-11-25-named-bots.md`.
 - [x] Results with each named partner: hands played, average score a hand, and contracts made when declaring, beside the partner pick and under Your partners in Recent hands. Plan: `docs/superpowers/plans/2026-11-25-partner-results.md`.
 - [x] Results against each named opponent: hands against and your average score a hand, beside the opponent picks and under Your opponents in Recent hands. Plan: `docs/superpowers/plans/2026-11-25-partner-results.md`.
-- [ ] Named bots next: named bots at online tables (per-seat aggressiveness on the service); players' own saved custom characters, on the account so they follow a player across devices.
+- [x] Named bots at online tables: any bot seat can be a named bot, playing at its own skill and aggressiveness; names on the seating screen, at the table, on the scorecard, and in the lobby. Plan: `docs/superpowers/plans/2026-11-25-online-named-bots.md`.
+- [ ] Named bots next: results with and against named bots at online tables; players' own saved characters (per-seat aggressiveness on the service); players' own saved custom characters, on the account so they follow a player across devices.
 
 ## Online multiplayer
 

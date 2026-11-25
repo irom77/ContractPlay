@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Seat } from "@contractplay/core";
 import type { SeatInfo, TableSummary } from "@contractplay/protocol";
-import { seatNames, seats } from "../table/labels.js";
+import { botName, seatNames, seats } from "../table/labels.js";
 
 type AdminTable = TableSummary & { listed: boolean };
 
 function seatDescription(seat: SeatInfo): string {
   if (seat.kind === "empty") return "Open";
-  if (seat.kind === "bot") return `Bot · ${seat.skill}`;
+  if (seat.kind === "bot") return `${botName(seat)} · ${seat.skill}`;
   return `${seat.name}${seat.away ? " · away" : ""}`;
 }
 

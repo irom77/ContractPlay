@@ -1,4 +1,4 @@
-import { RANKS, SEATS, SUITS } from "@contractplay/core";
+import { botCharacter, RANKS, SEATS, SUITS } from "@contractplay/core";
 import type { Aggression, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
 export const PROTOCOL_VERSION = 8;
@@ -12,7 +12,8 @@ export const TABLE_SCORINGS: readonly TableScoring[] = ["rubber", "duplicate"];
 
 export type SeatInfo =
   | { kind: "empty" }
-  | { kind: "bot"; skill: SkillLevel }
+  /** `character`: a named bot from the cast, playing at its own skill and aggressiveness rather than the table's. */
+  | { kind: "bot"; skill: SkillLevel; character?: string }
   | { kind: "human"; name: string; away: boolean; standIn?: SkillLevel;
     /** The player asked a bot to play their cards for the rest of this hand; they get the seat back when it ends. */
     autoPlay?: true };
@@ -61,7 +62,8 @@ export type ClientMessage =
   // expectedPlayerId only guards a captured account against a changed cookie; the server verifies identity.
   | { type: "hello"; version: number; secret?: string; expectedPlayerId?: string; name: string }
   | { type: "sit"; seat: Seat } | { type: "leave" } | { type: "refresh" }
-  | { type: "setBot"; seat: Seat; skill: SkillLevel }
+  /** With `character`, the seat gets that named bot and its skill (the sent `skill` is ignored). */
+  | { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string }
   | { type: "clearSeat"; seat: Seat }
   | { type: "deal" }
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
@@ -141,7 +143,10 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
     }
     case "setBot": {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
-      return seat && skill ? { type: "setBot", seat, skill } : undefined;
+      if (!seat || !skill) return undefined;
+      if (data.character === undefined) return { type: "setBot", seat, skill };
+      const character = typeof data.character === "string" ? botCharacter(data.character) : undefined;
+      return character ? { type: "setBot", seat, skill: character.skill, character: character.id } : undefined;
     }
     case "leave": case "refresh": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": case "withdrawClaim": return { type: data.type };
     case "claim": {
