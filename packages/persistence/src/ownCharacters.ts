@@ -1,4 +1,5 @@
-import { cleanName, TRAIT_LEVELS, TRAIT_NAMES, type BotTraits, type SkillLevel } from "@contractplay/core";
+import { cleanName, isBotTraits, isOwnCharacterId, MAX_CHARACTER_NAME, TRAIT_LEVELS, TRAIT_NAMES, type BotTraits, type SkillLevel } from "@contractplay/core";
+export { isBotTraits, isOwnCharacterId, MAX_CHARACTER_NAME } from "@contractplay/core";
 
 /**
  * A player's own bot character: a name, a description, a skill, and a setting on each trait dial. Kept in the browser and,
@@ -22,7 +23,6 @@ export type OwnCharacter = Readonly<{
 
 /** The most own characters a player keeps. */
 export const MAX_OWN_CHARACTERS = 12;
-export const MAX_CHARACTER_NAME = 24;
 export const MAX_CHARACTER_BLURB = 80;
 /** Characters and tombstones kept per player. */
 export const MAX_STORED_CHARACTERS = 100;
@@ -30,15 +30,6 @@ export const MAX_STORED_CHARACTERS = 100;
 const SKILLS: readonly unknown[] = ["beginner", "intermediate", "advanced", "expert"];
 const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
 const time = (value: unknown): boolean => Number.isSafeInteger(value) && (value as number) >= 0;
-
-export const isOwnCharacterId = (value: unknown): value is string => typeof value === "string" && /^own-[A-Za-z0-9_-]{6,40}$/.test(value);
-
-/** Exactly the six dials, each a known setting. */
-export function isBotTraits(value: unknown): value is BotTraits {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const keys = Object.keys(value);
-  return keys.length === TRAIT_NAMES.length && TRAIT_NAMES.every((name) => (TRAIT_LEVELS as readonly unknown[]).includes((value as Record<string, unknown>)[name]));
-}
 
 export function isOwnCharacter(value: unknown): value is OwnCharacter {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;

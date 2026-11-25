@@ -1,6 +1,6 @@
-import { botCharacter, cleanName, RANKS, SEATS, SUITS } from "@contractplay/core";
+import { botCharacter, cleanName, isBotTraits, isOwnCharacterId, MAX_CHARACTER_NAME, RANKS, SEATS, SUITS } from "@contractplay/core";
 export { cleanName } from "@contractplay/core";
-import type { Aggression, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
+import type { Aggression, BotTraits, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
 export const PROTOCOL_VERSION = 8;
 export const MAX_MESSAGE_BYTES = 4096;
@@ -14,7 +14,7 @@ export const TABLE_SCORINGS: readonly TableScoring[] = ["rubber", "duplicate"];
 export type SeatInfo =
   | { kind: "empty" }
   /** `character`: a named bot from the cast, playing at its own skill and aggressiveness rather than the table's. */
-  | { kind: "bot"; skill: SkillLevel; character?: string }
+  | { kind: "bot"; skill: SkillLevel; character?: string; custom?: { id?: string; name: string; traits: BotTraits } }
   | { kind: "human"; name: string; away: boolean; standIn?: SkillLevel;
     /** The player asked a bot to play their cards for the rest of this hand; they get the seat back when it ends. */
     autoPlay?: true };
@@ -63,14 +63,16 @@ export type ClientMessage =
   // expectedPlayerId only guards a captured account against a changed cookie; the server verifies identity.
   | { type: "hello"; version: number; secret?: string; expectedPlayerId?: string; name: string }
   | { type: "sit"; seat: Seat } | { type: "leave" } | { type: "refresh" }
-  /** With `character`, the seat gets that named bot and its skill (the sent `skill` is ignored). */
-  | { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string }
+  /** With `character` or `custom`, the seat gets that bot and its skill (the sent `skill` is ignored). */
+  | { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string; custom?: CustomBot }
   | { type: "clearSeat"; seat: Seat }
   | { type: "deal" }
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
   | { type: "handToBot"; seat: Seat } | { type: "resume" } | { type: "autoPlay" }
   | { type: "takeBack" } | { type: "cancelHand" }
   | { type: "claim"; tricks: number } | { type: "answerClaim"; accept: boolean; claimId: number } | { type: "withdrawClaim" };
+
+export type CustomBot = { id: string; name: string; skill: SkillLevel; traits: BotTraits };
 
 export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "already-seated" | "not-allowed" | "hand-in-progress" | "not-ready" | "stale" | "not-your-turn" | "illegal";
 
@@ -130,6 +132,13 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
     case "setBot": {
       const seat = seatOf(data.seat), skill = skillOf(data.skill);
       if (!seat || !skill) return undefined;
+      if (data.custom !== undefined) {
+        if (data.character !== undefined || !isRecord(data.custom) || !isOwnCharacterId(data.custom.id)) return undefined;
+        const name = cleanName(data.custom.name, MAX_CHARACTER_NAME), customSkill = skillOf(data.custom.skill);
+        if (name === undefined || !customSkill || !isBotTraits(data.custom.traits)) return undefined;
+        const traits = Object.fromEntries(Object.entries(data.custom.traits)) as BotTraits;
+        return { type: "setBot", seat, skill: customSkill, custom: { id: data.custom.id, name, skill: customSkill, traits } };
+      }
       if (data.character === undefined) return { type: "setBot", seat, skill };
       const character = typeof data.character === "string" ? botCharacter(data.character) : undefined;
       return character ? { type: "setBot", seat, skill: character.skill, character: character.id } : undefined;

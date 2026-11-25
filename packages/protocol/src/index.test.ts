@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TRAIT_PRESETS } from "@contractplay/core";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, cleanName, parseClientMessage, type ClientMessage } from "./index.js";
 
 const secret = "a".repeat(32);
@@ -91,6 +92,31 @@ describe("parseClientMessage", () => {
     expect(new TextEncoder().encode(multi).length).toBeGreaterThan(MAX_MESSAGE_BYTES);
     expect(parseClientMessage(multi)).toBeUndefined();
     expect(parseClientMessage(pad("x".repeat(100)))).toEqual({ type: "leave" });
+  });
+});
+
+describe("setBot with your own character", () => {
+  const custom = { id: "own-abc123", name: "  Gentle   Gina ", skill: "advanced", traits: TRAIT_PRESETS.conservative };
+
+  it("parses one with a cleaned name and the character's skill", () => {
+    expect(parse({ type: "setBot", seat: "east", skill: "beginner", custom })).toEqual({
+      type: "setBot", seat: "east", skill: "advanced",
+      custom: { ...custom, name: "Gentle Gina" }
+    });
+  });
+
+  it("refuses invalid characters", () => {
+    const invalid = [
+      { ...custom, name: "x".repeat(25) },
+      { ...custom, name: "\u0000" },
+      { ...custom, traits: Object.fromEntries(Object.entries(TRAIT_PRESETS.normal).filter(([key]) => key !== "leads")) },
+      { ...custom, traits: { ...TRAIT_PRESETS.normal, extra: "standard" } },
+      { ...custom, traits: { ...TRAIT_PRESETS.normal, openings: "wild" } },
+      { ...custom, id: "bea" },
+      { ...custom, skill: "godlike" }
+    ];
+    for (const character of invalid) expect(parse({ type: "setBot", seat: "east", skill: "beginner", custom: character })).toBeUndefined();
+    expect(parse({ type: "setBot", seat: "east", skill: "beginner", character: "bold-bea", custom })).toBeUndefined();
   });
 });
 

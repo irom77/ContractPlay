@@ -9,3 +9,4 @@ export * from "./rubber.js";
 export * from "./field.js";
 export * from "./characters.js";
 export * from "./names.js";
+export * from "./ownCharacter.js";
