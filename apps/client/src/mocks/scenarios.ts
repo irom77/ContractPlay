@@ -415,7 +415,7 @@ export const soloScreens: readonly PreviewScreen[] = [
 
 const authScreens: readonly PreviewScreen[] = [
   {
-    id: "email-sign-in", title: "Email sign-in", detail: "The real sign-in form with a sample address; submitting in this preview never contacts the server.",
+    id: "email-sign-in", title: "Email sign-in", detail: "The real sign-in form with a sample address, and under it what ContractPlay is for; submitting in this preview never contacts the server.",
     build: () => ({ kind: "auth", sent: false })
   },
   {

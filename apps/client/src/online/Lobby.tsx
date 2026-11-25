@@ -111,7 +111,22 @@ export function EmailGate({ identity, onBack, initialEmail = "", initialSent = f
       </>}
       {onBack ? <button className="secondary-button" type="button" onClick={onBack}>Back</button> : null}
     </form>
+    <MissionPanel />
   </section></main>;
+}
+
+/** What ContractPlay is for, under the sign-in form: following a player's bridge over time, not only dealing the next hand. */
+function MissionPanel() {
+  return <section className="lobby-panel mission-panel" aria-label="Why ContractPlay">
+    <h2>Bridge that remembers every hand</h2>
+    <p className="mission-lead">ContractPlay is built to follow your game over time: every deal you play becomes something to measure yourself against.</p>
+    <ul className="mission-points">
+      <li><span className="mission-suit" aria-hidden="true">♠</span><span><strong>Replay real deals</strong> Every other hand can be a deal someone has played before. When it ends, see how your result compares in IMPs.</span></li>
+      <li><span className="mission-suit red" aria-hidden="true">♥</span><span><strong>Score against the field</strong> Play board sets and get your matchpoints, the other tables' results, and the double-dummy par.</span></li>
+      <li><span className="mission-suit red" aria-hidden="true">♦</span><span><strong>Every hand on record</strong> Finished hands are saved to your account on any device, ready to review call by call and card by card.</span></li>
+      <li><span className="mission-suit" aria-hidden="true">♣</span><span><strong>Practise with bots that explain</strong> Four skill levels, SAYC or 2/1, and hints that tell you what any call means.</span></li>
+    </ul>
+  </section>;
 }
 
 /** The online name form: saves the display name (keeping the device secret) and hands back the identity. */

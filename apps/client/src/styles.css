@@ -472,6 +472,14 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 /* ---------- Online lobby ---------- */
 .lobby { justify-content: flex-start; }
 .lobby-panel { display: grid; gap: 12px; width: min(560px, 100%); border-radius: 10px; padding: 14px 16px; background: rgba(8, 28, 24, .62); text-align: left; }
+.mission-panel { gap: 10px; padding: 16px 18px; }
+.mission-panel h2 { margin: 0; color: var(--gold); font-family: inherit; font-size: 18px; font-weight: 800; line-height: 1.25; }
+.mission-panel .mission-lead { margin: 0; color: #e6ebe1; font-size: 14px; line-height: 1.45; }
+.mission-points { display: grid; gap: 10px; margin: 2px 0 0; padding: 0; list-style: none; }
+.mission-points li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; color: #cfdbd1; font-size: 13px; line-height: 1.45; }
+.mission-points strong { display: block; color: var(--ink); font-size: 14px; }
+.mission-suit { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 5px; background: #fdfcf8; color: var(--card-black); font: 700 16px/1 var(--suit-font); box-shadow: 0 1px 3px #0006; }
+.mission-suit.red { color: var(--card-red); }
 .lobby-panel label { display: grid; gap: 5px; color: #cfdbd1; font-size: 12px; font-weight: 600; }
 .lobby-panel input:not([type="checkbox"]), .lobby-panel select { min-width: 0; height: 38px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 10px; background: #21483e; color: var(--ink); font-size: 14px; }
 .lobby-panel .lobby-check { display: flex; align-items: center; gap: 8px; }
