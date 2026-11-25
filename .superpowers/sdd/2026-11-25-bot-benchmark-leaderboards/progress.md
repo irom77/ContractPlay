@@ -54,3 +54,8 @@
 - Task 3 contract: use lease-aware `putTableAssignments`, `putJobBoards`, and `startBoard` with current `{token, now}` claim; pause blocks future board admission, while reports for already admitted boards remain allowed. Generated board replays may be public; imported replay details remain private by default. Engine version must be checked before execution.
 - Task 2: fix round 1/5 (2 addressed, 0 open; commits `e4e3f96`..`b80da3a`).
 - Task 2: minor (deferred): default-parallel server suite exposes timing-sensitive failures in different pre-existing cases; investigate final verification only if it recurs.
+- Task 2: fix round 1/5 (2 addressed, 0 open — imported PBN replay stays private; lease-fenced setup and board admission with allowed late reports — commits `e4e3f96`..`b80da3a`).
+
+## Task 3 rulings before implementation
+- Ruling: all-bot benchmark tables have no human who can request the first deal. Add a platform-neutral validated server-triggered deal transition in `packages/table` that is callable only through the benchmark-only server operation, never as a client protocol message. Preserve the regular `reduce` validation flow and do not create a fake human seat; cost if wrong is a table API addition and small implementation rework.
+- Ruling: every board admission must be checked with the current job lease before any table can read/deal it. The session object must not expose the next board merely because the duplicate field completed if the job is paused; the coordinator must explicitly admit it. Cost if wrong is coordination changes and possible duplicate board work.
