@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Previews } from "./Previews.js";
-import { previewScreens } from "./scenarios.js";
+import { previewCategories, previewScreens } from "./scenarios.js";
 import readme from "../../../../README.md?raw";
 
 afterEach(cleanup);
@@ -284,6 +284,35 @@ describe("UI previews", () => {
     expect((screen.getByRole("button", { name: "Next screen" }) as HTMLButtonElement).disabled).toBe(true);
     await user.keyboard("{ArrowLeft}");
     expect(onIndex).toHaveBeenLastCalledWith(previewScreens.length - 2);
+  });
+
+  it("steps forward with Space and back with Shift+Space, without also pressing the focused button", async () => {
+    const user = userEvent.setup();
+    const onIndex = vi.fn();
+    render(<Previews index={3} onIndex={onIndex} />);
+    await user.keyboard(" ");
+    expect(onIndex).toHaveBeenLastCalledWith(4);
+    await user.keyboard("{Shift>} {/Shift}");
+    expect(onIndex).toHaveBeenLastCalledWith(2);
+
+    onIndex.mockClear();
+    screen.getByRole("button", { name: "Next screen" }).focus();
+    await user.keyboard(" ");
+    expect(onIndex.mock.calls).toEqual([[4]]);
+  });
+
+  it("puts every screen in exactly one picker group and jumps to the chosen screen", async () => {
+    const grouped = previewCategories.flatMap((category) => category.ids);
+    expect([...grouped].sort()).toEqual(previewScreens.map((s) => s.id).sort());
+
+    const user = userEvent.setup();
+    const onIndex = vi.fn();
+    render(<Previews index={0} onIndex={onIndex} />);
+    const picker = screen.getByRole("combobox", { name: "Jump to a screen" }) as HTMLSelectElement;
+    expect(within(picker).getAllByRole("group").map((group) => group.getAttribute("label"))).toEqual(previewCategories.map((c) => c.name));
+    const target = previewScreens.findIndex((s) => s.id === "solo-rubber-won");
+    await user.selectOptions(picker, `${target + 1}. ${previewScreens[target]!.title}`);
+    expect(onIndex).toHaveBeenLastCalledWith(target);
   });
 
   it("hides the navigation bar and brings it back", async () => {

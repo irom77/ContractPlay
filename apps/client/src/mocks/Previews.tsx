@@ -8,7 +8,7 @@ import { saveIdentity } from "../online/identity.js";
 import { EmailGate, Lobby } from "../online/Lobby.js";
 import type { AccountSession } from "../online/auth.js";
 import { OnlineTable } from "../online/OnlineTable.js";
-import { previewScreens, type PreviewData } from "./scenarios.js";
+import { previewCategories, previewScreens, type PreviewData } from "./scenarios.js";
 
 const previewAccount: AccountSession = { playerId: "preview-player", displayName: "Alex" };
 const previewAuth = { currentAccount: async () => previewAccount, requestMagicLink: async () => {}, signOut: async () => {}, syncHistory: async () => {},
@@ -62,7 +62,7 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
 
 export type PreviewsProps = { index: number; onIndex(next: number): void };
 
-/** UI preview mode (`#/mocks`): one realistic screen at a time, full window, with Previous/Next. */
+/** UI preview mode (`#/mocks`): one realistic screen at a time, full window, with Previous/Next and a grouped picker. */
 export function Previews({ index, onIndex }: PreviewsProps) {
   const last = previewScreens.length - 1;
   const current = Math.min(Math.max(index, 0), last);
@@ -74,10 +74,15 @@ export function Previews({ index, onIndex }: PreviewsProps) {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (event.altKey || event.ctrlKey || event.metaKey || target?.closest("input, select, textarea")) return;
-      if (event.key === "ArrowRight" && current < last) onIndex(current + 1);
-      else if (event.key === "ArrowLeft" && current > 0) onIndex(current - 1);
-      else return;
+      const space = event.key === " ";
+      const forward = event.key === "ArrowRight" || (space && !event.shiftKey);
+      const back = event.key === "ArrowLeft" || (space && event.shiftKey);
+      if (!forward && !back) return;
       event.preventDefault();
+      // Space would otherwise also press whatever button has focus (such as › after a click) when the key comes up.
+      if (space && target instanceof HTMLElement && target !== document.body) target.blur();
+      if (forward && current < last) onIndex(current + 1);
+      else if (back && current > 0) onIndex(current - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -88,10 +93,19 @@ export function Previews({ index, onIndex }: PreviewsProps) {
     {hidden
       ? <button className="preview-reveal" type="button" aria-label="Show preview controls" title="Show preview controls" onClick={() => setHidden(false)}>{current + 1}/{previewScreens.length}</button>
       : <nav className="preview-bar" aria-label="UI previews">
-        <button className="preview-step" type="button" aria-label="Previous screen" title="Previous (←)" disabled={current === 0} onClick={() => onIndex(current - 1)}>‹</button>
+        <button className="preview-step" type="button" aria-label="Previous screen" title="Previous (← or Shift+Space)" disabled={current === 0} onClick={() => onIndex(current - 1)}>‹</button>
         <span className="preview-count">{current + 1} / {previewScreens.length}</span>
+        <select className="preview-jump" aria-label="Jump to a screen" title="Jump to a screen" value={current}
+          onChange={(event) => { onIndex(Number(event.target.value)); event.target.blur(); }}>
+          {previewCategories.map((category) => <optgroup key={category.name} label={category.name}>
+            {category.ids.map((id) => {
+              const at = previewScreens.findIndex((s) => s.id === id);
+              return <option key={id} value={at}>{at + 1}. {previewScreens[at]!.title}</option>;
+            })}
+          </optgroup>)}
+        </select>
         <span className="preview-title" title={screen.detail}><strong>{screen.title}</strong><span className="preview-detail">{screen.detail}</span></span>
-        <button className="preview-step" type="button" aria-label="Next screen" title="Next (→)" disabled={current === last} onClick={() => onIndex(current + 1)}>›</button>
+        <button className="preview-step" type="button" aria-label="Next screen" title="Next (→ or Space)" disabled={current === last} onClick={() => onIndex(current + 1)}>›</button>
         <button className="preview-step" type="button" aria-label="Hide preview controls" title="Hide these controls" onClick={() => setHidden(true)}>×</button>
         <a className="preview-exit" href="#/">Exit</a>
       </nav>}

@@ -578,16 +578,19 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 /* ---------- UI preview mode (#/mocks) ---------- */
 /* Floats over the real screen, which keeps its full window size so the preview matches what players see. */
 .preview-bar, .preview-reveal { position: fixed; z-index: 50; bottom: 10px; left: 50%; transform: translateX(-50%); border: 1px solid rgba(242, 193, 78, .55); background: rgba(6, 22, 19, .94); color: var(--ink); box-shadow: 0 6px 20px #000a; }
-.preview-bar { display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 20px); border-radius: 10px; padding: 6px 8px; font-size: 13px; }
+/* A fixed width, so the step buttons stay put whatever the screen's title. */
+.preview-bar { display: flex; align-items: center; gap: 8px; width: min(820px, calc(100vw - 20px)); border-radius: 10px; padding: 6px 8px; font-size: 13px; }
 .preview-step { display: grid; flex: none; width: 32px; height: 32px; place-items: center; border: 1px solid rgba(255, 255, 255, .2); border-radius: 7px; padding: 0; background: rgba(255, 255, 255, .06); color: var(--ink); font-size: 20px; line-height: 1; cursor: pointer; }
 .preview-step:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
 .preview-step:disabled { opacity: .35; cursor: not-allowed; }
 .preview-count { flex: none; color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
-.preview-title { display: grid; min-width: 0; max-width: 460px; line-height: 1.25; }
+.preview-title { display: grid; flex: 1; min-width: 0; line-height: 1.25; }
+.preview-jump { flex: none; width: 150px; height: 32px; border: 1px solid rgba(255, 255, 255, .2); border-radius: 7px; padding: 0 6px; background: #0c2822; color: var(--ink); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.preview-jump:hover, .preview-jump:focus-visible { border-color: var(--gold); }
 .preview-title strong, .preview-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-detail { color: var(--muted); font-size: 12px; }
 .preview-exit { flex: none; padding: 0 6px; color: var(--muted); font-weight: 700; text-decoration: none; }
 .preview-exit:hover { color: var(--gold); }
 .preview-reveal { border-radius: 99px; padding: 4px 10px; color: var(--gold); font: 800 12px/1.4 inherit; cursor: pointer; opacity: .75; }
 .preview-reveal:hover { opacity: 1; }
-@media (max-width: 560px) { .preview-detail { display: none; } }
+@media (max-width: 560px) { .preview-detail { display: none; } .preview-jump { width: 110px; } }

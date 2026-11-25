@@ -423,6 +423,19 @@ const authScreens: readonly PreviewScreen[] = [
 /** Every preview, online screens first, then solo play and account sign-in. */
 export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens, ...authScreens];
 
+/**
+ * The preview picker's groups, by what a screen shows rather than where it sits in the list, so `#/mocks/N` numbers
+ * stay as they are. Every screen belongs to exactly one group.
+ */
+export const previewCategories: readonly { name: string; ids: readonly string[] }[] = [
+  { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "email-sign-in", "email-link-sent"] },
+  { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction"] },
+  { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-replayed-deal"] },
+  { name: "Menus, claims & auto play", ids: ["game-menu", "auto-play", "claim-answer", "solo-auto-play", "solo-claim", "solo-menu", "solo-settings", "solo-hands"] },
+  { name: "Results & scoring", ids: ["result", "rubber-score", "rubber-won", "duplicate-session", "solo-result", "solo-rubber-won", "solo-field-result", "solo-replay-result", "online-replay-result"] },
+  { name: "Reviewing hands", ids: ["solo-review", "solo-original-play"] }
+];
+
 function playUntilView(people: People, seat: Seat, stop: (game: GameState) => boolean): PreviewData {
   const humans = Object.keys(people) as Seat[];
   const state = playUntil(bid(dealt(table("Friday club", people, SEATS.filter((s) => !humans.includes(s)))), 8), stop);

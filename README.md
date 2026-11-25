@@ -23,7 +23,8 @@
 > | 31 | Solo: replay result | 34 | Email link sent |
 > | 32 | Online: replay result |  |  |
 >
-> - **Step through:** the ‹ and › buttons in the bar at the bottom, or the ← and → keys. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
+> - **Step through:** the ‹ and › buttons in the bar at the bottom, the ← and → keys, or Space (Shift+Space goes back).
+> - **Jump to a screen:** the picker in the bar groups the screens by what they show: lobby, seating and sign-in; bidding; card play; menus, claims and auto play; results and scoring; and reviewing hands. The address changes to `#/mocks/N`, so any screen can be bookmarked or linked directly, for example [`#/mocks/7`](https://contractplay.niuk.workers.dev/#/mocks/7).
 > - **Inspect without the bar:** × hides it; the small `N/34` button brings it back. **Exit** returns to the app.
 > - **Nothing is played or saved:** table and lobby clicks do not contact the server, and preview names, hints, and hand history stay out of browser storage. The email form advances only to its mock confirmation; it never sends a message.
 > - **Always current:** each online table and lobby screen is built from a real table state and drawn by the real `Lobby` and `OnlineTable` components; screens 33–34 use the real email sign-in form with a mock request, and the solo screens (17–31) open the real solo app on a fixed hand with bots, forced cards, and queued cards held still; screen 32 is the online table after a replayed hand. Layout and component changes appear in the previews automatically. `apps/client/src/mocks/Previews.test.tsx` checks that every screen still reaches its state (for example, that dummy is on your left in screen 7), so a change that breaks one fails `pnpm test`.
