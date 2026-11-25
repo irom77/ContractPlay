@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Autopilot on the sign-in screen.** The sign-in panel's second point is now **Autopilot when you need it**: if a hand is dull or you're tired, switch on Auto play at any point in the bidding or the play and a bot finishes the hand for you. It replaces **Score against the field**, which hasn't been tried in a real game yet.
 - **A smaller status card.** The contract, NS/EW trick counter, score, and whose-turn line in the top-right corner now sit in a tighter card with less padding, a smaller contract badge, and smaller text, so it takes up less of the table at solo and online tables. README screenshots refreshed.
 - **What ContractPlay is for, on the sign-in screen.** Under the email sign-in form, a short panel now says what ContractPlay is built for, following your game over time, and what makes it different: replaying real deals and comparing your result in IMPs, scoring board sets against the field with matchpoints and the double-dummy par, keeping every finished hand on your account across devices, and practising with bots at four skill levels with hints that explain calls.
 - **The auction stays on the table after the hand.** When a hand ends and every hand is face-up with its high-card points, each seat now keeps its calls in order beside its hand, so you can review the bidding alongside the cards and the score, at solo and online tables. At East and West the calls sit on their own row under the seat name, the width of the hand, so they stay clear of the result panel. Click a call there for its meaning, as during the auction.

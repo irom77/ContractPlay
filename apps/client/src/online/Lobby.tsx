@@ -122,7 +122,7 @@ function MissionPanel() {
     <p className="mission-lead">ContractPlay is built to follow your game over time: every deal you play becomes something to measure yourself against.</p>
     <ul className="mission-points">
       <li><span className="mission-suit" aria-hidden="true">♠</span><span><strong>Replay real deals</strong> Every other hand can be a deal someone has played before. When it ends, see how your result compares in IMPs.</span></li>
-      <li><span className="mission-suit red" aria-hidden="true">♥</span><span><strong>Score against the field</strong> Play board sets and get your matchpoints, the other tables' results, and the double-dummy par.</span></li>
+      <li><span className="mission-suit red" aria-hidden="true">♥</span><span><strong>Autopilot when you need it</strong> Hand dull or you're tired? Switch on Auto play at any point in the bidding or the play and a bot finishes the hand for you.</span></li>
       <li><span className="mission-suit red" aria-hidden="true">♦</span><span><strong>Every hand on record</strong> Finished hands are saved to your account on any device, ready to review call by call and card by card.</span></li>
       <li><span className="mission-suit" aria-hidden="true">♣</span><span><strong>Practise with bots that explain</strong> Four skill levels, SAYC or 2/1, and hints that tell you what any call means.</span></li>
     </ul>

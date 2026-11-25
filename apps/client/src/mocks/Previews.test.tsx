@@ -256,11 +256,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
   "email-sign-in": async () => {
     expect(screen.getByRole("region", { name: "Email sign-in" })).toBeTruthy();
     expect((screen.getByLabelText("Email") as HTMLInputElement).value).toBe("alex@example.com");
-    // Under the form, what ContractPlay is for: replays, scoring against the field, and a record of every hand.
+    // Under the form, what ContractPlay is for: replays, autopilot, and a record of every hand.
     const mission = screen.getByRole("region", { name: "Why ContractPlay" });
     expect(within(mission).getByRole("heading", { level: 2 }).textContent).toBe("Bridge that remembers every hand");
     expect(within(mission).getAllByRole("listitem").map((item) => item.querySelector("strong")?.textContent))
-      .toEqual(["Replay real deals", "Score against the field", "Every hand on record", "Practise with bots that explain"]);
+      .toEqual(["Replay real deals", "Autopilot when you need it", "Every hand on record", "Practise with bots that explain"]);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Send sign-in link" }));
     expect(await screen.findByText("Check your email for a sign-in link.")).toBeTruthy();
