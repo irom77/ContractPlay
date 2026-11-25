@@ -287,6 +287,10 @@ describe("bridge table", () => {
 
     expect(lastTrick.querySelectorAll(".table-card")).toHaveLength(0);
     expect(lastTrick.querySelector(".last-trick-chip")!.textContent).toBe(`${card.rank === "T" ? "10" : card.rank}${suitSymbols[card.suit]}`);
+    // It lies on the winner's side of the trick, not in a corner with the menu.
+    const winnerPosition = [...document.querySelector(`.seat-${winner}`)!.classList].find((name) => name.startsWith("pos-"))!.slice(4);
+    expect(lastTrick.parentElement!.classList.contains(`last-trick-at-${winnerPosition}`)).toBe(true);
+    expect(lastTrick.closest(".table-tools")).toBeNull();
   });
 
   it("pauses bot play for the full completed-trick display", async () => {

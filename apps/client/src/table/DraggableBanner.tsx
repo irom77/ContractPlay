@@ -22,7 +22,7 @@ function browserStorage(): Storage | undefined {
 }
 
 /**
- * A banner that floats over the table without covering the cards: it starts in the top-left corner under the status card,
+ * A banner that floats over the table without covering the cards: it starts in the top-left corner under the menu,
  * and the player can drag it (or move it from its grip with the arrow keys) anywhere on the table. Home, or a double-click
  * on the grip, puts it back. The spot is remembered on this device.
  */
@@ -45,22 +45,21 @@ export function DraggableBanner({ label, storageKey, className = "", children }:
       const space = room();
       if (!space) return setPlace(undefined);
       if (spot) return setPlace({ left: spot.x * space.width, top: spot.y * space.height });
-      // Default: the top-right corner, just under the menu and the last trick, where no seat or hand sits (on the left the
-      // side seat's badge and dummy start just under the status card). Tall, narrow windows have no room there (the top
-      // hand reaches the corner), so the banner sits on the open felt just above the player's seat.
+      // Default: the top-left corner, just under the menu and full-screen buttons, where no seat or hand sits (a side
+      // seat's dummy starts lower down). Tall, narrow windows have no room there (the top hand reaches the corner), so
+      // the banner sits on the open felt just above the player's seat.
       const tools = space.surface.querySelector<HTMLElement>(".table-tools");
-      const status = space.surface.querySelector<HTMLElement>(".table-status");
       const bottomSeat = space.surface.querySelector<HTMLElement>(".pos-bottom");
       if (bottomSeat && space.surface.clientHeight > space.surface.clientWidth * 1.25) {
-        setPlace({ left: status?.offsetLeft ?? 0, top: Math.max(0, Math.min(space.height, bottomSeat.offsetTop - space.element.offsetHeight - 12)) });
+        setPlace({ left: tools?.offsetLeft ?? 0, top: Math.max(0, Math.min(space.height, bottomSeat.offsetTop - space.element.offsetHeight - 12)) });
       } else if (tools) {
-        setPlace({ left: Math.max(0, Math.min(space.width, tools.offsetLeft + tools.offsetWidth - space.element.offsetWidth)), top: Math.min(space.height, tools.offsetTop + tools.offsetHeight + 8) });
+        setPlace({ left: Math.max(0, Math.min(space.width, tools.offsetLeft)), top: Math.min(space.height, tools.offsetTop + tools.offsetHeight + 8) });
       } else setPlace(undefined);
     };
     layout();
     window.addEventListener("resize", layout);
-    // The corner moves when the last trick appears under the menu, or the status card changes size.
-    const watched = [...(ref.current?.offsetParent?.querySelectorAll(".table-tools, .table-status") ?? [])];
+    // The corner moves when the tools change size.
+    const watched = [...(ref.current?.offsetParent?.querySelectorAll(".table-tools") ?? [])];
     const observer = typeof ResizeObserver === "function" && watched.length ? new ResizeObserver(layout) : undefined;
     for (const element of watched) observer?.observe(element);
     return () => { window.removeEventListener("resize", layout); observer?.disconnect(); };

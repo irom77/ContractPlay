@@ -54,8 +54,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 
 /* ---------- Corners of the table ---------- */
 .table-status, .table-tools, .history-controls, .hint-controls { position: absolute; z-index: 6; display: flex; gap: var(--u); }
-/* The status card: contract on the left; NS and EW columns with tricks won (gold) over the running score; whose turn underneath. */
-.table-status { top: calc(1.5 * var(--u)); left: calc(2 * var(--u)); display: grid; grid-template-columns: repeat(2, minmax(2.6em, auto)); grid-auto-flow: row; align-items: center; justify-items: center; column-gap: calc(.4 * var(--u)); row-gap: calc(.2 * var(--u)); border: 1px solid var(--line); border-radius: 10px; padding: calc(.9 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .62); box-shadow: 0 4px 12px #0005; font-variant-numeric: tabular-nums; }
+/* The status card (top right): contract on the left; NS and EW columns with tricks won (gold) over the running score; whose turn underneath. */
+.table-status { top: calc(1.5 * var(--u)); right: calc(2 * var(--u)); display: grid; grid-template-columns: repeat(2, minmax(2.6em, auto)); grid-auto-flow: row; align-items: center; justify-items: center; column-gap: calc(.4 * var(--u)); row-gap: calc(.2 * var(--u)); border: 1px solid var(--line); border-radius: 10px; padding: calc(.9 * var(--u)) calc(1.1 * var(--u)); background: rgba(8, 28, 24, .62); box-shadow: 0 4px 12px #0005; font-variant-numeric: tabular-nums; }
 .table-status.has-contract { grid-template-columns: auto repeat(2, minmax(2.6em, auto)); }
 .table-status .contract-badge { grid-column: 1; align-self: center; margin-right: calc(.8 * var(--u)); }
 .hud-row { display: contents; }
@@ -64,11 +64,12 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .hud-side { color: var(--muted); font-size: var(--text-s); font-weight: 700; letter-spacing: .08em; line-height: 1; }
 .trick-count b { color: var(--gold); font-size: var(--text-l); font-weight: 800; line-height: 1.1; }
 .match-score span { color: var(--ink); font-size: var(--text-s); font-weight: 600; opacity: .85; }
-.table-tools { top: calc(1.5 * var(--u)); right: calc(2 * var(--u)); flex-direction: column; align-items: flex-end; }
+/* The tools corner (top left): the game menu and the full-screen button. */
+.table-tools { top: calc(1.5 * var(--u)); left: calc(2 * var(--u)); flex-direction: column; align-items: flex-start; }
 .table-tools-row { display: flex; align-items: center; gap: var(--u); }
 .history-controls { bottom: var(--u); left: calc(2 * var(--u)); }
 .hint-controls { right: calc(2 * var(--u)); bottom: var(--u); flex-direction: column; align-items: flex-end; }
-.session-progress { position: absolute; z-index: 7; top: calc(2 * var(--u)); left: calc(2 * var(--u)); max-width: calc(34 * var(--u)); margin: 0; border-radius: 6px; padding: calc(.7 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .88); color: var(--ink); font-size: var(--text-s); line-height: 1.25; }
+.session-progress { position: absolute; z-index: 7; top: calc(2 * var(--u)); right: calc(2 * var(--u)); max-width: calc(34 * var(--u)); margin: 0; border-radius: 6px; padding: calc(.7 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .88); color: var(--ink); font-size: var(--text-s); line-height: 1.25; }
 .session-result-progress { margin: 0 0 calc(1.5 * var(--u)); color: var(--gold); font-size: var(--text-s); text-align: center; }
 .hint-controls p { margin: 0; max-width: max(200px, calc(34 * var(--u))); border-radius: 8px; padding: calc(.8 * var(--u)) calc(1.2 * var(--u)); background: rgba(8, 28, 24, .82); color: var(--ink); font-size: var(--text-m); line-height: 1.35; text-align: right; }
 .hint-controls p strong { display: block; color: var(--gold); font-family: var(--suit-font); font-size: var(--text-m); }
@@ -89,7 +90,15 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .board-label { grid-column: 1 / -1; justify-self: stretch; color: var(--muted); font-size: var(--text-s); text-align: left; }
 .table-status:is(.has-contract, :has(.hud-side)) .status-pill { margin-top: calc(.5 * var(--u)); border-top: 1px solid var(--line); padding-top: calc(.6 * var(--u)); }
 
-/* The last trick is a small badge with the card that won it; a click lays the whole trick out on the table, another clears it. */
+/* The last trick is a small badge with the card that won it; a click lays the whole trick out on the table, another clears it.
+   It lies beside the winner's place in the trick, as a won trick is gathered in front of its winner: beside the top or
+   bottom card on that player's left, or just outside the card at a side seat. */
+.last-trick-spot { position: absolute; z-index: 5; top: 50%; left: 50%; --w: calc(var(--h) * .7); --g: var(--u); }
+.last-trick-spot .last-trick-button { position: absolute; width: max-content; }
+.last-trick-at-top .last-trick-button { top: calc(-1 * (var(--dy) + var(--h) / 2)); left: calc(var(--w) / 2 + var(--g)); }
+.last-trick-at-bottom .last-trick-button { right: calc(var(--w) / 2 + var(--g)); bottom: calc(-1 * (var(--dy) + var(--h) / 2)); }
+.last-trick-at-left .last-trick-button { top: 0; right: calc(var(--dx) + var(--w) / 2 + var(--g)); transform: translateY(-50%); }
+.last-trick-at-right .last-trick-button { top: 0; left: calc(var(--dx) + var(--w) / 2 + var(--g)); transform: translateY(-50%); }
 .last-trick-button { display: flex; align-items: center; gap: calc(.8 * var(--u)); border: 1px solid rgba(255, 255, 255, .2); border-radius: 999px; padding: calc(.4 * var(--u)) calc(.5 * var(--u)) calc(.4 * var(--u)) calc(1.2 * var(--u)); background: rgba(8, 28, 24, .55); color: var(--ink); font-size: var(--text-s); font-weight: 700; white-space: nowrap; cursor: pointer; }
 .last-trick-button:hover:not(:disabled), .last-trick-button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
 .last-trick-button:disabled { opacity: .55; cursor: default; }
@@ -98,7 +107,7 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 
 /* ---------- Menu ---------- */
 .table-menu { position: relative; z-index: 8; }
-.table-menu-content { position: absolute; top: calc(100% + 8px); right: 0; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--panel); box-shadow: 0 14px 36px #061815cc; }
+.table-menu-content { position: absolute; top: calc(100% + 8px); left: 0; width: min(420px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: var(--panel); box-shadow: 0 14px 36px #061815cc; }
 .menu-deal { width: 100%; margin-bottom: 14px; }
 .game-menu-content { width: min(260px, calc(100vw - 24px)); display: grid; gap: 8px; padding: 12px; }
 .game-menu-content .menu-deal { margin-bottom: 0; }
@@ -220,7 +229,7 @@ button.playing-card { cursor: pointer; }
 /* With dummy across the top, the bidding drops to a second line and the trick makes room for it. */
 .pos-top.has-dummy { flex-wrap: wrap; justify-content: center; width: max-content; max-width: 100%; }
 .pos-top.has-dummy .seat-auction-calls { order: 3; flex-basis: 100%; justify-content: center; }
-.calls-shown .pos-top.has-dummy:not(.has-fixed-hand) ~ .trick-area { transform: translateY(calc(3.5 * var(--u))); }
+.calls-shown .pos-top.has-dummy:not(.has-fixed-hand) ~ :is(.trick-area, .last-trick-spot) { transform: translateY(calc(3.5 * var(--u))); }
 .seat-compass { position: relative; display: grid; flex: none; width: max(26px, calc(4.6 * var(--u))); height: max(26px, calc(4.6 * var(--u))); place-items: center; border: max(2px, calc(.35 * var(--u))) solid rgba(255, 255, 255, .34); border-radius: 50%; background: rgba(8, 28, 24, .4); color: var(--ink); font-size: var(--text-m); font-weight: 800; }
 .vulnerable-seat .seat-compass { border-color: #ee4a3f; }
 .played-seat .seat-compass { background: rgba(255, 255, 255, .2); }
@@ -322,7 +331,8 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .pos-left .hidden-hand { align-self: flex-start; }
 
 /* ---------- Centre of the table ---------- */
-.trick-area { position: absolute; z-index: 2; inset: 0; pointer-events: none; --h: calc(19 * var(--u)); --dx: calc(11 * var(--u)); --dy: calc(8 * var(--u)); }
+.trick-area, .last-trick-spot { --h: calc(19 * var(--u)); --dx: calc(11 * var(--u)); --dy: calc(8 * var(--u)); }
+.trick-area { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
 .trick-card { position: absolute; top: 50%; left: 50%; }
 .trick-pos-top { transform: translate(-50%, calc(-50% - var(--dy))); }
 .trick-pos-bottom { transform: translate(-50%, calc(-50% + var(--dy))); }
@@ -511,11 +521,11 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
    stepped to fill that box (a hand of four suits is 4 card widths, 3 gaps, and 9 steps: 42u plus 9 steps):
    - the hints corner (bottom right, or bottom left when dummy is on the right) takes --hint-room beside the bottom hand;
    - a dummy at a side seat is a column of 8.2u cards stepped 2.7u, as wide as its longest suit (--dummy-span);
-   - the status corner is capped at 20u wide (longer status text wraps), so a hand along the top starts at 24u;
-   - the tools corner stacks its buttons and the last-trick badge in one column, --tools-room wide. */
+   - the tools corner (top left) stacks its buttons in one column, --tools-room wide;
+   - the status corner (top right) is capped at 25u wide (longer status text wraps), so a hand along the top ends 28u in. */
 .online-table .table-surface {
   --hint-room: max(120px, calc(17 * var(--u)));
-  --tools-room: max(130px, calc(19 * var(--u)));
+  --tools-room: calc(max(34px, calc(5.4 * var(--u))) + 4 * var(--u));
   --side-dummy: calc((2 + 8.2 * .7 + 1.5) * var(--u) + (var(--dummy-span, 1) - 1) * 2.7 * var(--u));
   --bottom-left: var(--hint-room); --bottom-right: var(--hint-room);
 }
@@ -525,8 +535,8 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .online-table .pos-bottom .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--bottom-left) - var(--bottom-right) - 42 * var(--u)) / 9)); }
 .online-table.play-layout .hint-controls p { max-width: calc(var(--hint-room) - 2 * var(--u)); }
 .online-table .table-status { max-width: calc(25 * var(--u)); }
-.online-table .table-tools-row { flex-direction: column; align-items: flex-end; }
-.online-table .hand-on-top .pos-top.has-fixed-hand { right: var(--tools-room); left: calc(28 * var(--u)); width: auto; transform: none; }
+.online-table .table-tools-row { flex-direction: column; align-items: flex-start; }
+.online-table .hand-on-top .pos-top.has-fixed-hand { right: calc(28 * var(--u)); left: var(--tools-room); width: auto; transform: none; }
 .online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--tools-room) - 70 * var(--u)) / 9)); }
 .online-table .table-surface.dummy-on-right .hint-controls { right: auto; left: calc(2 * var(--u)); align-items: flex-start; }
 .online-table .table-surface.dummy-on-right .hint-controls p { text-align: left; }
@@ -549,8 +559,8 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .lobby-panel .online-totals { justify-self: start; margin: 0; }
 .lobby-panel > .scorecard { justify-self: center; }
 .online-status { position: absolute; z-index: 8; top: max(56px, calc(10 * var(--u))); left: 50%; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 24px); margin: 0; border-radius: 8px; padding: 8px 14px; background: rgba(8, 28, 24, .92); color: var(--gold); font-size: var(--text-m); font-weight: 700; box-shadow: 0 6px 18px #0008; transform: translateX(-50%); }
-/* The Auto play / bot-playing banner floats in the top-right corner under the menu and last trick, clear of every hand; the player can drag it anywhere on the table. */
-.online-resume { position: absolute; z-index: 7; top: calc(14 * var(--u)); right: calc(2 * var(--u)); display: flex; align-items: center; gap: 8px; width: max-content; max-width: max(300px, calc(44 * var(--u))); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 4px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-s); line-height: 1.3; cursor: grab; touch-action: none; user-select: none; }
+/* The Auto play / bot-playing banner floats in the top-left corner under the menu, clear of every hand; the player can drag it anywhere on the table. */
+.online-resume { position: absolute; z-index: 7; top: calc(14 * var(--u)); left: calc(2 * var(--u)); display: flex; align-items: center; gap: 8px; width: max-content; max-width: max(300px, calc(44 * var(--u))); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px 6px 4px; background: rgba(12, 40, 34, .94); box-shadow: 0 6px 18px #0008; font-size: var(--text-s); line-height: 1.3; cursor: grab; touch-action: none; user-select: none; }
 .online-resume:active { cursor: grabbing; }
 .online-resume > span { flex: 1 1 auto; min-width: 12ch; }
 .online-resume .primary-button { flex: none; min-height: max(30px, calc(4.2 * var(--u))); padding: 0 12px; font-size: var(--text-s); }

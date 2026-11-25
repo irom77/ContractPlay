@@ -194,7 +194,7 @@ describe("OnlineTable seating", () => {
     expect(screen.getByText("NS 420 · EW 50")).toBeTruthy();
   });
 
-  it("groups the running score with the contract and trick count in the top-left status corner during a hand", () => {
+  it("groups the running score with the contract and trick count in the top-right status corner during a hand", () => {
     const service = setup();
     service.push(tableView({ yourSeat: "north", seats: seatedNorth, handNumber: 1, handInProgress: true, totals: { ns: 420, ew: 50 }, game: publicGame(oneNoTrump(), ["north", "south"]) }));
     const score = screen.getByRole("group", { name: "Score NS 420 · EW 50" });

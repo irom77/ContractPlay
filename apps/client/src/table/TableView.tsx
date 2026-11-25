@@ -51,7 +51,7 @@ export type TableViewProps = {
   /** Keep every call in the bid picker disabled, for example while a sent call awaits the service. */
   bidsDisabled?: boolean;
   statusText: string; ariaLabel: string;
-  /** Where an imported board set stands, such as "Board 7 · 1 of 3", shown under the status in the top-left card. */
+  /** Where an imported board set stands, such as "Board 7 · 1 of 3", shown under the status in the top-right card. */
   boardLabel?: string | undefined;
   /** Seats played by a bot: their seat badge is drawn as a computer instead of a circle. */
   botSeats?: readonly Seat[] | undefined;
@@ -59,11 +59,11 @@ export type TableViewProps = {
   onBid?(bid: Bid): void; onPlay?(seat: Seat, card: Card): void;
   hintedBid?: Bid | undefined; hintedCards?: ReadonlySet<string> | undefined;
   explainCall?: { shown?: number | undefined; onToggle(index: number): void; text(index: number): string } | undefined;
-  /** Running match score, shown under the trick count in the top-left status card. */
+  /** Running match score, shown under the trick count in the top-right status card. */
   matchScore?: { ns: number; ew: number } | undefined;
   /** Once the hand is over: the whole deal, laid face-up at each seat with its high-card points. Nothing is playable. */
   revealedHands?: Readonly<Record<Seat, readonly Card[]>> | undefined;
-  tools?: React.ReactNode;               // menu + fullscreen (top-right)
+  tools?: React.ReactNode;               // menu + fullscreen (top-left)
   overlay?: React.ReactNode;             // score panel, review/history controls, hint controls, messages
 };
 
@@ -98,7 +98,7 @@ export function TableView({
   const fixedPlayHands = fixedSeatHands && liveTurnPhase(phase);
   // A dummy at a side seat is a column as wide as its longest suit; the bottom hand is laid out beside it.
   const sideDummy = fixedPlayHands && dummyVisible && dummySeat && (dummyPosition === "left" || dummyPosition === "right") ? dummyPosition : undefined;
-  // A hand spread along the top shares its height with the status corner, so it starts to the right of it.
+  // A hand spread along the top shares its height with the corners, so it fits between the tools and the status card.
   const handOnTop = fixedPlayHands && game.hands[seats[(seats.indexOf(bottomSeat) + 2) % 4]!].length > 0;
   const sideDummySpan = sideDummy && dummySeat ? Math.max(1, ...SUITS.map((suit) => game.hands[dummySeat].filter((card) => card.suit === suit).length)) : undefined;
   const completedNsTricks = contract
@@ -148,10 +148,6 @@ export function TableView({
 
         <div className="table-tools">
           <div className="table-tools-row">{tools}</div>
-          {lastTrick && lastTrickWinner ? <button className="last-trick-button" type="button" disabled={game.currentTrick.length > 0} aria-pressed={lastTrickOpen} aria-label={lastTrickOpen ? "Hide last trick" : "Last trick"} title={game.currentTrick.length > 0 ? "The last trick can be shown once this trick is complete" : lastTrickOpen ? "Hide last trick" : "Show the last trick on the table"} onClick={onToggleLastTrick}>
-            <span className="last-trick-label" aria-hidden="true">Last trick</span>
-            {lastTrick.filter(({ seat }) => seat === lastTrickWinner).map(({ seat, card }) => <span className={`last-trick-chip ${isRedSuit(card.suit) ? "red-card" : ""}`} key={seat} aria-hidden="true">{card.rank === "T" ? "10" : card.rank}{suitSymbols[card.suit]}</span>)}
-          </button> : null}
         </div>
 
         {seats.map((seat) => {
@@ -202,6 +198,13 @@ export function TableView({
         <div className="trick-area" role="region" aria-label="Current trick">
           {displayedTrick.map(({ seat, card }) => tableCard(card, `trick-card trick-card-position-${seat} trick-pos-${positionOf(seat)}`, `${seatNames[seat]} played ${cardLabel(card)}`))}
         </div>
+
+        {/* The last trick lies beside the card of the seat that won it, as a won trick is gathered in front of its winner; once
+            every hand is face-up at the end of the deal there is no trick to look back on. */}
+        {lastTrick && lastTrickWinner && !revealed ? <div className={`last-trick-spot last-trick-at-${positionOf(lastTrickWinner)}`}><button className="last-trick-button" type="button" disabled={game.currentTrick.length > 0} aria-pressed={lastTrickOpen} aria-label={lastTrickOpen ? "Hide last trick" : "Last trick"} title={game.currentTrick.length > 0 ? "The last trick can be shown once this trick is complete" : lastTrickOpen ? "Hide last trick" : "Show the last trick on the table"} onClick={onToggleLastTrick}>
+          <span className="last-trick-label" aria-hidden="true">Last trick</span>
+          {lastTrick.filter(({ seat }) => seat === lastTrickWinner).map(({ seat, card }) => <span className={`last-trick-chip ${isRedSuit(card.suit) ? "red-card" : ""}`} key={seat} aria-hidden="true">{card.rank === "T" ? "10" : card.rank}{suitSymbols[card.suit]}</span>)}
+        </button></div> : null}
 
         <section className={phase === "auction" ? "auction-panel centered-auction" : "sr-only"} aria-label="Auction">
           {auctionList}
