@@ -1,10 +1,11 @@
-import type { Aggression, SkillLevel } from "./bots.js";
+import type { Aggression, BotTraits, SkillLevel } from "./bots.js";
 
 /**
  * The bot cast: one named character for each skill level and temperament, so players can get to know them and pick
  * favourite partners and opponents. Each plays the table's bidding system; only skill and aggressiveness differ.
  */
-export type BotCharacter = Readonly<{ id: string; name: string; skill: SkillLevel; aggression: Aggression; blurb: string }>;
+/** `traits` sets single dials over the aggressiveness preset; the cast uses aggressiveness alone. */
+export type BotCharacter = Readonly<{ id: string; name: string; skill: SkillLevel; aggression: Aggression; blurb: string; traits?: Partial<BotTraits> }>;
 
 export const BOT_CHARACTERS: readonly BotCharacter[] = [
   { id: "tess", name: "Timid Tess", skill: "beginner", aggression: "conservative", blurb: "New to the game and shy of the bidding box." },

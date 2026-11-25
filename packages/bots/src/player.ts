@@ -1,6 +1,6 @@
-import { SEATS, cardId, type Bid, type BotConfig, type BotPlayer, type Hand, type PlayContext, type PublicBid, type Seat, type Suit } from "@contractplay/core";
+import { SEATS, cardId, resolveTraits, type Bid, type BotConfig, type BotPlayer, type Hand, type PlayContext, type PublicBid, type Seat, type Suit } from "@contractplay/core";
 import { forcedContinuation, strongOpenerRebid } from "./forcing.js";
-import { adjustCall, aggressionCard } from "./aggression.js";
+import { adjustCall, traitCard } from "./traits.js";
 import { advancedCard, expertCard } from "./play.js";
 import { createSystem } from "./system.js";
 
@@ -3676,11 +3676,11 @@ export function createRuleBot(config: BotConfig): BotPlayer {
 /**
  * A bot for the table. Where no rule fits and a pass would break a forcing agreement, it makes a natural forced call.
  * Should a rule ever choose a call the auction no longer allows, the bot passes instead, so a table never waits on a
- * call that cannot be made. Its aggressiveness then bends the chosen call or card (see `aggression.ts`).
+ * call that cannot be made. Its trait dials then bend the chosen call or card (see `traits.ts`).
  */
 export function createBot(config: BotConfig): BotPlayer {
   const bot = createRuleBot(config);
-  const aggression = config.aggression ?? "normal";
+  const traits = resolveTraits(config);
   return {
     config: bot.config,
     async chooseBid(hand, auction, seat) {
@@ -3695,9 +3695,9 @@ export function createBot(config: BotConfig): BotPlayer {
           : system.corrected(chosen) ?? strongOpenerRebid(hand, auction, seat, chosen) ?? chosen;
         return isLegalCall(bid, auction, seat) ? bid : "pass";
       })();
-      const adjusted = adjustCall(natural, system.h, system.v, aggression, () => forcedContinuation(hand, auction, seat, style) === undefined);
+      const adjusted = adjustCall(natural, system.h, system.v, traits, () => forcedContinuation(hand, auction, seat, style) === undefined);
       return isLegalCall(adjusted, auction, seat) ? adjusted : natural;
     },
-    chooseCard: async (context) => aggressionCard(context, aggression) ?? bot.chooseCard(context)
+    chooseCard: async (context) => traitCard(context, traits) ?? bot.chooseCard(context)
   };
 }

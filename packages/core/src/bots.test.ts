@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PlayContext, Solver } from "./bots.js";
-import { requestHint } from "./bots.js";
+import { requestHint, resolveTraits, TRAIT_PRESETS } from "./bots.js";
 
 const context: PlayContext = {
   seat: "north",
@@ -48,5 +48,21 @@ describe("requestHint", () => {
     await expect(requestHint({ ...context, ledSuit: "hearts" }, solver)).resolves.toEqual([
       { suit: "hearts", rank: "A" }
     ]);
+  });
+});
+
+describe("bot trait dials", () => {
+  const standard = { openings: "standard", competing: "standard", preempts: "standard", doubles: "standard", leads: "standard", secondHand: "standard" };
+
+  it("presets match today's aggressiveness", () => {
+    expect(TRAIT_PRESETS.normal).toEqual(standard);
+    expect(TRAIT_PRESETS.conservative).toEqual({ openings: "cautious", competing: "cautious", preempts: "cautious", doubles: "standard", leads: "cautious", secondHand: "cautious" });
+    expect(TRAIT_PRESETS.aggressive).toEqual({ openings: "bold", competing: "bold", preempts: "standard", doubles: "standard", leads: "bold", secondHand: "bold" });
+  });
+
+  it("resolves the preset then each set dial", () => {
+    expect(resolveTraits({})).toEqual(standard);
+    expect(resolveTraits({ aggression: "aggressive", traits: { preempts: "bold" } })).toEqual({ ...TRAIT_PRESETS.aggressive, preempts: "bold" });
+    expect(resolveTraits({ traits: { doubles: "cautious" } })).toEqual({ ...standard, doubles: "cautious" });
   });
 });
