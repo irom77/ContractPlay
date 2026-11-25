@@ -1,0 +1,17 @@
+{
+  "name": "@contractplay/benchmark",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "cd ../.. && vitest run packages/benchmark"
+  },
+  "dependencies": {
+    "@contractplay/core": "workspace:*",
+    "@contractplay/protocol": "workspace:*"
+  },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } }
+}
