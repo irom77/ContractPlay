@@ -40,3 +40,17 @@
 - Updated plan signatures to include `maxTables`, the required versioned score transform, the result wrapper, and the small-cohort mirror requirement. Task 2 will build the benchmark workspace package before server tests.
 - Task 1: minor (deferred): baseline Workerd teardown diagnostic and ESLint module-format warning appear despite successful exit; recheck during final release validation.
 - Task 3 must persist rotation version/seed/index/assignments and mirror a single-table rotation for small cohorts. Task 4 must attribute profile observations from partnership results, count underlying boards once, and provide calibrated directed observations.
+
+## Task 2 review findings
+- **Important: imported replay privacy.** Public replay currently returns imported board facts/actions after every table completes. It must remain private by default; public replay needs source/publication gating. `benchmark-store.ts:getPublicResult`, `benchmark-routes.ts:185`.
+- **Important: pause fencing.** Assignment/board setup writes do not require the current job lease and may succeed after pause or lease replacement. Fence coordinator setup writes. Preserve table reports for boards already released before pause: they are immutable facts from work already in flight, and may complete that board; prevent paused jobs from releasing or setting up any subsequent board. Add stale-lease tests and explicit resume behavior.
+- **Verification gap.** Two default-parallel `pnpm test` runs hit timing-sensitive timeouts in different existing server tests; the capped two-worker server suite passed 143. Final release checks still need a default concurrency run before any deployment.
+- Fix round 1/5 starts at `e4e3f96d498efe07cbe31a127d28abcf4f5586e3`.
+
+## Task 2 complete
+- Implementation commit: `e4e3f96d498efe07cbe31a127d28abcf4f5586e3`.
+- Review found important gaps in imported replay privacy and pause/claim fencing. Fix commit `b80da3a650a234c716fe7a803d004cbc65d90f33` addressed both; scoped re-review confirmed the public HTTP test hides imported deal/play facts and the lease tests cover stale setup writes, late reports, pause, and fresh-lease resume.
+- 15 focused tests passed after the fix; server typecheck and lint passed. Full default-parallel test runs had unrelated timing-sensitive server test timeouts, while `pnpm --filter @contractplay/server test --maxWorkers 2` passed all 143 tests. Final release suite remains required before deployment.
+- Task 3 contract: use lease-aware `putTableAssignments`, `putJobBoards`, and `startBoard` with current `{token, now}` claim; pause blocks future board admission, while reports for already admitted boards remain allowed. Generated board replays may be public; imported replay details remain private by default. Engine version must be checked before execution.
+- Task 2: fix round 1/5 (2 addressed, 0 open; commits `e4e3f96`..`b80da3a`).
+- Task 2: minor (deferred): default-parallel server suite exposes timing-sensitive failures in different pre-existing cases; investigate final verification only if it recurs.

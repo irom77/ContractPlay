@@ -86,13 +86,13 @@
 - Consumes: `BenchmarkProfileSnapshot` and rating-period output from Task 1; `authenticatedAccount` and `AuthStore` patterns from existing auth routes.
 - Produces: `BenchmarkStore` methods for roster, cohort snapshots, job claims, board/result insertion, and rating snapshots; `/api/admin/benchmarks/*` and public `/api/benchmarks/*` routes.
 
-- [ ] **Step 1: Write schema/store tests** for immutable profile versions, retirement, cohort snapshotting, idempotent board result keys, rating history, and bounded list queries.
-- [ ] **Step 2: Add migration 0006** creating separate benchmark profile/version, cohort, job, table assignment, board/result, and rating snapshot tables with uniqueness constraints and indexes for status/time queries.
-- [ ] **Step 3: Implement `BenchmarkStore`** with atomic/idempotent D1 operations and explicit schema, rotation, score-transform, and rating algorithm versions.
-- [ ] **Step 4: Add server-side admin authorization** for benchmark routes using authenticated accounts and a deployment-configured account-ID allowlist; return 401 for unauthenticated requests and 403 for signed-in non-admins. Never accept an admin identity from request data.
-- [ ] **Step 5: Implement validated route handlers** for profile/cohort CRUD, bounded PBN upload parsing (board facts only), job start/pause/resume/cancel, and public leaderboard/result reads.
-- [ ] **Step 6: Register environment types and route dispatch** without changing the existing table/session public API.
-- [ ] **Step 7: Build the benchmark dependency and run focused server tests** with `pnpm --filter @contractplay/benchmark build` and `pnpm --filter @contractplay/server test -- benchmark-store benchmark-routes`; ensure a clean checkout builds the domain package before server tests and confirm invalid input, unauthorized calls, and retries are handled as specified.
+- [x] **Step 1: Write schema/store tests** for immutable profile versions, retirement, cohort snapshotting, idempotent board result keys, rating history, and bounded list queries.
+- [x] **Step 2: Add migration 0006** creating separate benchmark profile/version, cohort, job, table assignment, board/result, and rating snapshot tables with uniqueness constraints and indexes for status/time queries.
+- [x] **Step 3: Implement `BenchmarkStore`** with atomic/idempotent D1 operations and explicit schema, rotation, score-transform, and rating algorithm versions.
+- [x] **Step 4: Add server-side admin authorization** for benchmark routes using authenticated accounts and a deployment-configured account-ID allowlist; return 401 for unauthenticated requests and 403 for signed-in non-admins. Never accept an admin identity from request data.
+- [x] **Step 5: Implement validated route handlers** for profile/cohort CRUD, bounded PBN upload parsing (board facts only), job start/pause/resume/cancel, and public leaderboard/result reads.
+- [x] **Step 6: Register environment types and route dispatch** without changing the existing table/session public API.
+- [x] **Step 7: Build the benchmark dependency and run focused server tests** with `pnpm --filter @contractplay/benchmark build` and `pnpm --filter @contractplay/server test -- benchmark-store benchmark-routes`; ensure a clean checkout builds the domain package before server tests and confirm invalid input, unauthorized calls, and retries are handled as specified.
 
 ### Task 3: Scheduled bounded coordinator and bot-only duplicate execution
 
