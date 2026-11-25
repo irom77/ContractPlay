@@ -1,6 +1,6 @@
 import type { Aggression, BotTraits, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel } from "@contractplay/core";
 import { SEATS } from "@contractplay/core";
-import type { ClientMessage, CustomBot, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
+import type { ClientMessage, RefusalReason, TableScoring, TableStyle } from "@contractplay/protocol";
 
 export type PlayerId = string;
 export type SeatState =

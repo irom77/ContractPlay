@@ -179,17 +179,17 @@
   - `CHANGES.md` and `TODO.md`: Part 3 done.
 - Test: `apps/client/src/mocks/Previews.test.tsx`
 
-- [ ] **Step 1: Write the failing preview expectation.**
+- [x] **Step 1: Write the failing preview expectation.**
   - The "seating" screen keeps West open and puts Gentle Gina (`GINA`, from the solo previews) at North instead of the human partner. The point that Deal waits for West still holds.
   - Its detail says: "…with Gentle Gina, your own character, at North (her non-standard dials under her name), and Bold Bea, a named bot, at East…".
   - The test expects `"Gentle Gina · Advanced · Player's character"` and her dial summary in the North seat group.
 
-- [ ] **Step 2: Run** `pnpm --filter @contractplay/client exec vitest run src/mocks/Previews.test.tsx`. Expected: FAIL.
+- [x] **Step 2: Run** `pnpm --filter @contractplay/client exec vitest run src/mocks/Previews.test.tsx`. Expected: FAIL.
 
-- [ ] **Step 3: Update the scenario and the docs.**
+- [x] **Step 3: Update the scenario and the docs.**
   - `GINA` is a module-local constant in `scenarios.ts`; reuse it there.
   - Only the `solo` preview kind has `ownCharacters` today. Add `ownCharacters?: readonly OwnCharacter[]` to the online preview kind, and have `Previews.tsx` store it under `contractplay.ownCharacters` for online screens too, so the picker shows Gina as yours.
 
-- [ ] **Step 4: Run** `pnpm typecheck && pnpm lint && pnpm test`. Expected: all pass.
+- [x] **Step 4: Run** `pnpm typecheck && pnpm lint && pnpm test`. Expected: all pass.
 
-- [ ] **Step 5: Commit** `Preview your own character at an online table`.
+- [x] **Step 5: Commit** `Preview your own character at an online table`.

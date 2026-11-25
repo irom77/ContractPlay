@@ -50,7 +50,10 @@ function PreviewScreen({ data }: { data: PreviewData }) {
 
 function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | { kind: "auth" }> }) {
   const storage = useMemo(() => {
-    const store = memoryStorage(data.kind === "table" && data.hints ? { "contractplay.hints": "on" } : {});
+    const store = memoryStorage({
+      ...(data.kind === "table" && data.hints ? { "contractplay.hints": "on" } : {}),
+      ...(data.kind === "table" && data.ownCharacters ? { "contractplay.ownCharacters": JSON.stringify(data.ownCharacters) } : {})
+    });
     saveIdentity(store, data.viewerName);
     return store;
   }, [data]);

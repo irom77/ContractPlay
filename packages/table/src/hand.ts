@@ -1,5 +1,5 @@
 import { applyAction, botCharacter, createDeck, createGameState, deal as dealCards, emptyRubber, nextRubberDeal, playContextFor, recordRubberHand, rewindTo, SEATS, shuffle } from "@contractplay/core";
-import type { Aggression, BotConfig, GameAction, GameState, Seat, SkillLevel, Vulnerability } from "@contractplay/core";
+import type { BotConfig, GameAction, GameState, Seat, SkillLevel, Vulnerability } from "@contractplay/core";
 import { createBot } from "@contractplay/bots";
 import {
   BOT_PAUSE_MS, TRICK_PAUSE_MS, accept, betweenHands, refuse, scoringOf, seatOf, withoutAutoPlay, withoutClaim, withoutGame, withoutKeys,

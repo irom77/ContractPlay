@@ -132,7 +132,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard }
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; ownCharacters?: readonly OwnCharacter[] }
   | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
 
@@ -154,10 +154,14 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "seating", title: "Seating", detail: "You host at South with a human partner and Bold Bea, a named bot, at East; each bot seat offers a table bot of any skill or one of the twelve named bots. West is still open, so Deal waits.",
+    id: "seating", title: "Seating", detail: "You host at South with Gentle Gina, your own character, at North (her non-standard dials under her name), and Bold Bea, a named bot, at East. West is still open, so Deal waits.",
     build: () => {
-      const people: People = { south: "Alex", north: "Maria" };
-      return view(table("Friday club", people, [], { east: "bea" }), "south", people);
+      const people: People = { south: "Alex" };
+      const host = player("south");
+      const state = table("Friday club", people, [], { east: "bea" });
+      const withGina = run(state, { type: "message", player: host, message: { type: "setBot", seat: "north", skill: GINA.skill,
+        custom: { id: GINA.id, name: GINA.name, skill: GINA.skill, traits: GINA.traits } }, at: AT });
+      return { ...view(withGina, "south", people), ownCharacters: [GINA] };
     }
   },
   {

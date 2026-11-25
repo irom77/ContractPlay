@@ -1,4 +1,4 @@
-import { cleanName, isBotTraits, isOwnCharacterId, MAX_CHARACTER_NAME, TRAIT_LEVELS, TRAIT_NAMES, type BotTraits, type SkillLevel } from "@contractplay/core";
+import { cleanName, isBotTraits, isOwnCharacterId, MAX_CHARACTER_NAME, type BotTraits, type SkillLevel } from "@contractplay/core";
 export { isBotTraits, isOwnCharacterId, MAX_CHARACTER_NAME } from "@contractplay/core";
 
 /**

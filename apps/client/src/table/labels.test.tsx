@@ -18,7 +18,7 @@ describe("online own-character labels", () => {
   it("builds setBot messages and names custom seats", () => {
     expect(setBotFor("east", gina.id, [gina])).toEqual({ type: "setBot", seat: "east", skill: "advanced",
       custom: { id: gina.id, name: "Gentle Gina", skill: "advanced", traits: gina.traits } });
-    expect(botName({ custom: { name: "Gentle Gina", traits: gina.traits } })).toBe("Gentle Gina");
+    expect(botName({ custom: { name: "Gentle Gina" } })).toBe("Gentle Gina");
   });
 });
 

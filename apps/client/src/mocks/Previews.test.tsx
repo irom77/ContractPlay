@@ -36,6 +36,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   seating: () => {
     expect(within(screen.getByRole("group", { name: "West seat" })).getByRole("button", { name: "Add bot" })).toBeTruthy();
+    const north = within(screen.getByRole("group", { name: "North seat" }));
+    expect(north.getByText("Gentle Gina · Advanced · Player's character", { selector: "strong" })).toBeTruthy();
+    expect(north.getByText("Openings: Sound · Competing: Sells out · Preempts: Sound · Penalty doubles: Rarely · Second hand: Low")).toBeTruthy();
     const east = within(screen.getByRole("group", { name: "East seat" }));
     expect(east.getByText("Bold Bea · Advanced · Aggressive", { selector: "strong" })).toBeTruthy();
     expect((east.getByLabelText("Bot") as HTMLSelectElement).value).toBe("bea");

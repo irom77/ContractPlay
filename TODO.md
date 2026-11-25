@@ -15,7 +15,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 
 ## Bots
 
-- [ ] Named bots next: players' own saved characters that play differently (`docs/superpowers/specs/2026-11-25-bot-traits-design.md`). Part 1 done: six trait dials in the bots (openings, competing, preempts, penalty doubles, leads, second hand), with aggressiveness as presets that play as before, plus wild preempts and penalty doubles rarely/often. Part 2 done: own characters in solo, with an editor, results and account sync (migration 0005). Next: part 3, own characters at online tables.
+- [x] Named bots: players' own saved characters that play differently (`docs/superpowers/specs/2026-11-25-bot-traits-design.md`). Parts 1–3 are done: six trait dials with the old aggressiveness presets preserved; own characters in solo with an editor, results and account sync (migration 0005); and own characters at online tables, with owner-only result attribution.
 
 ## Online multiplayer
 
