@@ -153,3 +153,13 @@ it("keeps account caches distinct even when both contain the same table hand", a
   await syncOnlineHands(storage, { playerId: "other-account", displayName: "Other" });
   expect(loadSoloData(storage).completedHands.map(h => h.onlineHistory?.ownerPlayerId).sort()).toEqual([account.playerId, "other-account"].sort());
 });
+it("keeps device-only solo hands when 25 newer account solo hands arrive", async () => {
+  const imported = Array.from({ length: 10 }, (_, i) => ({ ...hand(`mf3k2x-pbn${String(i).padStart(3, "0")}`, i), pbnMetadata: { tags: [] } }));
+  const storage = storageWith(imported);
+  const remote = Array.from({ length: 25 }, (_, i) => hand(`t${i}-remote`, 100 + i));
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ hands: remote })));
+  await syncOnlineHands(storage, account);
+  const ids = loadSoloData(storage).completedHands.map(h => h.id);
+  expect(ids).toHaveLength(35);
+  for (const hand of imported) expect(ids).toContain(hand.id);
+});
