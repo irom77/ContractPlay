@@ -339,6 +339,22 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect((doubles.getByLabelText("Rarely") as HTMLInputElement).checked).toBe(true);
     expect(doubles.getByText("Passes rather than double the opponents for penalty.")).toBeTruthy();
     expect(screen.getByRole("list", { name: "Your characters" }).textContent).toContain("Gentle Gina");
+  },
+  "benchmark-lobby": async () => {
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /^Open tables/, expanded: false }));
+    expect(screen.getByText("Bot benchmark")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Watch Benchmark · round 12" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Watch Friday club" })).toBeNull();
+  },
+  "benchmark-watch": () => {
+    const table = screen.getByRole("region", { name: "Benchmark match Benchmark · round 12, read-only observer" });
+    expect(screen.getByText("Watching bot benchmark · read-only")).toBeTruthy();
+    expect(within(table).getByRole("button", { name: "Back to open tables" })).toBeTruthy();
+    // Hands stay concealed while the board is in play, and there are no gameplay controls.
+    expect(table.querySelectorAll(".table-card[aria-label*=' of ']").length).toBeLessThan(16);
+    expect(screen.queryByRole("button", { name: /claim/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /menu/i })).toBeNull();
   }
 };
 

@@ -76,13 +76,18 @@ it("runs one unit per alarm, resumes a partial setup, gates paused boards and re
   await play(1);
   expect(await session.boardFor(first!.id, 1)).toBeUndefined();
   expect(await table(first!.id).startBenchmarkBoard(1)).toBe(false);
-  expect(await store.getPublicResult(id, 0, 0)).toMatchObject({ boardIndex: 0, jobId: id });
+  expect(await store.getPublicResult(id, 0, 0)).toBeNull();
   await coordinator().resume(id);
   for (let i = 0; i < 20 && (await Promise.all(listed.map(({ id }) => stateOf(id)))).some((s) => s?.handNumber !== 2); i++) await tick();
   expect((await stateOf(first!.id))!.handNumber).toBe(2);
   await play(2);
   for (let i = 0; i < 15 && ((await store.getJob(id))?.status !== "completed" || (await lobbyOf(env).list()).length); i++) await tick();
   expect((await store.getJob(id))?.status).toBe("completed");
+  const summary = await store.getSessionScores(id);
+  expect(summary?.profiles).toHaveLength(4);
+  for (const profile of summary!.profiles) {
+    expect(await store.listRatingHistory(profile.competitorId)).toHaveLength(1);
+  }
   expect(await lobbyOf(env).list()).toEqual([]);
   expect(await store.getPublicResult(id, 1, 1)).toMatchObject({ boardIndex: 1, jobId: id });
 }, 60_000);
@@ -231,7 +236,7 @@ it("repairs a stale lobby summary when board publication is retried", async () =
   const tableIds = [];
   for (let index = 0; index < 2; index++) {
     const tableId = await lobby.createBenchmarkTable({ jobId: id, tableIndex: index, sessionId,
-      name: `Publication ${index + 1}`, style: cohort.biddingStyle, assignment: rotation[index]! });
+      name: `Publication ${index + 1}`, style: cohort.biddingStyle, boardSource: "generated", assignment: rotation[index]! });
     expect(tableId).toBeTruthy();
     tableIds.push(tableId!);
   }

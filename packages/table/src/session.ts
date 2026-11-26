@@ -57,23 +57,29 @@ export function recordDuplicateResult(session: DuplicateSession, tableId: string
   };
 }
 
+/** Duplicate comparison of a North–South result with every other table on the same board. */
+export function duplicateBoardScore(mine: number, otherScores: readonly number[]) {
+  let points = 0, crossImps = 0;
+  for (const other of otherScores) {
+    points += mine > other ? 2 : mine === other ? 1 : 0;
+    crossImps += impsFor(mine - other);
+  }
+  return { crossImps, matchpoints: { points, top: 2 * otherScores.length } };
+}
+
 /** Computes the visible standing from finalized boards only. */
 export function sessionStanding(session: DuplicateSession, tableId: string): DuplicateSessionStanding | undefined {
   if (!session.tables.includes(tableId)) return undefined;
-  const opponents = session.tables.length - 1;
   let points = 0, top = 0, crossImps = 0, completedBoards = 0;
   for (let index = 0; index < session.currentBoard; index++) {
     const scores = session.results[index];
     const mine = scores?.[tableId];
     if (mine === undefined || !session.tables.every((table) => scores?.[table] !== undefined)) continue;
     completedBoards++;
-    top += 2 * opponents;
-    for (const other of session.tables) {
-      if (other === tableId) continue;
-      const theirs = scores![other]!;
-      points += mine > theirs ? 2 : mine === theirs ? 1 : 0;
-      crossImps += impsFor(mine - theirs);
-    }
+    const board = duplicateBoardScore(mine, session.tables.filter(id => id !== tableId).map(id => scores![id]!));
+    top += board.matchpoints.top;
+    points += board.matchpoints.points;
+    crossImps += board.crossImps;
   }
   return { tableId, completedBoards, matchpoints: { points, top, percentage: top === 0 ? 0 : points * 100 / top }, crossImps };
 }

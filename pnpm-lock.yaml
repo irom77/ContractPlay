@@ -23,6 +23,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@contractplay/benchmark':
+        specifier: workspace:^
+        version: link:../../packages/benchmark
       '@contractplay/bots':
         specifier: workspace:*
         version: link:../../packages/bots

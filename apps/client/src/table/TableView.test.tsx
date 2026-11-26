@@ -74,6 +74,14 @@ describe("card backs at hidden seats", () => {
     expect(container.querySelectorAll(".hidden-hand").length).toBe(3);
   });
 
+  it("can show the bottom seat's public card backs for an unseated observer", () => {
+    const game = afterOpeningLead();
+    const { container } = renderTable(publicGame(game, []), { bottomSeat: "south", showBacksAtBottom: true });
+    expect(backsAt(container, "east")).toBe(12);
+    for (const seat of ["north", "south", "west"] as const) expect(backsAt(container, seat)).toBe(13);
+    expect(container.querySelectorAll(".hidden-hand")).toHaveLength(4);
+  });
+
   it("shows no backs on a completed hand", () => {
     const game = { ...publicGame(afterOpeningLead(), ["north"]), phase: "complete" as const };
     const { container } = renderTable(game);

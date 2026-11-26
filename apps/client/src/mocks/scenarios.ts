@@ -5,7 +5,7 @@ import type { PartnerResult } from "../partnerResults.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
 import { handName } from "../handNames.js";
-import { botToAct, createTable, reduce, rubberHandId, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
+import { botToAct, createTable, observerViewFor, reduce, rubberHandId, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
 
 /*
  * UI preview scenarios. Every screen is a real table state built with the same reducer the server runs, then
@@ -132,7 +132,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; ownCharacters?: readonly OwnCharacter[] }
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; ownCharacters?: readonly OwnCharacter[]; observer?: true }
   | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
 
@@ -476,8 +476,27 @@ const laterScreens: readonly PreviewScreen[] = [
   {
     id: "solo-characters", title: "Solo: your characters", detail: "Editing Gentle Gina, a character you made: her name, description and skill, and a setting on each of six dials (openings, competing, preempts, penalty doubles, leads, second hand), each with what it means. Gina is sound and patient: she never doubles you for penalty.",
     build: () => newDealWithGina({ editingCharacter: GINA.id })
+  },
+  {
+    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats.",
+    build: () => {
+      const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
+      return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(bid(dealt(benchmarkTable()), 3)), summaryOf(playing)] };
+    }
+  },
+  {
+    id: "benchmark-watch", title: "Watching a bot benchmark table", detail: "A read-only observer at a bot benchmark table mid-play: the auction and the tricks so far, every hand face-down until the duplicate board is complete, and no seating, claim, or menu controls.",
+    build: () => ({ kind: "table", viewerName: "Alex", view: observerViewFor(playUntil(bid(dealt(benchmarkTable()), 8), moment(["east", "west"], 3))), observer: true })
   }
 ];
+
+/** A server-run benchmark table: four benchmark bots and the job marker the coordinator sets. */
+function benchmarkTable(): TableState {
+  const state = createTable({ id: "BENCH1", name: "Benchmark · round 12", style: "SAYC", listed: true, at: AT });
+  const seats = Object.fromEntries(SEATS.map((seat) => [seat, { kind: "bot", skill: "advanced" } as const])) as unknown as TableState["seats"];
+  return { ...state, seats, benchmark: { jobId: "preview-job", tableIndex: 0, engineVersion: "contractplay-bots-v1", boardSource: "generated",
+    profiles: Object.fromEntries(SEATS.map((seat) => [seat, { profileId: `preview-${seat}`, version: "1" }])) as Record<Seat, { profileId: string; version: string }> } };
+}
 
 /** Every preview, online screens first, then solo play and account sign-in, then later additions. */
 export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...soloScreens, ...authScreens, ...laterScreens];
@@ -487,9 +506,9 @@ export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...so
  * stay as they are. Every screen belongs to exactly one group.
  */
 export const previewCategories: readonly { name: string; ids: readonly string[] }[] = [
-  { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "solo-characters", "email-sign-in", "email-link-sent"] },
+  { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "solo-characters", "email-sign-in", "email-link-sent", "benchmark-lobby"] },
   { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction"] },
-  { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-bot-declares", "solo-replayed-deal"] },
+  { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-bot-declares", "solo-replayed-deal", "benchmark-watch"] },
   { name: "Menus, claims & auto play", ids: ["game-menu", "auto-play", "claim-answer", "solo-auto-play", "solo-claim", "solo-menu", "solo-settings", "solo-hands"] },
   { name: "Results & scoring", ids: ["result", "rubber-score", "rubber-won", "duplicate-session", "solo-result", "solo-rubber-won", "solo-field-result", "solo-replay-result", "online-replay-result", "result-waiting"] },
   { name: "Reviewing hands", ids: ["solo-review", "solo-original-play"] }

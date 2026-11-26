@@ -10,6 +10,10 @@ const POLL_MS = 15_000;
 const LEASE_MS = 90_000;
 const MAX_RETRIES = 5;
 const BOARD_TIMEOUT_MS = 30 * 60_000;
+// Keep replay facts for a rolling quarter or 10,000 completed boards, whichever is smaller.
+// The 5-minute scheduled hook processes only a bounded batch; score and rating history is retained.
+const REPLAY_RETENTION_MS = 90 * 24 * 60 * 60_000;
+const REPLAY_RETENTION_BOARD_BUDGET = 10_000;
 type Progress = { phase: "assign" | "boards" | "tables" | "session" | "admit" | "deal" | "wait";
   tableIds: string[]; boardIndex: number; nextTable: number; retries: number; deadline?: number };
 type Lease = { id: string; token: string };
@@ -24,10 +28,10 @@ const terminal = (job: BenchmarkJob) => ["cancelled", "failed", "completed"].inc
 export class BenchmarkObject extends DurableObject<Env> {
   private get store() { return new BenchmarkStore(this.env.DB); }
 
-  async enqueue(input: { id: string; cohortId: string; roundIndex: number }): Promise<BenchmarkJob | null> {
+  async enqueue(input: { id: string; cohortId: string; roundIndex?: number }): Promise<BenchmarkJob | null> {
     return this.ctx.blockConcurrencyWhile(async () => {
       await this.wake();
-      return this.store.startJob({ ...input, now: Date.now() });
+      return this.store.startJob({ ...input, roundIndex: input.roundIndex ?? null, now: Date.now() });
     });
   }
 
@@ -35,6 +39,12 @@ export class BenchmarkObject extends DurableObject<Env> {
     await this.ctx.blockConcurrencyWhile(async () => {
       await this.wake();
       const store = this.store;
+      try {
+        await store.compactReplays(at, REPLAY_RETENTION_MS, REPLAY_RETENTION_BOARD_BUDGET);
+      } catch (error) {
+        // Archive maintenance is best-effort; it must not delay a due benchmark cohort.
+        console.error("benchmark replay compaction failed", error);
+      }
       for (const cohort of await store.dueCohorts(at)) {
         // Cohort IDs are server-generated UUIDs. Retries of the same cron tick identify the same job, including after a manually selected round.
         await store.startJob({ id: `cron-${cohort.id}-${at.toString(36)}`, cohortId: cohort.id, roundIndex: cohort.roundIndex, now: at });
@@ -165,7 +175,8 @@ export class BenchmarkObject extends DurableObject<Env> {
         const assignments = await store.listTableAssignments(job.id);
         const index = p.tableIds.length;
         const id = await lobbyOf(this.env).createBenchmarkTable({ jobId: job.id, sessionId: sid, tableIndex: index,
-          name: `${job.cohort.name.slice(0, MAX_TABLE_NAME - 4)} · ${index + 1}`, style: job.cohort.biddingStyle, assignment: assignments[index]! });
+          name: `${job.cohort.name.slice(0, MAX_TABLE_NAME - 4)} · ${index + 1}`, style: job.cohort.biddingStyle,
+          boardSource: job.cohort.importId === null ? "generated" : "imported", assignment: assignments[index]! });
         if (!id) {
           await this.finish(job, token, "failed");
           return STEP_MS;
@@ -228,7 +239,10 @@ export class BenchmarkObject extends DurableObject<Env> {
 
   private async finish(job: BenchmarkJob, token: string, status: "completed" | "failed"): Promise<void> {
     await this.queueCleanup(job);
-    if (!await this.store.finishJob(job.id, token, status, Date.now())) throw new Error("Benchmark finalization refused");
+    const finalized = status === "completed"
+      ? await this.store.finishRatedJob(job.id, token, Date.now())
+      : await this.store.finishJob(job.id, token, status, Date.now());
+    if (!finalized) throw new Error("Benchmark finalization refused");
   }
 
   private async queueCleanup(job: BenchmarkJob): Promise<void> {

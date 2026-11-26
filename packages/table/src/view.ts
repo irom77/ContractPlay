@@ -96,3 +96,24 @@ export function viewFor(state: TableState, player: PlayerId | undefined, session
     ...(yourSeat && state.game && betweenHands(state) ? { revealed: state.game.initialDeal } : {})
   };
 }
+
+/** A listed benchmark table as an unseated public observer may see it. Never use a synthetic player seat here. */
+export function observerViewFor(state: TableState, session?: NonNullable<TableView["session"]>): TableView {
+  const source = state.game;
+  const game = source ? {
+    phase: source.phase, dealer: source.dealer, vulnerability: source.vulnerability, currentActor: source.currentActor,
+    auction: source.auction, ...(source.contract ? { contract: source.contract } : {}),
+    hands: { north: [], east: [], south: [], west: [] },
+    currentTrick: source.currentTrick, completedTricks: source.completedTricks,
+    ...(source.score ? { score: source.score } : {}), trickLeader: source.trickLeader,
+    ...(source.claim ? { claim: source.claim } : {})
+  } satisfies NonNullable<TableView["game"]> : undefined;
+  const completed = (source?.phase === "complete" || source?.phase === "passed-out")
+    && state.benchmark?.boardSource === "generated" && state.sessionBoard !== undefined
+    && session !== undefined && session.completedBoards > state.sessionBoard.index;
+  return {
+    ...summaryOf(state), listed: state.listed, revision: state.revision, handNumber: state.handNumber,
+    totals: { ...state.totals }, canDeal: false, observer: true,
+    ...(game ? { game } : {}), ...(completed ? { revealed: source!.initialDeal } : {})
+  };
+}

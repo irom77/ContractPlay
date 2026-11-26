@@ -712,7 +712,7 @@ describe("a hand at an online table", () => {
           a.send(lastAct);
           const stale = await a.next();
           expect(stale).toMatchObject({ type: "refused", reason: "stale" });
-          expect(stale.type === "refused" && stale.view.game).toEqual(view.game);
+          expect(stale.type === "refused" && stale.view?.game).toEqual(view.game);
         } else if (viewerActs(view)) {
           const action = await chooseFromView(view);
           lastAct = { type: "act", handNumber: view.handNumber, revision: view.revision, action };
@@ -727,7 +727,7 @@ describe("a hand at an online table", () => {
           let answer = await a.next();
           while (answer.type === "view") answer = await a.next();
           expect(answer).toMatchObject({ type: "refused", reason: "stale", view: { yourSeat: "south", revision: view.revision } });
-          expect(answer.type === "refused" && answer.view.game!.hands.south).toEqual(view.game!.hands.south);
+          expect(answer.type === "refused" && answer.view?.game!.hands.south).toEqual(view.game!.hands.south);
         } else if (inPlay && reconnected && hibernated && !restarted) {
           // restart: evict with sockets closed, reconnect; the view must match the last one
           restarted = true;

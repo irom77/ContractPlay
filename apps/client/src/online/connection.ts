@@ -5,9 +5,13 @@ import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
 import type { AccountSession } from "./auth.js";
 
-export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone" | "identity-conflict" | "account-changed";
+export type ConnectionStatus = "connecting" | "open" | "reconnecting" | "reload" | "gone" | "refused" | "identity-conflict" | "account-changed";
 export type TableConnection = { send(message: Exclude<ClientMessage, { type: "hello" }>): void; close(): void };
 export type SessionBoardInput = Readonly<{ number: number; deal: Deal; dealer: Seat; vulnerability: Vulnerability }>;
+type ConnectTableInput = {
+  baseUrl: string; tableId: string; onView(view: TableView): void; onRefused(reason: RefusalReason): void; onStatus(status: ConnectionStatus): void;
+  createSocket?: (url: string) => WebSocket;
+} & ({ observer: true; identity?: never } | { observer?: false; identity: Identity | AccountSession });
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000];
 const SOCKET_OPEN = 1;
@@ -34,7 +38,8 @@ function parseServerMessage(data: unknown): ServerMessage | undefined {
   if (!isRecord(frame)) return undefined;
   switch (frame.type) {
     case "view": return isView(frame.view) ? { type: "view", view: frame.view } : undefined;
-    case "refused": return typeof frame.reason === "string" && isView(frame.view) ? { type: "refused", reason: frame.reason as RefusalReason, view: frame.view } : undefined;
+    case "refused": return typeof frame.reason === "string" && (frame.view === undefined || isView(frame.view))
+      ? { type: "refused", reason: frame.reason as RefusalReason, ...(isView(frame.view) ? { view: frame.view } : {}) } : undefined;
     case "reload": return { type: "reload" };
     case "gone": return { type: "gone" };
     case "identity-conflict": return { type: "identity-conflict" };
@@ -43,11 +48,7 @@ function parseServerMessage(data: unknown): ServerMessage | undefined {
   }
 }
 
-export function connectTable(input: {
-  baseUrl: string; tableId: string; identity: Identity | AccountSession;
-  onView(view: TableView): void; onRefused(reason: RefusalReason): void; onStatus(status: ConnectionStatus): void;
-  createSocket?: (url: string) => WebSocket;
-}): TableConnection {
+export function connectTable(input: ConnectTableInput): TableConnection {
   const url = `${input.baseUrl.replace(/^http/, "ws").replace(/\/+$/, "")}/api/tables/${encodeURIComponent(input.tableId)}/ws`;
   const createSocket = input.createSocket ?? ((target: string) => new WebSocket(target));
   let socket: WebSocket | undefined;
@@ -75,9 +76,11 @@ export function connectTable(input: {
       if (stopped || socket !== current) return;
       attempt = 0;
       // Browser WebSockets carry same-origin cookies automatically; account IDs never authenticate a socket.
-      const hello: ClientMessage = "secret" in input.identity
-        ? { type: "hello", version: PROTOCOL_VERSION, secret: input.identity.secret, name: input.identity.name }
-        : { type: "hello", version: PROTOCOL_VERSION, expectedPlayerId: input.identity.playerId, name: input.identity.displayName };
+      const hello: ClientMessage = input.observer
+        ? { type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" }
+        : "secret" in input.identity
+          ? { type: "hello", version: PROTOCOL_VERSION, secret: input.identity.secret, name: input.identity.name }
+          : { type: "hello", version: PROTOCOL_VERSION, expectedPlayerId: input.identity.playerId, name: input.identity.displayName };
       current.send(JSON.stringify(hello));
       input.onStatus("open");
     };
@@ -86,7 +89,11 @@ export function connectTable(input: {
       const message = parseServerMessage(event.data);
       if (!message) return;
       if (message.type === "view") input.onView(message.view);
-      else if (message.type === "refused") { input.onRefused(message.reason); input.onView(message.view); }
+      else if (message.type === "refused") {
+        input.onRefused(message.reason);
+        if (message.view) input.onView(message.view);
+        else { stop("refused"); current.close(); }
+      }
       else { stop(message.type); current.close(); }
     };
     current.onclose = () => {
@@ -103,6 +110,7 @@ export function connectTable(input: {
 
   return {
     send(message) {
+      if (input.observer && message.type !== "refresh") return;
       if (stopped || !socket || socket.readyState !== SOCKET_OPEN) return;
       socket.send(JSON.stringify(message));
     },

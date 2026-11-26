@@ -126,7 +126,7 @@ describe("BenchmarkStore", () => {
     expect(await store.recordResult(result)).toBe(true);
     await store.changeJobStatus("job", "pause", 8);
     expect(await store.recordResult({ ...result, tableIndex: 1, completedAt: 9 })).toBe(true);
-    expect(await store.getPublicResult("job", 0, 0)).toMatchObject({ board, releasedAt: 9 });
+    expect(await store.getPublicResult("job", 0, 0)).toBeNull();
     expect(await store.startBoard("job", 1, { ...initial, now: 10 })).toBe(false);
     expect(await store.recordResult({ ...result, boardIndex: 1, completedAt: 11 })).toBe(false);
 
@@ -137,6 +137,9 @@ describe("BenchmarkStore", () => {
     expect(await store.startBoard("job", 1, renewed)).toBe(true);
     expect(await store.startBoard("job", 1, renewed)).toBe(true);
     expect(await store.recordResult({ ...result, boardIndex: 1, completedAt: 16 })).toBe(true);
+    expect(await store.recordResult({ ...result, tableIndex: 1, boardIndex: 1, completedAt: 17 })).toBe(true);
+    expect(await store.finishJob("job", renewed.token, "completed", 18)).toBe(true);
+    expect(await store.getPublicResult("job", 0, 0)).toMatchObject({ board, releasedAt: 9, scoring: "imps" });
   });
 
   it("releases a board once every duplicate table finishes it and keeps future boards private", async () => {
@@ -156,8 +159,30 @@ describe("BenchmarkStore", () => {
     expect(await store.recordResult({ ...result, tableIndex: 1 })).toBe(true);
     expect(await store.finishJob("job", "worker", "completed", 8)).toBe(false);
     expect(await store.getPublicResult("job", 0, 1)).toBeNull();
-    expect(await store.getPublicResult("job", 0, 0)).toMatchObject({ board, assignment, actions, nsScore: 0 });
-    expect(await store.listPublicResults()).toHaveLength(2);
+    expect(await store.getPublicResult("job", 0, 0)).toBeNull();
+    expect(await store.listPublicResults()).toEqual([]);
+    expect(await store.startBoard("job", 1, claim)).toBe(true);
+    for (const tableIndex of [0, 1]) await store.recordResult({ ...result, tableIndex, boardIndex: 1, completedAt: 9 });
+    expect(await store.finishJob("job", "worker", "completed", 10)).toBe(true);
+    expect(await store.getPublicResult("job", 0, 0)).toMatchObject({ board, assignment, actions, nsScore: 0,
+      scoring: "imps",
+      field: [{ tableIndex: 0, nsScore: 0, contract: null, tricks: null }, { tableIndex: 1, nsScore: 0, contract: null, tricks: null }] });
+    expect(await store.listPublicResults()).toHaveLength(4);
+  });
+
+  it("does not make a released board public when its whole job fails", async () => {
+    await queue("failed", 1);
+    const assignment = createRotation(profiles, 17, 0, 2)[0]!;
+    const claim = { token: "worker", now: 4 };
+    await store.claimNextJob(claim.token, claim.now, 10);
+    await store.putTableAssignments("failed", [assignment, assignment], claim);
+    await store.putJobBoards("failed", [board], claim);
+    expect(await store.startBoard("failed", 0, claim)).toBe(true);
+    for (const tableIndex of [0, 1]) await store.recordResult({ jobId: "failed", tableIndex, boardIndex: 0, actions,
+      contract: null, tricks: null, nsScore: 0, completedAt: 5 });
+    expect(await store.finishJob("failed", claim.token, "failed", 6)).toBe(true);
+    expect(await store.getPublicResult("failed", 0, 0)).toBeNull();
+    expect(await store.listPublicResults()).toEqual([]);
   });
 
   it("commits a rating period once and reads the latest comparable ratings without losing history", async () => {

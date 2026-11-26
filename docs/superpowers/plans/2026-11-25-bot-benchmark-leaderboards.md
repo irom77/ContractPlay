@@ -124,12 +124,12 @@
 - Consumes: completed session standings and profile assignments from Task 3; rating engine from Task 1.
 - Produces: immutable per-board replay records, per-session raw Matchpoints/cross-IMPs, derived diagnostics, and versioned rating-period snapshots.
 
-- [ ] **Step 1: Write result/replay tests** asserting persisted auction/play reconstructs the completed deal, duplicate reports are no-ops, and concealed deal facts are absent from unfinished public result responses.
-- [ ] **Step 2: Persist board facts and public event sequence** (deal metadata, auction, plays, contract, tricks, NS/EW score, assignments) separately from derived session/rating summaries.
-- [ ] **Step 3: Build a deterministic simulation fixture for rating calibration** across mirrored seat/partner rotations; compare observed ΔIMP distributions and document the selected ΔIMP-to-score scale before allowing non-provisional publication.
-- [ ] **Step 4: Aggregate one rating-period observation per profile from completed rotated sessions** so duplicate boards are not treated as independent 1v1 games; include sample-board count and preserve raw IMP/MP metrics.
-- [ ] **Step 5: Commit ratings idempotently by job and algorithm version**; retries must return the existing rating snapshot, while a new algorithm version creates a new history series.
-- [ ] **Step 6: Test retirement/version migration and replay retention** so retired IDs remain historically queryable and replay data obeys the configured rolling retention policy.
+- [x] **Step 1: Write result/replay tests** asserting persisted auction/play reconstructs the completed deal, duplicate reports are no-ops, and concealed deal facts are absent from unfinished public result responses.
+- [x] **Step 2: Persist board facts and public event sequence** (deal metadata, auction, plays, contract, tricks, NS/EW score, assignments) separately from derived session/rating summaries.
+- [x] **Step 3: Build a deterministic simulation fixture for rating calibration** across mirrored seat/partner rotations; compare observed ΔIMP distributions and document the selected ΔIMP-to-score scale before allowing non-provisional publication.
+- [x] **Step 4: Aggregate one rating-period observation per profile from completed rotated sessions** so duplicate boards are not treated as independent 1v1 games; include sample-board count and preserve raw IMP/MP metrics.
+- [x] **Step 5: Commit ratings idempotently by job and algorithm version**; retries must return the existing rating snapshot, while a new algorithm version creates a new history series.
+- [x] **Step 6: Test retirement/version migration and replay retention** so retired IDs remain historically queryable and replay data obeys the configured rolling retention policy.
 
 ### Task 5: Safe read-only live observation and Open tables integration
 
@@ -141,12 +141,12 @@
 - Consumes: benchmark table metadata and existing `viewFor` redaction boundary.
 - Produces: optional `observer: true` on the existing `hello` message; a spectator-specific read-only table view/event stream with auction, played cards, and empty hidden hands; benchmark badge/status in Open tables; observer navigation that cannot issue player actions.
 
-- [ ] **Step 1: Write redaction tests** for observers joining during auction/play and assert no concealed hands, bot-private state, future-board deal, seat controls, or action messages are present.
-- [ ] **Step 2: Add a centralized spectator projection** in the table package or its existing view boundary; expose only bids and played cards appropriate to a live observer.
-- [ ] **Step 3: Add observer connection role and enforce server-side read-only behavior** in `TableObject`; reject all game-changing client messages from spectator sockets and apply existing socket/IP limits.
-- [ ] **Step 4: Mark benchmark entries in lobby summaries** and ensure table execution does not depend on spectator presence.
-- [ ] **Step 5: Add Open tables observer action and benchmark table presentation** with client tests for live entry, disconnect/rejoin, and no player seating/action affordances.
-- [ ] **Step 6: Run table, protocol, server, and client focused test suites** using the workspace scripts and ensure existing player-view behavior remains unchanged.
+- [x] **Step 1: Write redaction tests** for observers joining during auction/play and assert no concealed hands, bot-private state, future-board deal, seat controls, or action messages are present.
+- [x] **Step 2: Add a centralized spectator projection** in the table package or its existing view boundary; expose only bids and played cards appropriate to a live observer.
+- [x] **Step 3: Add observer connection role and enforce server-side read-only behavior** in `TableObject`; reject all game-changing client messages from spectator sockets and apply existing socket/IP limits.
+- [x] **Step 4: Mark benchmark entries in lobby summaries** and ensure table execution does not depend on spectator presence.
+- [x] **Step 5: Add Open tables observer action and benchmark table presentation** with client tests for live entry, disconnect/rejoin, and no player seating/action affordances.
+- [x] **Step 6: Run table, protocol, server, and client focused test suites** using the workspace scripts and ensure existing player-view behavior remains unchanged.
 
 ### Task 6: Admin maintenance UI, public leaderboard, and project docs
 
@@ -159,12 +159,23 @@
 - Consumes: protected admin APIs and public benchmark APIs from Task 2; benchmark/replay routes and observer UI from Tasks 3–5.
 - Produces: admin workflow for profile lifecycle, cohort membership, schedule/job health, and PBN import; public leaderboard with provisional state, rating uncertainty, sample count, version, and replay links.
 
-- [ ] **Step 1: Write UI tests** for creating/editing a cohort, starting/pausing/resuming/canceling a job, retiring a profile without losing history, and showing provisional versus eligible rankings.
-- [ ] **Step 2: Extend the admin page** with profile/version and cohort configuration, schedule controls, PBN upload, and job status/failure recovery; require an authenticated allowlisted admin session.
-- [ ] **Step 3: Add the public leaderboard view** showing profile version, Glicko rating/RD, eligibility, sample size, rating date/version, and raw IMP/board and MP diagnostics.
-- [ ] **Step 4: Link completed benchmark records to replay** while revealing full deals only after hand completion.
-- [ ] **Step 5: Update `TODO.md`, `CHANGES.md`, and README** to distinguish shipped behavior from remaining calibration/operational work.
-- [ ] **Step 6: Run release checks** with `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm web:verify`; refresh README screenshots only if the existing screenshots visibly change.
+- [x] **Step 1: Write UI tests** for creating/editing a cohort, starting/pausing/resuming/canceling/retrying a job, retiring a profile while retaining its history, PBN board-count validation, and provisional versus eligible rankings. Replay tests assert that hands remain concealed until the final stored action.
+- [x] **Step 2: Extend the admin page** with configurable profile versions, cohort membership/scoring/board counts/schedule/PBN sources, and job status/recovery; benchmark requests use same-origin signed-in cookies and the server allowlist. Added resumable per-board DDS analysis for completed jobs. The legacy table-removal surface remains separate and unauthenticated.
+- [x] **Step 3: Add the public leaderboard view** showing profile version, Glicko rating/RD/volatility, eligibility, sample size, rating date and algorithm/score versions, rolling IMP/board and matchpoint results, DDS diagnostics with source/counts, and rating history.
+- [x] **Step 4: Link completed generated benchmark records to step-through replay** while revealing all hands only at the final stored action. Imported board scores are public, but imported deal/play remains admin-only. Retention expiry removes replay links.
+- [x] **Step 5: Update `TODO.md`, `CHANGES.md`, README, and deployment documentation** to distinguish implemented code from pending production migration/allowlist/deployment and to call out the legacy open table-removal surface.
+- [x] **Step 6: Run release checks** with `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm web:verify`; all passed. The full test command passed 2,210 tests across 87 files. Existing README screenshot scenes did not change, so no refresh was needed.
+
+### Task 7: Play a released generated deal against a bot
+
+**Status: complete.** This extends watch replay into player practice without affecting rating or account-history data.
+
+- [x] Offer `Play this deal` only for generated boards whose duplicate session has fully released and whose deal/replay data remains retained.
+- [x] Let the player replace the selected benchmark profile in its assigned seat and play the exact deal against that original table's other three assigned bots.
+- [x] Compare the player's completed score with the released benchmark field rows for that exact board and partnership/seat, and identify the source bot profile in the comparison.
+- [x] Use memory-only `StorageLike` for the attempt and suppress online, account-history, and partner-result uploads so practice stays outside ratings and owned hand history.
+- [x] Imported PBN boards, incomplete sessions, failed jobs, private boards, and expired board data must never expose deal facts or create practice attempts. Public release requires a completed session; replay retention expires atomically; imported result endpoints return 404.
+- [x] Add focused UI/server tests for release checks, exact deal/profile selection, score comparison, and history/ranking isolation. Store tests prove the field is unavailable until all duplicate tables finish; route coverage proves imported hands remain private; client tests cover profile seat/cast, signed partnership score, field comparison data, and memory-only practice setup.
 
 ## Self-review
 
@@ -172,5 +183,5 @@
 - **Step scan:** Each task has a testable package or vertical slice and gives explicit files, boundaries, or a command. Calibration is intentionally an evidence-producing implementation step because the spec marks the ΔIMP scale as a hypothesis.
 - **Type consistency:** Profile snapshots, rotation assignments, store/coordinator responsibilities, and route outputs are named once in Interfaces and reused by later tasks.
 - **Review focus:** All five identified failure classes are tied to explicit tests in Tasks 2–5.
-- **Proportion:** Six vertical tasks separate reusable domain logic, persistence, execution, result integrity, observation, and user-facing operations while keeping each downstream task dependent on stable prior interfaces.
+- **Proportion:** Seven vertical tasks separate reusable domain logic, persistence, execution, result integrity, observation, operations, and isolated player practice while keeping each downstream task dependent on stable prior interfaces.
 

@@ -5,6 +5,8 @@ import { Lobby } from "./online/Lobby.js";
 import { OnlineTable } from "./online/OnlineTable.js";
 import { parseRoute, routeHash, type Route } from "./online/route.js";
 import { Admin } from "./admin/Admin.js";
+import { BenchmarkLeaderboard, BenchmarkReplay } from "./online/BenchmarkPages.js";
+import { BenchmarkPracticePage } from "./online/BenchmarkPracticePage.js";
 
 // The UI preview mode is loaded only when someone opens #/mocks.
 const Previews = lazy(() => import("./mocks/Previews.js").then((module) => ({ default: module.Previews })));
@@ -40,9 +42,14 @@ export default function Root() {
     if (baseUrl !== undefined) return <Admin baseUrl={baseUrl} />;
     return <main className="app-shell"><section className="empty-table lobby admin-page"><div className="lobby-panel">Online table administration is unavailable in this build.</div></section></main>;
   }
+  if (baseUrl !== undefined && route.screen === "leaderboard") return <BenchmarkLeaderboard baseUrl={baseUrl} />;
+  if (baseUrl !== undefined && route.screen === "benchmark-replay") return <BenchmarkReplay key={`${route.jobId}:${route.tableIndex}:${route.boardIndex}`} baseUrl={baseUrl} jobId={route.jobId} tableIndex={route.tableIndex} boardIndex={route.boardIndex} />;
+  if (baseUrl !== undefined && route.screen === "benchmark-practice") return <BenchmarkPracticePage key={`${route.jobId}:${route.tableIndex}:${route.boardIndex}:${route.profileId}:${route.version}`} baseUrl={baseUrl} jobId={route.jobId} tableIndex={route.tableIndex} boardIndex={route.boardIndex} profileId={route.profileId} version={route.version}
+    onExit={() => navigate({ screen: "benchmark-replay", jobId: route.jobId, tableIndex: route.tableIndex, boardIndex: route.boardIndex })} />;
   if (baseUrl === undefined || route.screen === "solo") return <App autoStart={soloStart} {...(soloDialog ? { initialDialog: soloDialog } : {})} />;
   if (route.screen === "lobby") {
-    return <Lobby baseUrl={baseUrl} storage={storage} onOpenTable={(id) => navigate({ screen: "table", id })} onPlaySolo={() => openSolo(undefined, true)} onRecentHands={() => openSolo("hands")} />;
+    return <Lobby baseUrl={baseUrl} storage={storage} onOpenTable={(id, observer) => navigate({ screen: "table", id, ...(observer ? { observer } : {}) })} onPlaySolo={() => openSolo(undefined, true)} onRecentHands={() => openSolo("hands")} />;
   }
-  return <OnlineTable key={route.id} baseUrl={baseUrl} tableId={route.id} storage={storage} onLeave={() => navigate({ screen: "lobby" })} onRecentHands={() => openSolo("hands")} />;
+  if (route.screen === "table") return <OnlineTable key={`${route.id}:${route.observer ? "observer" : "player"}`} baseUrl={baseUrl} tableId={route.id} {...(route.observer ? { observer: true as const } : {})} storage={storage} onLeave={() => navigate({ screen: "lobby" })} onRecentHands={() => openSolo("hands")} />;
+  return <App autoStart={soloStart} {...(soloDialog ? { initialDialog: soloDialog } : {})} />;
 }

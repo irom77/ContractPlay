@@ -1,25 +1,14 @@
-import { RANKS, SEATS, SUITS } from "@contractplay/core";
-import type { Deal, HandRecord } from "@contractplay/core";
+import { serializeDdsDeal } from "./ddsDeal.js";
+export { serializeDdsDeal } from "./ddsDeal.js";
+import type { HandRecord } from "@contractplay/core";
 
 export type DoubleDummyRequest = Readonly<Pick<HandRecord, "deal" | "dealer" | "vulnerability">>;
-type WorkerReply = Readonly<{ id: number; score?: number; error?: string }>;
+export type DoubleDummyBaseline = Readonly<{ source: "bridge-dds-1.4.0"; parNS: number; tricks: number[][] }>;
+type WorkerReply = Readonly<{ id: number; baseline?: DoubleDummyBaseline; error?: string }>;
 
 let worker: Worker | undefined;
 let nextId = 0;
-const waiting = new Map<number, { resolve: (score: number) => void; reject: (error: Error) => void }>();
-
-/** PBN deal string used by DDS: North, East, South, West, with S.H.D.C suits and descending ranks. */
-export function serializeDdsDeal(deal: Deal): string {
-  return SEATS.map((seat, index) => {
-    const hands = SUITS.map((suit) =>
-      [...deal[seat]].filter((card) => card.suit === suit)
-        .sort((a, b) => RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank))
-        .map((card) => card.rank)
-        .join("")
-    ).join(".");
-    return index === 0 ? "N:" + hands : hands;
-  }).join(" ");
-}
+const waiting = new Map<number, { resolve: (baseline: DoubleDummyBaseline) => void; reject: (error: Error) => void }>();
 
 function getWorker(): Worker {
   if (worker) return worker;
@@ -28,7 +17,7 @@ function getWorker(): Worker {
     const result = waiting.get(event.data.id);
     if (!result) return;
     waiting.delete(event.data.id);
-    if (typeof event.data.score === "number" && Number.isFinite(event.data.score)) result.resolve(event.data.score);
+    if (event.data.baseline) result.resolve(event.data.baseline);
     else result.reject(new Error(event.data.error ?? "The double-dummy solver returned no par score"));
   });
   const fail = () => {
@@ -45,7 +34,7 @@ function getWorker(): Worker {
 }
 
 /** Calculates duplicate par asynchronously in a Web Worker so DDS never blocks the table UI. */
-export function calculateDoubleDummyPar(input: DoubleDummyRequest): Promise<number> {
+export function calculateDoubleDummyBaseline(input: DoubleDummyRequest): Promise<DoubleDummyBaseline> {
   const id = ++nextId;
   return new Promise((resolve, reject) => {
     waiting.set(id, { resolve, reject });
@@ -61,4 +50,8 @@ export function calculateDoubleDummyPar(input: DoubleDummyRequest): Promise<numb
       reject(cause instanceof Error ? cause : new Error(String(cause)));
     }
   });
+}
+
+export async function calculateDoubleDummyPar(input: DoubleDummyRequest): Promise<number> {
+  return (await calculateDoubleDummyBaseline(input)).parNS;
 }

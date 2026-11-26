@@ -40,6 +40,8 @@ const resumeBannerKey = "contractplay.resumeBanner";
 
 export type OnlineTableProps = {
   baseUrl: string; tableId: string; storage: StorageLike; onLeave(): void;
+  /** Connect without a player identity and render only the benchmark observer view. */
+  observer?: true;
   /** Opens the device's recent hands, where finished online hands are saved; the seat is kept as with Back to lobby. */
   onRecentHands(): void; connect?: typeof defaultConnect;
   /** Opens the game menu on arrival (the UI previews show it this way). */
@@ -192,23 +194,24 @@ function publicPlayContext(game: PublicGame): PlayContext {
 
 export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   const [identity, setIdentity] = useState<Identity | undefined>(() => loadIdentity(storage));
-  const [account, setAccount] = useState<AccountSession | null | undefined>(props.account);
+  const [account, setAccount] = useState<AccountSession | null | undefined>(() => props.observer ? null : props.account);
   useEffect(() => {
     let active = true;
+    if (props.observer) { setAccount(null); return () => { active = false; }; }
     if (props.account !== undefined) { setAccount(props.account); return; }
     void currentAccount().then(session => { if (active) setAccount(session); }).catch(() => { if (active) setAccount(null); });
     return () => { active = false; };
-  }, [props.account]);
+  }, [props.account, props.observer]);
   useEffect(() => {
-    if (account) void syncOnlineHands(storage, account).then(() => syncBotResults(storage, account)).catch(() => {});
-  }, [storage, account]);
-  if (!identity && !account) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
-  if (account === undefined) return <main className="app-shell"><p role="status">Restoring your session…</p></main>;
-  return <ConnectedTable {...props} storage={storage} onLeave={onLeave} identity={account ?? identity!} />;
+    if (!props.observer && account) void syncOnlineHands(storage, account).then(() => syncBotResults(storage, account)).catch(() => {});
+  }, [storage, account, props.observer]);
+  if (!props.observer && !identity && !account) return <NameGate storage={storage} onSaved={setIdentity} secondary={{ label: "Back to lobby", onClick: onLeave }} />;
+  if (!props.observer && account === undefined) return <main className="app-shell"><p role="status">Restoring your session…</p></main>;
+  return <ConnectedTable {...props} storage={storage} onLeave={onLeave} {...(props.observer ? {} : { identity: account ?? identity! })} observer={props.observer === true} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: OnlineTableProps & { identity: Identity | AccountSession }) {
-  const accountIdentity = "playerId" in identity ? identity : undefined;
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, observer = false, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: Omit<OnlineTableProps, "observer"> & { identity?: Identity | AccountSession; observer?: boolean }) {
+  const accountIdentity = identity && "playerId" in identity ? identity : undefined;
   const playerId = accountIdentity?.playerId;
   const [ownCharacters, setOwnCharacters] = useState<readonly OwnCharacter[]>(() => charactersFor(loadOwnCharacters(storage), playerId));
   const [charactersSyncedFor, setCharactersSyncedFor] = useState<string>();
@@ -266,33 +269,36 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const activeQueued = queued && view?.game && queueOwners.includes(queued.seat) && queueStillValid(view.game, queued, String(view.handNumber), !!view.claim) ? queued : undefined;
 
   useEffect(() => {
-    const current = connect({
-      baseUrl, tableId, identity,
-      onView: (next) => {
+    const handlers = {
+      onView: (next: TableViewData) => {
         setReceived((previous) => receive(previous, next));
         setWaiting(false);
         // A take-back by anyone clears the queue: the card was picked for a position that no longer exists.
         const count = actionCount(next.game);
-        if (lastActions.current?.handNumber === next.handNumber && count < lastActions.current.count) setQueued(undefined);
+        const previousActions = lastActions.current;
+        if (previousActions?.handNumber === next.handNumber && count < previousActions.count) setQueued(undefined);
         lastActions.current = { handNumber: next.handNumber, count };
         if (takeBackSent.current) { takeBackSent.current = false; setTakenBackTo(next.revision); }
       },
-      onRefused: (reason) => {
+      onRefused: (reason: RefusalReason) => {
         takeBackSent.current = false;
         setWaiting(false);
         setLeaving(false);
         const text = refusalText(reason);
         setNotice(text === undefined ? undefined : { text });
       },
-      onStatus: (next) => {
+      onStatus: (next: ConnectionStatus) => {
         setStatus(next);
         // Dropped on any break in the connection: the table may have moved on while this client was away.
         if (next !== "open") setQueued(undefined);
       }
-    });
+    };
+    const current = observer
+      ? connect({ baseUrl, tableId, observer: true, ...handlers })
+      : connect({ baseUrl, tableId, identity: identity!, ...handlers });
     connection.current = current;
     return () => { current.close(); if (connection.current === current) connection.current = undefined; };
-  }, [baseUrl, tableId, identity, connect]);
+  }, [baseUrl, tableId, identity, observer, connect]);
 
   // Only ending the hold is timed; starting it happens with the view (see `receive`).
   useEffect(() => {
@@ -323,23 +329,23 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     const key = game && isLive(game) ? `${view.handNumber}:${deciderOf(game, view.seats)}:${game.auction.length + game.completedTricks.length * 4 + game.currentTrick.length}` : undefined;
     setTurn((known) => key === undefined ? undefined : known?.key === key ? known : { key, since: Date.now() });
 
-    if (view.revealed && game?.phase === "complete") {
-      const account = "playerId" in identity ? identity : undefined;
+    if (!observer && view.revealed && game?.phase === "complete") {
+      const account = identity && "playerId" in identity ? identity : undefined;
       const saved = saveToHistory(storage, view, account);
       if (saved && account) void uploadOnlineHand(storage, account, saved).catch(() => {
         setNotice({ text: "Online history could not sync. This hand is saved locally; reopen Recent hands to retry." });
       });
     }
-  }, [view, storage, identity]);
+  }, [view, storage, identity, observer]);
 
   useEffect(() => {
     const game = view?.game;
-    if (!charactersReady || !view?.revealed || game?.phase !== "complete") return;
-    const account = "playerId" in identity ? identity : undefined;
+    if (observer || !charactersReady || !view?.revealed || game?.phase !== "complete") return;
+    const account = identity && "playerId" in identity ? identity : undefined;
     const saved = saveToHistory(storage, view, account);
     const result = saved ? recordOnlineResult(storage, view, saved, ownCharacters) : undefined;
     if (result && account) void uploadBotResult(storage, account, result).catch(() => {});
-  }, [view, storage, identity, ownCharacters, charactersReady]);
+  }, [view, storage, identity, observer, ownCharacters, charactersReady]);
 
   useEffect(() => {
     if (!turn) return;
@@ -464,12 +470,19 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       <div className="lobby-panel"><p>This table no longer exists.</p>{backButton}</div>
     </section></main>;
   }
+  if (observer && status === "refused") {
+    return <main className="app-shell"><section className="empty-table lobby" aria-label="Sign-in required to watch">
+      <div className="lobby-panel"><p>Sign in before watching bot benchmark tables.</p>{backButton}</div>
+    </section></main>;
+  }
   if (!view) {
     return <main className="app-shell"><section className="empty-table lobby" aria-label="Joining the table">
       <div className="lobby-panel"><p className="quiet-copy">Connecting…</p>{backButton}</div>
       {statusLine}
     </section></main>;
   }
+
+  if (observer) return <ObserverTable view={view} onLeave={onLeave} status={status} />;
 
   // A rubber table scores the rubber in play (or the one just won, until the next deal); older tables keep running totals.
   const replayLine = view.replay ? <p className="replay-notice" role="status">{replayNotice(view.replay.firstPlayedAt, false)}</p> : null;
@@ -723,4 +736,36 @@ function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatIn
     {isHost ? <span className="online-badge">host</span> : null}
     {onHandToBot ? <button className="secondary-button online-seat-button" type="button" aria-label={`Hand to a bot for ${seatNames[seat]}`} onClick={onHandToBot}>Hand to a bot</button> : null}
   </span>;
+}
+
+function ObserverTable({ view, onLeave, status }: { view: TableViewData; onLeave(): void; status: ConnectionStatus }) {
+  const [callsOpen, setCallsOpen] = useState(true);
+  const [lastTrickOpen, setLastTrickOpen] = useState(false);
+  const [fullscreen, toggleFullscreen] = useFullscreen(() => {});
+  const statusLine = status === "reconnecting" ? <p className="online-status" role="status">Reconnecting…</p>
+    : status === "reload" ? <p className="online-status" role="status">ContractPlay was updated. Reload to keep watching.</p>
+      : status === "gone" ? <p className="online-status" role="status">This benchmark table has closed.</p> : null;
+  const game = view.game;
+  if (!game) return <main className="app-shell"><section className="empty-table lobby" aria-label={`Watching ${view.name}`}>
+    <div className="lobby-panel"><h1>{view.name}</h1><p className="quiet-copy">Waiting for the benchmark bots to begin.</p>
+      <button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button></div>{statusLine}
+  </section></main>;
+
+  const live = isLive(game);
+  const statusText = live ? `${seatNames[game.currentActor]} to ${game.phase === "auction" ? "bid" : "play"}`
+    : game.phase === "complete" ? "Hand complete" : "Passed out";
+  return <main className="app-shell">
+    <div className={`game-layout online-table ${game.phase === "auction" ? "auction-layout" : "play-layout"}`}>
+      <TableView game={game} bottomSeat="south" displayedTrick={game.currentTrick}
+        showCalls={callsOpen} onToggleCalls={() => setCallsOpen((open) => !open)}
+        lastTrickOpen={lastTrickOpen} onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
+        showBottomHand={false} fixedSeatHands showBacksAtBottom cardsDisabled bidsDisabled statusText={statusText}
+        ariaLabel={`Benchmark match ${view.name}, read-only observer`} botSeats={botSeatsOf(view.seats)}
+        seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={false} onHandToBot={undefined} seat={seat} />}
+        matchScore={view.totals} revealedHands={view.revealed}
+        tools={<><button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button>
+          <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
+        overlay={<><p className="session-progress" role="status">Watching bot benchmark · read-only</p>{statusLine}</>} />
+    </div>
+  </main>;
 }

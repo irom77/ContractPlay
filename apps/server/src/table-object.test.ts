@@ -28,10 +28,10 @@ beforeEach(async () => {
   await env.DB.batch(["deal_results", "archived_deals", "sessions", "account_player_identities", "accounts"].map((name) => env.DB.prepare(`DELETE FROM ${name}`)));
 });
 
-async function table(): Promise<string> {
+async function table(listed = false): Promise<string> {
   const response = await worker.fetch(new Request(`${origin}/api/tables`, {
     method: "POST", headers: { "CF-Connecting-IP": crypto.randomUUID() },
-    body: JSON.stringify({ name: "Account seats", style: "SAYC", listed: false })
+    body: JSON.stringify({ name: "Account seats", style: "SAYC", listed })
   }), config);
   expect(response.status).toBe(201);
   return (await response.json<{ id: string }>()).id;
@@ -85,6 +85,74 @@ async function seatGuest(id: string, secret: string, seat: "north" | "east") {
 }
 
 const accountHello = { type: "hello", version: PROTOCOL_VERSION, name: "Untrusted name" };
+
+async function makeBenchmark(id: string, listed = true) {
+  const stub = env.TABLES.get(env.TABLES.idFromName(id));
+  const previous = (await stored(id))!;
+  const profiles = Object.fromEntries(["north", "east", "south", "west"].map((seat) => [seat, { profileId: `bot-${seat}`, version: "v1" }]));
+  await runInDurableObject(stub, (_instance, context) => context.storage.put("state", {
+    ...previous, listed, benchmark: { jobId: "observer-test", tableIndex: 0, engineVersion: "contractplay-bots-v1", boardSource: "generated", profiles }
+  }));
+  await evictDurableObject(stub);
+  return previous;
+}
+
+describe("benchmark observers", () => {
+  it("admits a listed benchmark observer as a read-only socket without player presence", async () => {
+    const id = await table(true);
+    const before = await makeBenchmark(id);
+    const signedIn = await account();
+    const observer = await socket(id, { Cookie: signedIn.cookie });
+    observer.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    const initial = await observer.view();
+    expect(initial).toMatchObject({ observer: true, benchmark: true, canDeal: false });
+    expect(initial).not.toHaveProperty("yourSeat");
+    expect(initial).not.toHaveProperty("host");
+    expect(await stored(id)).toEqual(before && { ...before, listed: true, benchmark: expect.any(Object) });
+
+    for (const message of [{ type: "sit", seat: "north" }, { type: "deal" }, { type: "leave" }, { type: "autoPlay" }]) {
+      observer.send(message);
+      const refused = await observer.next();
+      expect(refused).toMatchObject({ type: "refused", reason: "not-allowed" });
+      expect(await stored(id)).toEqual({ ...before, listed: true, benchmark: expect.any(Object) });
+    }
+    observer.send({ type: "refresh" });
+    expect(await observer.view()).toMatchObject({ observer: true, canDeal: false });
+    observer.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect((await stored(id))?.connections).toEqual(before?.connections);
+    const reconnected = await socket(id, { Cookie: signedIn.cookie });
+    reconnected.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    expect(await reconnected.view()).toMatchObject({ observer: true, benchmark: true });
+    expect((await stored(id))?.connections).toEqual(before?.connections);
+  });
+
+  it("rejects observer hello for an ordinary or unlisted table without changing table state", async () => {
+    const ordinary = await table(true);
+    const before = await stored(ordinary);
+    const denied = await socket(ordinary);
+    denied.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    expect(await denied.next()).toEqual({ type: "gone" });
+    expect(await stored(ordinary)).toEqual(before);
+
+    const unlisted = await table(false);
+    const unlistedBefore = await makeBenchmark(unlisted, false);
+    const hidden = await socket(unlisted);
+    hidden.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    expect(await hidden.next()).toEqual({ type: "gone" });
+    expect((await stored(unlisted))?.connections).toEqual(unlistedBefore?.connections);
+  });
+
+  it("requires an authenticated account before accepting observer hello", async () => {
+    const id = await table(true);
+    await makeBenchmark(id);
+    const anonymous = await socket(id);
+    anonymous.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Anonymous" });
+    const refused = await anonymous.next();
+    expect(refused).toMatchObject({ type: "refused", reason: "not-allowed" });
+    expect(refused).not.toHaveProperty("view");
+  });
+});
 
 describe("authenticated table identities", () => {
   it("rejects a reconnect captured for A after the session changes to B or disappears", async () => {

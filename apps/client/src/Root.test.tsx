@@ -83,6 +83,26 @@ describe("Root", () => {
     expect(location.hash).toBe("#/solo");
   });
 
+  it("opens an isolated exact-board benchmark practice against the selected bot seat", async () => {
+    const { deal } = await import("@contractplay/core");
+    const profile = (profileId: string, aggression: "conservative" | "normal" | "aggressive") => ({ profileId, version: "v1", skill: "beginner" as const, aggression, biddingStyle: "SAYC" as const, engineVersion: "contractplay-bots-v1" });
+    const contract = { level: 1 as const, strain: "spades" as const, doubled: 0 as const, declarer: "north" as const };
+    const payload = { jobId: "job1", tableIndex: 0, boardIndex: 0, scoring: "imps", board: { number: 7, deal: deal(), dealer: "east", vulnerability: "Both" },
+      assignment: { north: profile("tess", "conservative"), east: profile("ray", "normal"), south: profile("eddie", "aggressive"), west: profile("cora", "conservative") },
+      nsScore: 120, contract, tricks: 7, actions: [], field: [{ tableIndex: 0, nsScore: 120, contract, tricks: 7 }, { tableIndex: 1, nsScore: -50, contract: null, tricks: null }] };
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => input.toString().includes("/api/benchmarks/results/job1/0/0")
+      ? Promise.resolve(Response.json(payload)) : Promise.resolve(new Response("[]"))));
+    location.hash = "#/benchmark/practice/job1/0/0/cora/v1";
+    render(<Root />);
+    expect(await screen.findByText(/Practice board 7 as cora/)).toBeTruthy();
+    expect(screen.getByText("Rookie Ray · East to bid")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Recent hands" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Deal a new hand" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Finish practice" })).toBeTruthy();
+    expect(window.localStorage.length).toBe(0);
+  });
+
   it("follows hashchange", async () => {
     render(<Root />);
     await act(async () => { location.hash = "#/online"; });

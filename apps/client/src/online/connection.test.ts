@@ -62,6 +62,26 @@ describe("connectTable", () => {
     expect(JSON.parse(sockets[1]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, name: "Signed in", expectedPlayerId: "untrusted-client-id" });
   });
 
+  it("connects as an observer without player identity and blocks every client send except refresh", () => {
+    const sockets: FakeSocket[] = [];
+    const connection = connectTable({ baseUrl: "https://example.com", tableId: "BOT123", observer: true,
+      onView() {}, onRefused() {}, onStatus() {},
+      createSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket as unknown as WebSocket; } });
+    sockets[0]?.open();
+    expect(JSON.parse(sockets[0]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    connection.send({ type: "deal" });
+    connection.send({ type: "sit", seat: "north" });
+    connection.send({ type: "refresh" });
+    expect(sockets[0]?.sent.map((frame) => JSON.parse(frame).type)).toEqual(["hello", "refresh"]);
+    sockets[0]?.drop();
+    vi.advanceTimersByTime(1000);
+    sockets[1]?.open();
+    expect(JSON.parse(sockets[1]?.sent[0] ?? "")).toEqual({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    connection.send({ type: "sit", seat: "north" });
+    expect(sockets[1]?.sent).toHaveLength(1);
+    connection.close();
+  });
+
   it("stops a reconnect when the cookie account changed", () => {
     const { sockets, statuses } = setup(true);
     sockets[0]?.open(); sockets[0]?.drop(); vi.advanceTimersByTime(1000); sockets[1]?.open();
@@ -107,10 +127,33 @@ describe("connectTable", () => {
     expect(views).toHaveLength(1);
   });
 
+  it("reports a privacy refusal without requiring a view", () => {
+    const { sockets, views, refusals } = setup();
+    sockets[0]?.open();
+    sockets[0]?.receive({ type: "refused", reason: "not-allowed" });
+    expect(refusals).toEqual(["not-allowed"]);
+    expect(views).toHaveLength(0);
+  });
+
+  it("stops reconnecting after a terminal observer refusal without a view", () => {
+    const sockets: FakeSocket[] = [];
+    const statuses: ConnectionStatus[] = [];
+    const connection = connectTable({ baseUrl: "https://example.com", tableId: "BOT123", observer: true,
+      onView() {}, onRefused() {}, onStatus: (status) => statuses.push(status),
+      createSocket: (url) => { const socket = new FakeSocket(url); sockets.push(socket); return socket as unknown as WebSocket; } });
+    sockets[0]?.open();
+    sockets[0]?.receive({ type: "refused", reason: "not-allowed" });
+    expect(statuses.at(-1)).toBe("refused");
+    expect(sockets[0]?.closed).toBe(true);
+    vi.advanceTimersByTime(60_000);
+    expect(sockets).toHaveLength(1);
+    connection.close();
+  });
+
   it("ignores malformed frames without throwing", () => {
     const { sockets, views, refusals } = setup();
     sockets[0]?.open();
-    for (const frame of ["not json", "null", "[]", JSON.stringify({ type: "view" }), JSON.stringify({ type: "refused", reason: "stale" }), JSON.stringify({ type: "wat" }), new ArrayBuffer(2)]) {
+    for (const frame of ["not json", "null", "[]", JSON.stringify({ type: "view" }), JSON.stringify({ type: "wat" }), new ArrayBuffer(2)]) {
       expect(() => sockets[0]?.receive(frame)).not.toThrow();
     }
     expect(views).toHaveLength(0);

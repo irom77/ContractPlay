@@ -1,9 +1,9 @@
-import { SEATS, TRAIT_PRESETS, cardId } from "@contractplay/core";
+import { SEATS, TRAIT_PRESETS, cardId, createDeck, deal } from "@contractplay/core";
 import type { Card, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
 import type { TableState } from "./state.js";
 import { afterOnePassedOut, fourHumans, newTable, othersReady, playOut, replayRecord, seededRandom, sendOk, tableInPlay, tableWithBots } from "./test-helpers.js";
-import { summaryOf, viewFor } from "./view.js";
+import { observerViewFor, summaryOf, viewFor } from "./view.js";
 
 /** Every card object found anywhere in a JSON value. */
 function cardsIn(value: unknown, found: Set<string> = new Set()): Set<string> {
@@ -168,5 +168,83 @@ describe("viewFor", () => {
     expect(summaryOf(away).seats.north).toEqual({ kind: "human", name: "alice", away: true, standIn: "expert" });
     expect(summaryOf(t).seats.north).toEqual({ kind: "human", name: "Player", away: false });
     expect(JSON.stringify(summaryOf(away))).not.toContain("\"player\"");
+  });
+});
+
+describe("observerViewFor", () => {
+  const benchmark: NonNullable<TableState["benchmark"]> = {
+    jobId: "job-1", tableIndex: 0, engineVersion: "contractplay-bots-v1",
+    boardSource: "generated",
+    profiles: Object.fromEntries(SEATS.map((seat) => [seat, { profileId: `bot-${seat}`, version: "v1" }])) as Record<Seat, { profileId: string; version: string }>
+  };
+
+  it("shows auction and played cards while keeping all hands and controls private during every live phase", async () => {
+    let state = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(21));
+    state = { ...state, benchmark, listed: true, sessionId: "session", sessionBoard: { index: 0, number: 1, deal: state.game!.initialDeal, dealer: "north", vulnerability: "None" } };
+    const session = (completedBoards: number) => ({ board: 1, position: 1, boardCount: 2, scoring: "imps" as const, completedBoards, complete: false,
+      waitingForTables: true, rank: 1, tableCount: 2, matchpoints: { points: 0, top: 2, percentage: 0 }, crossImps: 0 });
+    const check = (s: TableState) => {
+      const view = observerViewFor(s, session(0));
+      expect(view.observer).toBe(true);
+      expect(view.game).toBeDefined();
+      for (const seat of SEATS) expect(view.game!.hands[seat]).toEqual([]);
+      expect(view).not.toHaveProperty("yourSeat");
+      expect(view).not.toHaveProperty("host");
+      expect(view).not.toHaveProperty("claim");
+      expect(view).not.toHaveProperty("nextHand");
+      expect(view).not.toHaveProperty("session");
+      expect(view).not.toHaveProperty("replay");
+      expect(view.canDeal).toBe(false);
+      const allowed = new Set([...s.game!.completedTricks.flat(), ...s.game!.currentTrick].map(({ card }) => cardId(card)));
+      expect(cardsIn(JSON.parse(JSON.stringify(view)))).toEqual(allowed);
+    };
+
+    check(state);
+    state = await playOut(state, (s) => check(s));
+    const finished = observerViewFor(state, session(1));
+    expect(finished.game!.hands).toEqual({ north: [], east: [], south: [], west: [] });
+    expect(finished.revealed).toEqual(state.game!.initialDeal);
+  }, 30_000);
+
+  it("keeps a completed generated board hidden until the whole duplicate board is released", async () => {
+    const started = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(30));
+    const finished = await playOut(started);
+    const state = { ...finished, benchmark, listed: true, sessionId: "session", sessionBoard: { index: 0, number: 1,
+      deal: finished.game!.initialDeal, dealer: "north" as const, vulnerability: "None" as const } };
+    const waiting = { board: 1, position: 1, boardCount: 1, scoring: "imps" as const, completedBoards: 0, complete: false, waitingForTables: true,
+      rank: 1, tableCount: 2, matchpoints: { points: 0, top: 2, percentage: 0 }, crossImps: 0 };
+    expect(observerViewFor(state, waiting).revealed).toBeUndefined();
+    expect(observerViewFor(state, { ...waiting, completedBoards: 1, complete: true, waitingForTables: false }).revealed).toEqual(finished.game!.initialDeal);
+  });
+
+  it("never reveals completed imported PBN deals to public observers", async () => {
+    const started = sendOk(tableWithBots(), "alice", { type: "deal" }, 1, seededRandom(31));
+    const finished = await playOut(started);
+    const state: TableState = { ...finished, listed: true, sessionId: "session", sessionBoard: { index: 0, number: 1,
+      deal: finished.game!.initialDeal, dealer: "north", vulnerability: "None" }, benchmark: { ...benchmark, boardSource: "imported" } };
+    const released = { board: 1, position: 1, boardCount: 1, scoring: "imps" as const, completedBoards: 1, complete: true, waitingForTables: false,
+      rank: 1, tableCount: 2, matchpoints: { points: 0, top: 2, percentage: 0 }, crossImps: 0 };
+    expect(observerViewFor(state, released).revealed).toBeUndefined();
+  });
+
+  it("does not reveal the claimer's hand or pending response controls to an observer", () => {
+    const start = tableInPlay({ north: "human", east: "human", south: "human", west: "human" });
+    const state = { ...sendOk(start, "south", { type: "claim", tricks: 9 }), benchmark, listed: true };
+    const view = observerViewFor(state);
+    expect(view.claim).toBeUndefined();
+    expect(view.game!.hands).toEqual({ north: [], east: [], south: [], west: [] });
+    const allowed = new Set([...state.game!.completedTricks.flat(), ...state.game!.currentTrick].map(({ card }) => cardId(card)));
+    expect(cardsIn(JSON.parse(JSON.stringify(view)))).toEqual(allowed);
+  });
+
+  it("hides unreleased boards before the first deal and omits player readiness data", () => {
+    const state = { ...tableWithBots(), benchmark, listed: true,
+      sessionBoard: { index: 0, number: 42, deal: deal(createDeck()), dealer: "north" as const, vulnerability: "Both" as const } };
+    const view = observerViewFor(state);
+    expect(view.game).toBeUndefined();
+    expect(view).not.toHaveProperty("revealed");
+    expect(view).not.toHaveProperty("session");
+    expect(JSON.stringify(view)).not.toContain("number\":42");
+    expect(JSON.stringify(view)).not.toContain("sessionBoard");
   });
 });

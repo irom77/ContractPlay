@@ -147,6 +147,20 @@ describe("Lobby", () => {
     expect(onOpenTable).toHaveBeenCalledWith("ABC123");
   });
 
+  it("labels benchmark tables for watching while keeping ordinary tables joinable", async () => {
+    const user = userEvent.setup();
+    const benchmark: TableSummary = { ...summaries[1]!, id: "BOT123", name: "Benchmark match", benchmark: true, handInProgress: true,
+      seats: { north: { kind: "bot", skill: "expert" }, east: { kind: "bot", skill: "advanced" },
+        south: { kind: "bot", skill: "intermediate" }, west: { kind: "bot", skill: "beginner" } } };
+    const { onOpenTable } = setup({ list: () => Promise.resolve([...summaries, benchmark]) });
+    expect(await screen.findByText("Bot benchmark")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Watch Benchmark match" }).textContent).toBe("Watch");
+    expect(screen.getByRole("button", { name: "Join Friday club" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Join Benchmark match" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Watch Benchmark match" }));
+    expect(onOpenTable).toHaveBeenCalledWith("BOT123", true);
+  });
+
   it("explains an empty list", async () => {
     setup({ list: () => Promise.resolve([]) });
     expect(await screen.findByText("No open tables yet. Create one to start.")).toBeTruthy();

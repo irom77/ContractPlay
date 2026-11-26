@@ -41,7 +41,7 @@ export type LobbyApi = {
 export type LobbyProps = {
   baseUrl: string;
   storage: StorageLike;
-  onOpenTable(id: string): void;
+  onOpenTable(id: string, observer?: true): void;
   /** Opens solo play and deals at once, with the setup the Play panel just saved. */
   onPlaySolo(): void;
   /** Opens the device's recent hands, solo and online alike. */
@@ -204,7 +204,7 @@ function AccountName({ name, onRename }: { name: string; onRename(name: string):
 }
 
 function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
-  resultsSynced: number; expandedPanels: boolean; identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string): void; onPlaySolo(): void; onRecentHands(): void;
+  resultsSynced: number; expandedPanels: boolean; identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string, observer?: true): void; onPlaySolo(): void; onRecentHands(): void;
   account: AccountSession; onRename(name: string): Promise<void>; onSignOut(): void;
 }) {
   const [tables, setTables] = useState<TableSummary[] | undefined>();
@@ -350,6 +350,7 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
+            <a className="secondary-button" href="/#/leaderboard">Bot leaderboard</a>
             <AccountName name={account.displayName} onRename={onRename} /><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
           </span>
@@ -367,6 +368,7 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
               <li key={table.id} className="lobby-table">
                 <div className="lobby-table-head">
                   <strong>{table.name}</strong>
+                  {table.benchmark ? <span className="benchmark-badge">Bot benchmark</span> : null}
                   <span className="quiet-copy">{table.style} · {scoringNames[table.scoring ?? "duplicate"]}{table.aggression && table.aggression !== "normal" ? ` · ${aggressionNames[table.aggression]} bots` : ""}</span>
                   {table.handInProgress ? <span className="lobby-playing">Playing</span> : null}
                 </div>
@@ -375,7 +377,9 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
                     <li key={seat}><span className="quiet-copy">{seatNames[seat]}</span> <span>{seatLabel(table.seats[seat])}</span></li>
                   ))}
                 </ul>
-                <button className="secondary-button" type="button" aria-label={`Join ${table.name}`} onClick={() => onOpenTable(table.id)}>Join</button>
+                {table.benchmark
+                  ? <button className="secondary-button" type="button" aria-label={`Watch ${table.name}`} onClick={() => onOpenTable(table.id, true)}>Watch</button>
+                  : <button className="secondary-button" type="button" aria-label={`Join ${table.name}`} onClick={() => onOpenTable(table.id)}>Join</button>}
               </li>
             ))}
           </ul>

@@ -4,7 +4,7 @@ import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@con
 import { botCharacter, SEATS, type Aggression, type Seat } from "@contractplay/core";
 import type { BenchmarkTableAssignment } from "@contractplay/benchmark";
 import { BenchmarkStore } from "./benchmark-store.js";
-import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, dealBotSessionHand, dealsNow, createTable, isReplayHand, nextWake, reduce, replayVulnerability, seatSessionBots, summaryOf, viewFor } from "@contractplay/table";
+import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, dealBotSessionHand, dealsNow, createTable, isReplayHand, nextWake, observerViewFor, reduce, replayVulnerability, seatSessionBots, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
 import { AuthStore } from "./auth-store.js";
@@ -41,7 +41,7 @@ const RECONCILE_MS = 3_600_000;
  * never reaches the table state, a client, the lobby, or a log), when the socket was accepted, and,
  * once `hello` completed, the player and name.
  */
-type Attachment = { ip: string; acceptedAt: number; account?: VerifiedAccount; player?: PlayerId; name?: string };
+type Attachment = { ip: string; acceptedAt: number; account?: VerifiedAccount; player?: PlayerId; name?: string; role?: "observer" };
 type Identity = { player: PlayerId; name: string };
 
 /** A float in [0, 1) from the platform's cryptographic source; deals must not be predictable. */
@@ -60,8 +60,12 @@ const attachmentOf = (ws: WebSocket): Attachment | undefined => (ws.deserializeA
 /** The socket's player once `hello` completed. */
 function identityOf(ws: WebSocket): Identity | undefined {
   const attachment = attachmentOf(ws);
-  return attachment?.player === undefined ? undefined : { player: attachment.player, name: attachment.name ?? "" };
+  return attachment?.role === "observer" || attachment?.player === undefined ? undefined : { player: attachment.player, name: attachment.name ?? "" };
 }
+
+/** Established observers consume socket limits but never count as table players. */
+const observerOf = (ws: WebSocket): boolean => attachmentOf(ws)?.role === "observer";
+const establishedOf = (ws: WebSocket): boolean => observerOf(ws) || identityOf(ws) !== undefined;
 
 function send(ws: WebSocket, message: ServerMessage): void {
   try { ws.send(JSON.stringify(message)); } catch { /* socket already closing */ }
@@ -93,7 +97,7 @@ export class TableObject extends DurableObject<Env> {
   }
 
   async createBenchmark(input: { id: string; jobId: string; tableIndex: number; sessionId: string; name: string;
-    style: TableStyle; assignment: BenchmarkTableAssignment }): Promise<TableSummary> {
+    style: TableStyle; boardSource: "generated" | "imported"; assignment: BenchmarkTableAssignment }): Promise<TableSummary> {
     const existing = await this.load();
     if (existing) {
       if (existing.benchmark?.jobId !== input.jobId || existing.benchmark.tableIndex !== input.tableIndex) throw new Error("Table ID collision");
@@ -110,7 +114,7 @@ export class TableObject extends DurableObject<Env> {
       profiles[seat] = { profileId: profile.profileId, version: profile.version };
     }
     const fresh = { ...createTable({ ...input, scoring: "duplicate", listed: true, at: Date.now() }),
-      benchmark: { jobId: input.jobId, tableIndex: input.tableIndex, profiles, engineVersion: BENCHMARK_ENGINE_VERSION }, sessionId: input.sessionId };
+      benchmark: { jobId: input.jobId, tableIndex: input.tableIndex, profiles, engineVersion: BENCHMARK_ENGINE_VERSION, boardSource: input.boardSource }, sessionId: input.sessionId };
     const out = seatSessionBots(fresh, characters);
     if (out.refused) throw new Error("Could not seat benchmark profiles");
     await this.save(out.state);
@@ -186,7 +190,7 @@ export class TableObject extends DurableObject<Env> {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
     const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
     const open = this.openSockets();
-    const pending = open.filter((ws) => !identityOf(ws));
+    const pending = open.filter((ws) => !establishedOf(ws));
     const fromIp = open.filter((ws) => attachmentOf(ws)?.ip === ip).length;
     const pendingFromIp = pending.filter((ws) => attachmentOf(ws)?.ip === ip).length;
     if (pending.length >= MAX_PENDING_SOCKETS || open.length - pending.length >= MAX_SOCKETS_PER_TABLE
@@ -209,6 +213,14 @@ export class TableObject extends DurableObject<Env> {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") return this.closeSocket(ws, 1003, "text frames only");
     if (new TextEncoder().encode(message).length > MAX_MESSAGE_BYTES) return this.closeSocket(ws, 1009, "message too big");
+    if (observerOf(ws)) {
+      const state = await this.load();
+      if (!state) return this.gone(ws);
+      const parsed = parseClientMessage(message);
+      const session = await this.sessionStatus(state);
+      if (parsed?.type === "refresh") return send(ws, { type: "view", view: observerViewFor(state, session) });
+      return send(ws, { type: "refused", reason: parsed ? "not-allowed" : "bad-message", view: observerViewFor(state, session) });
+    }
     const me = identityOf(ws);
     if (!me) return this.hello(ws, message);
     const state = await this.load();
@@ -241,7 +253,7 @@ export class TableObject extends DurableObject<Env> {
     const now = Date.now();
     for (const ws of this.openSockets()) {
       const attachment = attachmentOf(ws);
-      if (attachment && attachment.player === undefined && now >= attachment.acceptedAt + HELLO_TIMEOUT_MS) ws.close(1008, "hello timeout");
+      if (attachment && !establishedOf(ws) && now >= attachment.acceptedAt + HELLO_TIMEOUT_MS) ws.close(1008, "hello timeout");
     }
     const state = await this.load();
     if (state) {
@@ -280,6 +292,20 @@ export class TableObject extends DurableObject<Env> {
     if (!state) return this.gone(ws);
     const parsed = parseClientMessage(message);
     if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
+    if (parsed.observer) {
+      if (parsed.secret !== undefined || parsed.expectedPlayerId !== undefined || !state.listed || !state.benchmark) return this.gone(ws);
+      if (!attachmentOf(ws)?.account) {
+        send(ws, { type: "refused", reason: "not-allowed" });
+        ws.close(1008, "sign in required");
+        return;
+      }
+      if (this.openSockets().filter((other) => other !== ws && establishedOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
+        ws.close(1013, "too many connections");
+        return;
+      }
+      ws.serializeAttachment({ ...attachmentOf(ws)!, role: "observer" } satisfies Attachment);
+      return send(ws, { type: "view", view: observerViewFor(state, await this.sessionStatus(state)) });
+    }
     const account = attachmentOf(ws)?.account;
     if ((account || parsed.expectedPlayerId !== undefined) && parsed.expectedPlayerId !== account?.primaryPlayerId) {
       send(ws, { type: "account-changed" });
@@ -287,7 +313,7 @@ export class TableObject extends DurableObject<Env> {
       return;
     }
     if (!account && parsed.secret === undefined) return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
-    if (this.openSockets().filter((other) => other !== ws && identityOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
+    if (this.openSockets().filter((other) => other !== ws && establishedOf(other)).length >= MAX_SOCKETS_PER_TABLE) {
       ws.close(1013, "too many connections");
       return;
     }
@@ -371,7 +397,7 @@ export class TableObject extends DurableObject<Env> {
     const backstop = state && Object.keys(state.connections).length > 0 ? now + RECONCILE_MS : Infinity;
     const hello = Math.min(...this.openSockets().flatMap((ws) => {
       const attachment = attachmentOf(ws);
-      return attachment && attachment.player === undefined ? [Math.max(attachment.acceptedAt + HELLO_TIMEOUT_MS, now)] : [];
+      return attachment && !establishedOf(ws) ? [Math.max(attachment.acceptedAt + HELLO_TIMEOUT_MS, now)] : [];
     }));
     const report = state?.benchmark && isFinished(state) && await this.ctx.storage.get<number>(REPORTED_HAND) !== state.handNumber
       ? now + 10_000 : Infinity;
@@ -430,6 +456,7 @@ export class TableObject extends DurableObject<Env> {
     for (const ws of sockets) {
       const me = identityOf(ws);
       if (me) send(ws, { type: "view", view: viewFor(state, me.player, sessionStatus) });
+      else if (observerOf(ws)) send(ws, { type: "view", view: observerViewFor(state, sessionStatus) });
     }
   }
 

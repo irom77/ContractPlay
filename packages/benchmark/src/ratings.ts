@@ -18,6 +18,8 @@ export type RatingSnapshot = RatingState & Readonly<{ competitorId: string; elig
 export type RatingPeriodObservation = Readonly<{
   competitorId: string;
   opponentId: string;
+  /** An attributed field opponent may have a synthetic pre-period rating. Never added as a competitor. */
+  opponentRating?: Readonly<Pick<RatingState, "rating" | "deviation">>;
   sampleBoards: number;
   rawScore: BenchmarkScore;
 }>;
@@ -133,7 +135,7 @@ function updateRating(
   let information = 0;
   let outcomeSum = 0;
   for (const observation of observations) {
-    const opponent = ratings.get(observation.opponentId) ?? UNRATED;
+    const opponent = observation.opponentRating ?? ratings.get(observation.opponentId) ?? UNRATED;
     const opponentDeviation = opponent.deviation / SCALE;
     const weight = 1 / Math.sqrt(1 + 3 * (opponentDeviation / Math.PI) ** 2);
     const difference = (rating - opponent.rating) / SCALE;
@@ -176,13 +178,15 @@ export function ratingPeriodUpdate(
       throw new RangeError("A distinct benchmark opponent ID is required");
     }
     if (!Number.isSafeInteger(sampleBoards) || sampleBoards < 1) throw new RangeError("An observation requires positive sample boards");
+    if (result.opponentRating) validateRating({ ...UNRATED, ...result.opponentRating });
     validateScore(rawScore);
     const score = Object.freeze({ ...rawScore, matchpoints: Object.freeze({ ...rawScore.matchpoints }) });
     const fractionalScore = transform.toFractionalScore(score, sampleBoards);
     if (!Number.isFinite(fractionalScore) || fractionalScore < 0 || fractionalScore > 1) {
       throw new RangeError("The benchmark transform must return a fractional score between 0 and 1");
     }
-    const observation = Object.freeze({ competitorId, opponentId, sampleBoards, rawScore: score, fractionalScore });
+    const observation = Object.freeze({ competitorId, opponentId, ...(result.opponentRating ? { opponentRating: Object.freeze({ ...result.opponentRating }) } : {}),
+      sampleBoards, rawScore: score, fractionalScore });
     const matches = byCompetitor.get(competitorId);
     if (matches) matches.push(observation);
     else byCompetitor.set(competitorId, [observation]);

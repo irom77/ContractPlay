@@ -12,6 +12,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@contractplay/benchmark": "workspace:^",
     "@contractplay/bots": "workspace:*",
     "@contractplay/core": "workspace:*",
     "@contractplay/pbn": "workspace:*",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Seat } from "@contractplay/core";
 import type { SeatInfo, TableSummary } from "@contractplay/protocol";
 import { botName, seatNames, seats } from "../table/labels.js";
+import { BenchmarkAdmin } from "./BenchmarkAdmin.js";
 
 type AdminTable = TableSummary & { listed: boolean };
 
@@ -94,6 +95,7 @@ export function Admin({ baseUrl }: { baseUrl: string }) {
             </ul>
           ) : null}
         </section>
+        <BenchmarkAdmin baseUrl={baseUrl} />
         {error ? <p className="error-message admin-message" role="alert">{error}</p> : null}
         {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
       </section>

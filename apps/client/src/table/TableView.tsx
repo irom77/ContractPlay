@@ -42,6 +42,8 @@ export type TableViewProps = {
   showBottomHand: boolean;
   /** Online, keep every visible hand at its seat, grouped by suit, from the deal to the last card (the bidding included). */
   fixedSeatHands?: boolean;
+  /** A seat without a player can still show its public card backs at the bottom (for read-only observers). */
+  showBacksAtBottom?: boolean;
   /** A seat to show face-up at its place, such as the claimer's hand while a claim is pending; backs stay if its cards were not sent. */
   exposedSeat?: Seat | undefined;
   /** Seats whose cards the viewer may queue now, to play when that seat's turn comes. */
@@ -80,7 +82,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
-  game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, exposedSeat,
+  game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, showBacksAtBottom = false, exposedSeat,
   queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, dealing = false, tools, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
@@ -167,7 +169,7 @@ export function TableView({
           const seatHasCards = seatCards.length > 0;
           const held = cardsHeld(game, seat);
           // Hands the viewer cannot see are backs; the bottom position never shows backs, as the hand zone is the viewer's own.
-          const showBacks = phase === "play" && !seatHasCards && held > 0 && position !== "bottom";
+          const showBacks = phase === "play" && !seatHasCards && held > 0 && (showBacksAtBottom || position !== "bottom");
           // Dummy is told by its seat badge alone: a square with a gold ring instead of a circle, and no text tag.
           const isDummy = dummyVisible && seat === dummySeat;
           const isBot = botSeats?.includes(seat) ?? false;

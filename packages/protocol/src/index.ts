@@ -2,7 +2,7 @@ import { botCharacter, cleanName, isBotTraits, isOwnCharacterId, MAX_CHARACTER_N
 export { cleanName } from "@contractplay/core";
 import type { Aggression, BotTraits, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -26,6 +26,8 @@ export type TableSummary = { id: string; benchmark?: true; name: string; style: 
 export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader" | "claim">;
 
 export type TableView = TableSummary & {
+  /** The connection has a server-enforced read-only role and cannot take a seat or act. */
+  observer?: true;
   /** `revision` is the staleness token to send with `act`, not a change counter: views can differ at the same revision, so never dedupe views by it. */
   listed: boolean; revision: number; handNumber: number;
   /** Running totals at a duplicate-scored table; a rubber table keeps its score in `rubber`. */
@@ -61,7 +63,7 @@ export type TableView = TableSummary & {
 
 export type ClientMessage =
   // expectedPlayerId only guards a captured account against a changed cookie; the server verifies identity.
-  | { type: "hello"; version: number; secret?: string; expectedPlayerId?: string; name: string }
+  | { type: "hello"; version: number; secret?: string; expectedPlayerId?: string; observer?: true; name: string }
   | { type: "sit"; seat: Seat } | { type: "leave" } | { type: "refresh" }
   /** With `character` or `custom`, the seat gets that bot and its skill (the sent `skill` is ignored). */
   | { type: "setBot"; seat: Seat; skill: SkillLevel; character?: string; custom?: CustomBot }
@@ -78,7 +80,7 @@ export type RefusalReason = "bad-message" | "not-seated" | "seat-taken" | "alrea
 
 export type ServerMessage =
   | { type: "view"; view: TableView }
-  | { type: "refused"; reason: RefusalReason; view: TableView }
+  | { type: "refused"; reason: RefusalReason; view?: TableView }
   | { type: "reload" }
   | { type: "gone" }
   | { type: "identity-conflict" }
@@ -121,9 +123,10 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
     case "hello": {
       const name = cleanName(data.name, MAX_PLAYER_NAME);
       if (typeof data.version !== "number" || (data.secret !== undefined && (typeof data.secret !== "string" || !SECRET.test(data.secret))) || name === undefined) return undefined;
+      if (data.observer !== undefined && data.observer !== true) return undefined;
       if (data.expectedPlayerId !== undefined && (typeof data.expectedPlayerId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(data.expectedPlayerId))) return undefined;
       return { type: "hello", version: data.version, ...(typeof data.secret === "string" ? { secret: data.secret } : {}),
-        ...(typeof data.expectedPlayerId === "string" ? { expectedPlayerId: data.expectedPlayerId } : {}), name };
+        ...(typeof data.expectedPlayerId === "string" ? { expectedPlayerId: data.expectedPlayerId } : {}), ...(data.observer === true ? { observer: true as const } : {}), name };
     }
     case "sit": case "clearSeat": case "handToBot": {
       const seat = seatOf(data.seat);

@@ -1,5 +1,6 @@
 import { BENCHMARK_ROTATION_VERSION, GLICKO_2_VERSION, benchmarkProfileVersionId, isLeaderboardEligible } from "@contractplay/benchmark";
 import type { BenchmarkProfileSnapshot, BenchmarkTableAssignment, RatedObservation, RatingPeriodResult, RatingSnapshot, RatingState } from "@contractplay/benchmark";
+import { BENCHMARK_SCORE_TRANSFORM, rateSession, scoreSession, type SessionScores, type ScoredBoard } from "./benchmark-scoring.js";
 import { SEATS } from "@contractplay/core";
 import type { Contract, GameAction } from "@contractplay/core";
 import type { DuplicateSession, DuplicateSessionBoard } from "@contractplay/table";
@@ -10,7 +11,7 @@ export const MAX_BENCHMARK_PROFILES = 32;
 export const MAX_BENCHMARK_TABLES = 8;
 export const MAX_BENCHMARK_PAGE = 50;
 const MAX_ACTIVE_JOBS = 8;
-const PENDING_SCORE_TRANSFORM_VERSION = "pending-calibration";
+
 const pageSize = (limit: number) => Number.isSafeInteger(limit) ? Math.min(MAX_BENCHMARK_PAGE, Math.max(1, limit)) : MAX_BENCHMARK_PAGE;
 
 export type BenchmarkProfileKey = Pick<BenchmarkProfileSnapshot, "profileId" | "version">;
@@ -89,17 +90,22 @@ export type BenchmarkBoardResultInput = Readonly<{
 }>;
 export type BenchmarkResultSummary = Omit<BenchmarkBoardResultInput, "actions" | "contract"> & Readonly<{
   boardNumber: number;
+  scoring: DuplicateSession["scoring"];
   ewScore: number;
   releasedAt: number;
+  replayAvailable: boolean;
+  replayStatus: "available" | "private-import" | "expired";
 }>;
 export type BenchmarkResult = BenchmarkBoardResultInput & BenchmarkResultSummary & Readonly<{
   board: DuplicateSessionBoard;
   assignment: BenchmarkTableAssignment;
+  field: readonly Readonly<{ tableIndex: number; nsScore: number; contract: Contract | null; tricks: number | null }>[];
 }>;
 type BoardRow = Omit<DuplicateSessionBoard, "deal"> & { dealJson: string };
 type ResultRow = BenchmarkResultSummary & Omit<BoardRow, "number"> & { actionsJson: string; contractJson: string | null; seatsJson: string };
 const resultColumns = `r.job_id AS jobId, r.table_index AS tableIndex, r.board_index AS boardIndex,
-  b.board_number AS boardNumber, r.tricks, r.ns_score AS nsScore, -r.ns_score AS ewScore, r.completed_at AS completedAt, r.released_at AS releasedAt`;
+  b.board_number AS boardNumber, json_extract(j.cohort_json, '$.scoring') AS scoring,
+  r.tricks, r.ns_score AS nsScore, -r.ns_score AS ewScore, r.completed_at AS completedAt, r.released_at AS releasedAt`;
 
 type RatingPeriodRow = {
   id: string; ratedAt: number; algorithmVersion: RatingPeriodResult["algorithmVersion"]; scoreTransformVersion: string; observationsJson: string;
@@ -219,20 +225,23 @@ export class BenchmarkStore {
   }
 
   /** Re-check current eligibility in the same transaction that snapshots the roster and queues the job. */
-  async startJob({ id, cohortId, roundIndex, now, scoreTransformVersion = PENDING_SCORE_TRANSFORM_VERSION }: {
-    id: string; cohortId: string; roundIndex: number; now: number; scoreTransformVersion?: string;
+  async startJob({ id, cohortId, roundIndex, now, scoreTransformVersion = BENCHMARK_SCORE_TRANSFORM.version }: {
+    id: string; cohortId: string; roundIndex: number | null; now: number; scoreTransformVersion?: string;
   }): Promise<BenchmarkJob | null> {
     const [, stored] = await this.db.batch<JobRow>([
-      this.db.prepare(`INSERT INTO benchmark_jobs (id, cohort_id, cohort_json, profiles_json, import_id,
+      this.db.prepare(`INSERT INTO benchmark_jobs (id, cohort_id, cohort_json, profiles_json, import_id, board_source,
           schema_version, round_index, rotation_version, algorithm_version, score_transform_version, status, created_at, updated_at)
         SELECT ?1, c.id, c.config_json, (SELECT json_group_array(json(snapshot_json)) FROM (
           SELECT p.snapshot_json ${selectedProfiles("c.config_json")} ORDER BY CAST(member.key AS INTEGER)
-        )), json_extract(c.config_json, '$.importId'), ?5, ?3, ?6, ?7, ?8, 'queued', ?4, ?4
+        )), json_extract(c.config_json, '$.importId'),
+          CASE WHEN json_extract(c.config_json, '$.importId') IS NULL THEN 'generated' ELSE 'imported' END,
+          ?5, CASE WHEN ?3 IS NULL THEN COALESCE((SELECT MAX(round_index) + 1 FROM benchmark_jobs WHERE cohort_id = c.id), 0) ELSE ?3 END,
+          ?6, ?7, ?8, 'queued', ?4, ?4
         FROM benchmark_cohorts c WHERE c.id = ?2 AND c.retired_at IS NULL AND ${validCohort("c.config_json")}
           AND (SELECT COUNT(*) FROM benchmark_jobs WHERE status IN (${activeStatuses})) < ?9
         ON CONFLICT DO NOTHING`).bind(id, cohortId, roundIndex, now, BENCHMARK_SCHEMA_VERSION, BENCHMARK_ROTATION_VERSION,
         GLICKO_2_VERSION, scoreTransformVersion, MAX_ACTIVE_JOBS),
-      this.db.prepare(`SELECT ${jobColumns} FROM benchmark_jobs WHERE id = ? AND cohort_id = ? AND round_index = ?`).bind(id, cohortId, roundIndex)
+      this.db.prepare(`SELECT ${jobColumns} FROM benchmark_jobs WHERE id = ? AND cohort_id = ?`).bind(id, cohortId)
     ]);
     const row = stored?.results[0];
     return row ? readJob(row) : null;
@@ -299,15 +308,19 @@ export class BenchmarkStore {
     return meta.changes === 1;
   }
 
-  async finishJob(id: string, token: string, status: "completed" | "failed", now: number): Promise<boolean> {
-    const { meta } = await this.db.prepare(`UPDATE benchmark_jobs SET status = ?3, claim_token = NULL, claim_expires_at = NULL,
+  private finishStatement(id: string, token: string, status: "completed" | "failed", now: number) {
+    return this.db.prepare(`UPDATE benchmark_jobs SET status = ?3, claim_token = NULL, claim_expires_at = NULL,
       completed_at = ?4, updated_at = ?4 WHERE id = ?1 AND claim_token = ?2 AND claim_expires_at > ?4 AND (?3 = 'failed' OR (
         (SELECT COUNT(*) FROM benchmark_boards WHERE job_id = ?1) = json_extract(cohort_json, '$.boardCount')
         AND (SELECT COUNT(*) FROM benchmark_table_assignments WHERE job_id = ?1) >= 2
         AND NOT EXISTS (SELECT 1 FROM benchmark_boards b WHERE b.job_id = ?1 AND NOT EXISTS (
           SELECT 1 FROM benchmark_results r WHERE r.job_id = b.job_id AND r.board_index = b.board_index AND r.released_at IS NOT NULL
         ))
-      ))`).bind(id, token, status, now).run();
+      ))`).bind(id, token, status, now);
+  }
+
+  async finishJob(id: string, token: string, status: "completed" | "failed", now: number): Promise<boolean> {
+    const { meta } = await this.finishStatement(id, token, status, now).run();
     return meta.changes === 1;
   }
 
@@ -353,7 +366,7 @@ export class BenchmarkStore {
 
   async listJobBoards(id: string): Promise<DuplicateSessionBoard[]> {
     const { results } = await this.db.prepare(`SELECT board_number AS number, dealer, vulnerability, deal_json AS dealJson
-      FROM benchmark_boards WHERE job_id = ? ORDER BY board_index LIMIT ?`).bind(id, MAX_BENCHMARK_BOARDS).all<BoardRow>();
+      FROM benchmark_boards WHERE job_id = ? AND deal_json IS NOT NULL ORDER BY board_index LIMIT ?`).bind(id, MAX_BENCHMARK_BOARDS).all<BoardRow>();
     return results.map(({ dealJson, ...board }) => ({ ...board, deal: JSON.parse(dealJson) as DuplicateSessionBoard["deal"] }));
   }
 
@@ -393,11 +406,15 @@ export class BenchmarkStore {
   }
 
   async listPublicResults(limit = 25): Promise<BenchmarkResultSummary[]> {
-    const { results } = await this.db.prepare(`SELECT ${resultColumns} FROM benchmark_results r
+    const { results } = await this.db.prepare(`SELECT ${resultColumns}, CASE
+        WHEN j.board_source != 'generated' THEN 'private-import'
+        WHEN b.deal_json IS NULL OR r.actions_json IS NULL THEN 'expired'
+        ELSE 'available' END AS replayStatus FROM benchmark_results r
       JOIN benchmark_boards b ON b.job_id = r.job_id AND b.board_index = r.board_index
-      WHERE r.released_at IS NOT NULL ORDER BY r.released_at DESC, r.job_id, r.board_index, r.table_index LIMIT ?`)
+      JOIN benchmark_jobs j ON j.id = r.job_id
+      WHERE r.released_at IS NOT NULL AND j.status = 'completed' ORDER BY r.released_at DESC, r.job_id, r.board_index, r.table_index LIMIT ?`)
       .bind(pageSize(limit)).all<BenchmarkResultSummary>();
-    return results;
+    return results.map(result => ({ ...result, replayAvailable: result.replayStatus === "available" }));
   }
 
   getPublicResult(jobId: string, tableIndex: number, boardIndex: number): Promise<BenchmarkResult | null> {
@@ -416,31 +433,117 @@ export class BenchmarkStore {
       JOIN benchmark_table_assignments t ON t.job_id = r.job_id AND t.table_index = r.table_index
       JOIN benchmark_jobs j ON j.id = r.job_id
       WHERE r.job_id = ?1 AND r.table_index = ?2 AND r.board_index = ?3 AND r.released_at IS NOT NULL
-        AND (?4 = 0 OR j.import_id IS NULL)`)
+        AND b.deal_json IS NOT NULL AND r.actions_json IS NOT NULL AND (?4 = 0 OR (j.board_source = 'generated' AND j.status = 'completed'))`)
       .bind(jobId, tableIndex, boardIndex, generatedOnly ? 1 : 0).first<ResultRow>();
     if (!row) return null;
     const { actionsJson, contractJson, seatsJson, dealJson, dealer, vulnerability, ...summary } = row;
+    const { results: fieldRows } = await this.db.prepare(`SELECT table_index AS tableIndex, ns_score AS nsScore,
+      contract_json AS contractJson, tricks FROM benchmark_results
+      WHERE job_id = ?1 AND board_index = ?2 AND released_at IS NOT NULL ORDER BY table_index`)
+      .bind(jobId, boardIndex).all<{ tableIndex: number; nsScore: number; contractJson: string | null; tricks: number | null }>();
     return { ...summary, actions: JSON.parse(actionsJson) as GameAction[], contract: contractJson ? JSON.parse(contractJson) as Contract : null,
       board: { number: summary.boardNumber, dealer, vulnerability, deal: JSON.parse(dealJson) as DuplicateSessionBoard["deal"] },
-      assignment: JSON.parse(seatsJson) as BenchmarkTableAssignment };
+      assignment: JSON.parse(seatsJson) as BenchmarkTableAssignment,
+      field: fieldRows.map(({ contractJson: fieldContract, ...fieldRow }) => ({ ...fieldRow, contract: fieldContract ? JSON.parse(fieldContract) as Contract : null })) };
   }
 
-  /** The period and every rating become visible together. Only the transaction that creates the period can add rows to it. */
-  async commitRatingPeriod(jobId: string, result: RatingPeriodResult, now: number): Promise<{ result: RatingPeriodResult; ratedAt: number } | null> {
+  async getSessionScores(jobId: string): Promise<SessionScores | null> {
+    const json = await this.db.prepare("SELECT summary_json FROM benchmark_session_scores WHERE job_id = ?").bind(jobId).first<string>("summary_json");
+    return json === null ? null : JSON.parse(json) as SessionScores;
+  }
+
+  /** Rolling figures use the latest twenty completed sessions separately for each event scoring format. */
+  async getProfileMetrics(competitorId: string) {
+    const { results } = await this.db.prepare(`WITH recent AS (
+      SELECT *, ROW_NUMBER() OVER(PARTITION BY scoring ORDER BY completed_at DESC, job_id DESC) AS seq
+      FROM benchmark_profile_scores WHERE competitor_id = ?
+    ), outcomes AS (SELECT *, CASE WHEN scoring = 'imps' THEN cross_imps ELSE 2*mp-top END AS margin
+      FROM recent WHERE seq <= 20)
+      SELECT scoring, COUNT(*) AS sessions, SUM(boards) AS boards, SUM(cross_imps)/SUM(boards) AS impsPerBoard,
+        100.0*SUM(mp)/SUM(top) AS matchpointPercentage, SUM(margin>0) AS wins, SUM(margin=0) AS ties,
+        SUM(margin<0) AS losses, 100.0*SUM(margin>0)/COUNT(*) AS winPercentage
+      FROM outcomes GROUP BY scoring ORDER BY scoring`).bind(competitorId).all<{
+        scoring: "matchpoints" | "imps"; sessions: number; boards: number; impsPerBoard: number; matchpointPercentage: number;
+        wins: number; ties: number; losses: number; winPercentage: number;
+      }>();
+    return results;
+  }
+
+  /** Compact a bounded batch of terminal boards older than the retention horizon or beyond the replay budget.
+   * Raw result rows, summaries and ratings remain queryable. */
+  async compactReplays(now: number, maxAgeMs: number, maxBoards = 10000): Promise<number> {
+    if (!Number.isSafeInteger(maxAgeMs) || maxAgeMs < 0 || !Number.isSafeInteger(maxBoards) || maxBoards < 1) throw new RangeError("Invalid replay limits");
+    const retained = `SELECT b.job_id, b.board_index, j.completed_at FROM benchmark_jobs j
+      JOIN benchmark_boards b ON b.job_id=j.id WHERE j.completed_at IS NOT NULL AND b.deal_json IS NOT NULL`;
+    const { results } = await this.db.prepare(`WITH oldest AS (
+      SELECT * FROM (${retained}) ORDER BY completed_at, job_id, board_index LIMIT 32
+    ), overflow AS (
+      SELECT completed_at, job_id, board_index FROM (${retained}) ORDER BY completed_at DESC, job_id DESC, board_index DESC LIMIT 1 OFFSET ?1
+    ) SELECT job_id AS jobId, board_index AS boardIndex FROM oldest WHERE completed_at <= ?2
+      OR (completed_at, job_id, board_index) <= (SELECT completed_at, job_id, board_index FROM overflow)`)
+      .bind(maxBoards, now - maxAgeMs).all<{ jobId: string; boardIndex: number }>();
+    if (!results.length) return 0;
+    const keys = JSON.stringify(results);
+    const where = `(job_id, board_index) IN (SELECT json_extract(value,'$.jobId'), json_extract(value,'$.boardIndex') FROM json_each(?))`;
+    await this.db.batch([this.db.prepare(`UPDATE benchmark_results SET actions_json=NULL WHERE ${where}`).bind(keys),
+      this.db.prepare(`UPDATE benchmark_boards SET deal_json=NULL WHERE ${where}`).bind(keys)]);
+    return results.length;
+  }
+
+  /** The single coordinator serializes finishes. Persist completion, raw metrics and ratings in one D1 transaction. */
+  async finishRatedJob(jobId: string, token: string, now: number): Promise<boolean> {
+    const job = await this.getJob(jobId);
+    if (job?.status === "completed") return (await this.getSessionScores(jobId)) !== null;
+    if (!job || job.status !== "running" || job.scoreTransformVersion !== BENCHMARK_SCORE_TRANSFORM.version ||
+      job.algorithmVersion !== GLICKO_2_VERSION) return false;
+    const assignments = await this.listTableAssignments(jobId);
+    const { results: rows } = await this.db.prepare(`SELECT board_index AS boardIndex, table_index AS tableIndex, ns_score AS nsScore
+      FROM benchmark_results WHERE job_id=? AND released_at IS NOT NULL ORDER BY board_index, table_index`).bind(jobId).all<ScoredBoard>();
+    const scores = scoreSession(job.cohort.scoring, assignments, rows, job.cohort.boardCount);
+    const { results: priorRows } = await this.db.prepare(`SELECT * FROM (
+      SELECT ${ratingColumns}, ROW_NUMBER() OVER(PARTITION BY s.competitor_id ORDER BY p.rowid DESC) AS seq
+      FROM benchmark_rating_snapshots s JOIN benchmark_rating_periods p ON p.id=s.period_id
+      WHERE p.algorithm_version=? AND p.score_transform_version=? AND s.competitor_id IN (SELECT value FROM json_each(?))
+    ) WHERE seq=1`).bind(job.algorithmVersion, job.scoreTransformVersion, JSON.stringify(scores.profiles.map(p => p.competitorId))).all<RatingRow>();
+    const period = rateSession(scores, assignments, new Map(priorRows.map(row => [row.competitorId, row])));
     const id = crypto.randomUUID();
+    const [finished] = await this.db.batch([
+      this.finishStatement(jobId, token, "completed", now),
+      // A stale claim leaves the job running. Every insert checks the successful terminal transition.
+      ...this.ratingStatements(id, jobId, period, now),
+      this.db.prepare(`INSERT INTO benchmark_session_scores(job_id,summary_json)
+        SELECT job_id,? FROM benchmark_rating_periods WHERE id=?`).bind(JSON.stringify(scores), id),
+      this.db.prepare(`INSERT INTO benchmark_profile_scores (job_id,competitor_id,scoring,completed_at,boards,cross_imps,mp,top)
+        SELECT p.job_id, json_extract(e.value,'$.competitorId'), ?3, p.rated_at, json_extract(e.value,'$.sampleBoards'),
+          json_extract(e.value,'$.crossImps'), json_extract(e.value,'$.matchpoints.points'), json_extract(e.value,'$.matchpoints.top')
+        FROM benchmark_rating_periods p, json_each(?2) e WHERE p.id=?1`).bind(id, JSON.stringify(scores.profiles), scores.scoring)
+    ]);
+    return finished!.meta.changes === 1;
+  }
+
+  private ratingStatements(id: string, jobId: string, result: RatingPeriodResult, now: number) {
     const { algorithmVersion, scoreTransformVersion, observations, ratings } = result;
-    const [, , periods, snapshots] = await this.db.batch<RatingPeriodRow | RatingRow>([
+    return [
       this.db.prepare(`INSERT INTO benchmark_rating_periods (id, job_id, algorithm_version, score_transform_version, rated_at, observations_json)
         SELECT ?1, j.id, ?3, ?4, ?5, ?6 FROM benchmark_jobs j WHERE j.id = ?2 AND j.status = 'completed' ON CONFLICT DO NOTHING`)
         .bind(id, jobId, algorithmVersion, scoreTransformVersion, now, JSON.stringify(observations)),
       this.db.prepare(`INSERT INTO benchmark_rating_snapshots (period_id, competitor_id, position, rating, deviation, volatility, sample_boards)
         SELECT p.id, json_extract(entry.value, '$.competitorId'), entry.key, json_extract(entry.value, '$.rating'),
           json_extract(entry.value, '$.deviation'), json_extract(entry.value, '$.volatility'), json_extract(entry.value, '$.sampleBoards')
-        FROM benchmark_rating_periods p, json_each(?2) entry WHERE p.id = ?1`).bind(id, JSON.stringify(ratings)),
+        FROM benchmark_rating_periods p, json_each(?2) entry WHERE p.id = ?1`).bind(id, JSON.stringify(ratings))
+    ];
+  }
+
+  /** The period and every rating become visible together. Only the transaction that creates the period can add rows to it. */
+  async commitRatingPeriod(jobId: string, result: RatingPeriodResult, now: number): Promise<{ result: RatingPeriodResult; ratedAt: number } | null> {
+    const id = crypto.randomUUID();
+    const { algorithmVersion, scoreTransformVersion } = result;
+    const [, , periods, snapshots] = await this.db.batch<RatingPeriodRow | RatingRow>([
+      ...this.ratingStatements(id, jobId, result, now),
       this.db.prepare(`SELECT id, rated_at AS ratedAt, algorithm_version AS algorithmVersion, score_transform_version AS scoreTransformVersion,
-        observations_json AS observationsJson FROM benchmark_rating_periods WHERE job_id = ? AND algorithm_version = ?`).bind(jobId, algorithmVersion),
+        observations_json AS observationsJson FROM benchmark_rating_periods WHERE job_id = ? AND algorithm_version = ? AND score_transform_version = ?`).bind(jobId, algorithmVersion, scoreTransformVersion),
       this.db.prepare(`SELECT ${ratingColumns} FROM benchmark_rating_snapshots s JOIN benchmark_rating_periods p ON p.id = s.period_id
-        WHERE p.job_id = ? AND p.algorithm_version = ? ORDER BY s.position`).bind(jobId, algorithmVersion)
+        WHERE p.job_id = ? AND p.algorithm_version = ? AND p.score_transform_version = ? ORDER BY s.position`).bind(jobId, algorithmVersion, scoreTransformVersion)
     ]);
     const period = periods?.results[0] as RatingPeriodRow | undefined;
     if (!period) return null;
@@ -452,17 +555,19 @@ export class BenchmarkStore {
   async listRatingHistory(competitorId: string, limit = 25): Promise<BenchmarkRating[]> {
     const { results } = await this.db.prepare(`SELECT ${ratingArchiveColumns} FROM benchmark_rating_snapshots s
       JOIN benchmark_rating_periods p ON p.id = s.period_id WHERE s.competitor_id = ?
-      ORDER BY p.rated_at DESC, p.id DESC LIMIT ?`).bind(competitorId, pageSize(limit)).all<RatingArchiveRow>();
+      ORDER BY p.rated_at DESC, p.rowid DESC LIMIT ?`).bind(competitorId, pageSize(limit)).all<RatingArchiveRow>();
     return results.map((rating) => ({ ...rating, eligible: isLeaderboardEligible(rating) }));
   }
 
   /** Use the latest algorithm/transform series so ratings with different meanings never compete on one list. */
   async listLeaderboard(limit = 25): Promise<BenchmarkRating[]> {
     const { results } = await this.db.prepare(`WITH series AS (
-      SELECT algorithm_version, score_transform_version FROM benchmark_rating_periods ORDER BY rated_at DESC, id DESC LIMIT 1
+      SELECT algorithm_version, score_transform_version FROM benchmark_rating_periods ORDER BY rated_at DESC, rowid DESC LIMIT 1
     ), ranked AS (
-      SELECT ${ratingArchiveColumns}, ROW_NUMBER() OVER(PARTITION BY s.competitor_id ORDER BY p.rated_at DESC, p.id DESC) AS sequence
+      SELECT ${ratingArchiveColumns}, ROW_NUMBER() OVER(PARTITION BY s.competitor_id ORDER BY p.rated_at DESC, p.rowid DESC) AS sequence
       FROM benchmark_rating_snapshots s JOIN benchmark_rating_periods p ON p.id = s.period_id
+      JOIN benchmark_profile_versions v ON json_extract(s.competitor_id,'$[0]')=v.profile_id
+        AND json_extract(s.competitor_id,'$[1]')=v.version AND v.retired_at IS NULL
       JOIN series ON series.algorithm_version = p.algorithm_version AND series.score_transform_version = p.score_transform_version
     )
     SELECT competitorId, rating, deviation, volatility, sampleBoards, jobId, ratedAt, algorithmVersion, scoreTransformVersion

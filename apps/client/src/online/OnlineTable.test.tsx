@@ -913,6 +913,37 @@ describe("OnlineTable play", () => {
 });
 
 describe("OnlineTable connection", () => {
+  it("opens without a player identity and renders a read-only observer table", () => {
+    const storage = memoryStorage();
+    const service = fakeService();
+    const onLeave = vi.fn();
+    render(<OnlineTable observer account={null} baseUrl="https://x.test" tableId="BOT123" storage={storage}
+      onLeave={onLeave} onRecentHands={vi.fn()} connect={service.connect} />);
+    expect(service.connectMock.mock.calls[0]![0]).toMatchObject({ observer: true, tableId: "BOT123" });
+    expect(service.connectMock.mock.calls[0]![0]).not.toHaveProperty("identity");
+    service.status("open");
+    const game = newGame();
+    service.push(tableView({ observer: true, benchmark: true, handNumber: 1, handInProgress: true, seats: seatedNorth,
+      game: publicGame(game, []), canDeal: false }));
+    expect(screen.getByRole("region", { name: "Benchmark match Friday club, read-only observer" })).toBeTruthy();
+    expect(screen.getByText("Watching bot benchmark · read-only")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Take a seat" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Game menu" })).toBeNull();
+    expect(screen.queryAllByRole("button", { name: /^Play / })).toHaveLength(0);
+    expect(service.sent).toEqual([]);
+
+    let playing = oneNoTrump();
+    playing = playOne(playing);
+    service.push(tableView({ observer: true, benchmark: true, handNumber: 1, handInProgress: true, seats: seatedNorth,
+      game: publicGame(playing, []), canDeal: false }));
+    expect(document.querySelectorAll(".hidden-hand")).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: "Take a seat" })).toBeNull();
+    expect(service.sent).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Back to open tables" }));
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(service.sent).toEqual([]);
+  });
+
   it("asks for a name first, then connects", async () => {
     const user = userEvent.setup();
     const service = setup({ named: false });

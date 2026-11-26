@@ -62,6 +62,7 @@ import { syncBotResults, uploadBotResult } from "./online/botResultsSync.js";
 import { CharacterLimitError, syncCharacters, uploadCharacters } from "./online/charactersSync.js";
 import { applyCharacters, changedCharacters, charactersFor, loadOwnCharacters, saveOwnCharacters } from "./ownCharacters.js";
 import { serviceUrl } from "./online/connection.js";
+import type { BenchmarkPracticeSetup } from "./online/benchmarkPractice.js";
 
 const vulnerabilities: readonly Vulnerability[] = ["None", "NS", "EW", "Both"];
 const hintsStorageKey = "contractplay.hints";
@@ -71,6 +72,11 @@ type ScoringFormat = SoloScoring;
 
 function createHandId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createMemoryStorage(): StorageLike {
+  const values = new Map<string, string>();
+  return { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); }, removeItem: (key) => { values.delete(key); } };
 }
 
 /** The robot that answers a claim for the other side: the first defender for a declaring-side claim, else declarer. */
@@ -122,10 +128,16 @@ const autoPlayBannerKey = "contractplay.resumeBanner";
  * `initialDialog` opens a menu dialog on arrival, as when online play links to Recent hands. `autoStart` deals a hand on
  * arrival (the lobby's Play panel), unless a hand is still being bid or played, which is resumed instead.
  */
-export default function App({ solver, preview, initialDialog, autoStart }: { solver?: Solver; preview?: SoloPreview; initialDialog?: MenuDialog; autoStart?: boolean } = {}) {
+export default function App({ solver, preview, initialDialog, autoStart, benchmarkPractice, onExitBenchmarkPractice }: { solver?: Solver; preview?: SoloPreview; initialDialog?: MenuDialog; autoStart?: boolean; benchmarkPractice?: BenchmarkPracticeSetup; onExitBenchmarkPractice?: () => void } = {}) {
   const frozen = !!preview;
-  const persistence = useMemo(() => createClientPersistenceAdapter(preview?.storage ?? window.localStorage), [preview]);
-  const [soloData, setSoloData] = useState<SoloData>(() => loadSoloData(persistence.storage));
+  const practiceStorage = useMemo(createMemoryStorage, [benchmarkPractice]);
+  const persistence = useMemo(() => createClientPersistenceAdapter(preview?.storage ?? (benchmarkPractice ? practiceStorage : window.localStorage)), [preview, benchmarkPractice, practiceStorage]);
+  const [soloData, setSoloData] = useState<SoloData>(() => {
+    if (!benchmarkPractice) return loadSoloData(persistence.storage);
+    const game = createGameState(benchmarkPractice.record);
+    return { version: 1, currentHandId: createHandId(), currentGame: game, completedHands: [], currentRecord: benchmarkPractice.record,
+      boardSet: { name: benchmarkPractice.record.event ?? "Bot benchmark practice", records: [benchmarkPractice.record], position: 0 }, handsStarted: 1 };
+  });
   const latestSoloData = useRef(soloData);
   latestSoloData.current = soloData;
   const pbnFileInput = useRef<HTMLInputElement>(null);
@@ -137,6 +149,9 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const [initialSetup] = useState(() => preview ? { ...loadSoloSetup(persistence.storage),
     opponents: preview.userSeat !== undefined ? "bots" as const : "manual" as const, seat: preview.userSeat ?? "north", ...(preview.cast ? { cast: preview.cast } : {}) }
     // A hand left unfinished before setups were remembered was at a manual table, solo's old default: keep it there.
+    : benchmarkPractice ? { ...loadSoloSetup(persistence.storage), opponents: "bots" as const, seat: benchmarkPractice.userSeat,
+      botSkill: benchmarkPractice.botSkill, biddingStyle: benchmarkPractice.biddingStyle, botAggression: benchmarkPractice.botAggression,
+      cast: benchmarkPractice.cast, scoring: "single" as const }
     : !soloSetupStored(persistence.storage) && (soloData.currentGame?.phase === "auction" || soloData.currentGame?.phase === "play")
       ? { ...loadSoloSetup(persistence.storage), opponents: "manual" as const }
       : loadSoloSetup(persistence.storage));
@@ -205,7 +220,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   });
   const [dialog, setDialog] = useState<MenuDialog | undefined>(preview?.dialog ?? initialDialog);
   useEffect(() => {
-    if (frozen || dialog !== "hands" || serviceUrl() === undefined) return;
+    if (frozen || benchmarkPractice || dialog !== "hands" || serviceUrl() === undefined) return;
     let active = true;
     void currentAccount().then(async account => {
       if (!active || !account) return;
@@ -223,7 +238,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       if (active) setStoredCharacters(characters);
     }).catch(() => { if (active) setMessage("Online history could not sync. Your local hands are still available; reopen Recent hands to retry."); });
     return () => { active = false; };
-  }, [dialog, frozen, persistence]);
+  }, [dialog, frozen, benchmarkPractice, persistence]);
   // The hand the user has handed over: bots make every remaining call and play for it.
   const [botsFinishHandId, setBotsFinishHandId] = useState<string | undefined>(preview?.autoPlay ? currentHandId : undefined);
   // A card the user picked before their turn, played for them when it comes.
@@ -325,7 +340,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   // finished again replaces its result). The hand open when solo starts was counted when it was finished.
   const resultCountedFor = useRef(game);
   useEffect(() => {
-    if (frozen || !game || !currentHandId || !playAgainstBots || resultCountedFor.current === game) return;
+    if (frozen || benchmarkPractice || !game || !currentHandId || !playAgainstBots || resultCountedFor.current === game) return;
     resultCountedFor.current = game;
     const result = partnerResultOf(currentHandId, game, userSeat, cast, { at: Date.now() }, ownCharacters);
     if (!result) return;
@@ -334,11 +349,11 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     void currentAccount().then(async (account) => {
       if (account) setPartnerResults(await uploadBotResult(persistence.storage, account, result));
     }).catch(() => {});
-  }, [frozen, game, currentHandId, playAgainstBots, userSeat, cast, persistence, ownCharacters]);
+  }, [frozen, benchmarkPractice, game, currentHandId, playAgainstBots, userSeat, cast, persistence, ownCharacters]);
   // The player's own characters: kept here, and sent to the account for a signed-in player (a failure waits for the next sync).
   const saveOwn = (next: OwnCharacter[]) => {
     const changed = changedCharacters(ownCharacters, next);
-    if (frozen) { setStoredCharacters(applyCharacters(storedCharacters, changed)); return; }
+    if (frozen || benchmarkPractice) { setStoredCharacters(applyCharacters(storedCharacters, changed)); return; }
     // Into the stored list as it is now, so a sync that just landed isn't overwritten.
     setStoredCharacters(saveOwnCharacters(persistence.storage, applyCharacters(loadOwnCharacters(persistence.storage), changed)));
     if (serviceUrl() === undefined) return;
@@ -350,12 +365,12 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   const partnerRecords = castRecords.partners;
 
   // Hands played against bots on dealt or replayed deals go to the archive; imported, board-set and repeated ones do not.
-  useSoloResultPost(currentHandId, game, !frozen && playAgainstBots && !currentPbnMetadata && !boardSet && (!currentRecord || !!currentRecord.replay), currentRecord?.replay?.dealId);
+  useSoloResultPost(currentHandId, game, !frozen && !benchmarkPractice && playAgainstBots && !currentPbnMetadata && !boardSet && (!currentRecord || !!currentRecord.replay), currentRecord?.replay?.dealId);
 
   // A signed-in player's finished hand goes to their account at once (dealt or replayed only); a failure retries on the next sync.
   const uploadedHandId = useRef(game?.phase === "complete" ? currentHandId : undefined);
   useEffect(() => {
-    if (frozen || !currentHandId || game?.phase !== "complete" || uploadedHandId.current === currentHandId || serviceUrl() === undefined) return;
+    if (frozen || benchmarkPractice || !currentHandId || game?.phase !== "complete" || uploadedHandId.current === currentHandId || serviceUrl() === undefined) return;
     // The finished hand reaches the saved list one render after the game ends.
     const hand = soloData.completedHands.find((candidate) => candidate.id === currentHandId);
     if (!hand) return;
@@ -366,7 +381,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
       await uploadSoloHand(persistence.storage, account, hand);
       setSoloData(loadSoloData(persistence.storage));
     }).catch(() => {});
-  }, [frozen, currentHandId, game, soloData, persistence]);
+  }, [frozen, benchmarkPractice, currentHandId, game, soloData, persistence]);
 
   // A rubber hand is scored when it ends, and loses its score again if it is taken back from the end.
   useEffect(() => {
@@ -999,16 +1014,19 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
     { id: "hands", label: "Recent hands", onSelect: () => setDialog("hands") },
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") }
   ] : [
+    ...(benchmarkPractice && onExitBenchmarkPractice ? [{ id: "benchmark-return", label: "Return to benchmark replay", onSelect: onExitBenchmarkPractice }] : []),
     ...(online ? [{ id: "online", label: "Online tables", title: "Go to the online lobby; this hand is kept for later", onSelect: goOnline }] : []),
     ...(claimSeat !== undefined && !soloClaimPending && !pickingClaim ? [{ id: "claim", label: "Claim", title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(game) }] : []),
     { id: "take-back", label: "Take back", disabled: !game || game.history.cursor === 0, title: "Undo the last call or card to choose again", onSelect: takeBack },
     ...(handLive && !botsFinishing ? [{ id: "auto-play", label: "Auto play this hand",
       title: "A bot makes your calls and plays your cards until this hand ends, then you play again", onSelect: () => setBotsFinishHandId(currentHandId) }] : []),
-    { id: "settings", label: "Settings", title: "Scoring, dealer, opponents, hints, and forced cards for the next deal", onSelect: () => setDialog("settings") },
+    ...(benchmarkPractice ? [] : [{ id: "settings", label: "Settings", title: "Scoring, dealer, opponents, hints, and forced cards for the next deal", onSelect: () => setDialog("settings") }]),
     ...(scoring === "rubber" || inRubber ? [{ id: "rubber", label: "Scores", title: "The rubber scorecard: above and below the line, games, totals, and the last hand's points", onSelect: () => setDialog("rubber") }] : []),
-    { id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") },
+    ...(benchmarkPractice ? [] : [{ id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") }]),
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
-    ...(boardSet ? [
+    ...(benchmarkPractice && onExitBenchmarkPractice ? [
+      { id: "deal", label: "Finish practice", title: "Return to this benchmark replay", onSelect: onExitBenchmarkPractice }
+    ] : boardSet ? [
       { id: "leave-set", label: "Leave the board set", title: "Stop playing this board set; this hand stays on the table", onSelect: () => setBoardSet(undefined) },
       boardSet.position + 1 < boardSet.records.length
         ? { id: "deal", label: "Next board", ...(handLive ? { tone: "danger" as const, title: "Abandon this board and play the next" } : {}), onSelect: advanceBoardSet }
@@ -1034,7 +1052,9 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
   // A board-set hand's result is set against the field; the original table's play is a review of its own, without one.
   const shownRecord = original ? undefined : selectedHand ? selectedHand.record : currentRecord;
   // While a board set is active, the result moves on through the set instead of dealing afresh.
-  const nextButton = isReviewing ? null : boardSet
+  const nextButton = isReviewing ? null : benchmarkPractice && onExitBenchmarkPractice
+    ? <button className="primary-button" type="button" onClick={onExitBenchmarkPractice}>Finish practice</button>
+    : boardSet
     ? boardSet.position + 1 < boardSet.records.length
       ? <button className="primary-button" type="button" onClick={advanceBoardSet}>Next board</button>
       : <button className="primary-button" type="button" onClick={finishBoardSet}>Finish board set</button>
@@ -1100,6 +1120,7 @@ export default function App({ solver, preview, initialDialog, autoStart }: { sol
 
   return (
     <main className={`app-shell ${fullscreen ? "is-fullscreen" : ""}`}>
+      {benchmarkPractice ? <p className="benchmark-practice-banner">Practice board {benchmarkPractice.record.board} as {benchmarkPractice.benchmark.profileId} · benchmark {benchmarkPractice.benchmark.sideScore} {benchmarkPractice.benchmark.side}</p> : null}
       <div className={`game-layout ${phase === "auction" ? "auction-layout" : phase === "play" ? "play-layout" : ""}`}>
         <TableView
           game={shownGame}

@@ -14,7 +14,7 @@
     "tauri:build": "pnpm --filter @contractplay/client tauri:build",
     "typecheck": "pnpm --recursive build && pnpm --recursive typecheck",
     "lint": "eslint \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.ts\"",
-    "test": "pnpm --filter @contractplay/pbn... build && pnpm --filter @contractplay/persistence... build && pnpm --filter @contractplay/bots... build && pnpm --filter @contractplay/protocol... build && pnpm --filter @contractplay/table... build && pnpm --filter @contractplay/benchmark... build && vitest run --passWithNoTests && pnpm --filter @contractplay/server test",
+    "test": "pnpm --filter @contractplay/pbn... build && pnpm --filter @contractplay/persistence... build && pnpm --filter @contractplay/bots... build && pnpm --filter @contractplay/protocol... build && pnpm --filter @contractplay/table... build && pnpm --filter @contractplay/benchmark... build && vitest run --maxWorkers 2 --testTimeout 15000 --passWithNoTests && vitest run --config vitest.packages.config.ts --maxWorkers 2 --testTimeout 15000 && pnpm --filter @contractplay/server test",
     "server:dev": "pnpm --workspace-root build && pnpm --filter @contractplay/server dev",
     "deploy": "pnpm web:verify && pnpm --filter @contractplay/server exec wrangler deploy"
   },

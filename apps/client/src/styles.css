@@ -517,6 +517,7 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .lobby-tables, .lobby-seats { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .lobby-table { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
 .lobby-table-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.benchmark-badge { border: 1px solid rgba(243, 194, 79, .55); border-radius: 999px; padding: 2px 8px; color: var(--gold); font-size: 11px; font-weight: 700; }
 .lobby-playing { color: var(--gold); font-size: 11px; font-weight: 700; }
 .lobby-seats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); font-size: 13px; }
 .lobby-table .secondary-button { justify-self: start; }
@@ -533,6 +534,24 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .admin-panel { width: min(960px, 100%); max-height: 100%; overflow: auto; }
 .admin-panel h1 { margin: 0; font: 500 22px/1.2 Georgia, serif; }
 .admin-panel .section-heading { gap: 12px; }
+.benchmark-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); align-items: end; gap: 12px; margin: 12px 0; border-top: 1px solid var(--line); padding-top: 12px; }
+.benchmark-form label { display: grid; gap: 5px; color: var(--muted); font-size: 13px; }
+.benchmark-form input:not([type="checkbox"]), .benchmark-form select { min-width: 0; min-height: 38px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; background: rgba(255, 255, 255, .08); color: var(--ink); font: inherit; }
+.benchmark-form option { color: #17201d; }
+.benchmark-form fieldset { display: grid; gap: 7px; border: 1px solid var(--line); border-radius: 7px; padding: 9px; }
+.benchmark-form fieldset label { display: flex; align-items: center; gap: 7px; }
+.benchmark-form legend { color: var(--muted); font-size: 13px; }
+.admin-panel > section[aria-label^="Benchmark"] { display: grid; gap: 10px; margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
+.admin-panel > section[aria-label^="Benchmark"] h2 { margin: 0; font-size: 18px; }
+.benchmark-rankings { overflow-x: auto; }
+.benchmark-rankings table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.benchmark-rankings th, .benchmark-rankings td { border-bottom: 1px solid var(--line); padding: 9px; white-space: nowrap; }
+.benchmark-rankings td:first-child { white-space: normal; }
+.benchmark-rankings small { display: block; color: var(--muted); }
+.benchmark-rankings .text-button { border: 0; padding: 0; background: transparent; color: var(--gold); font: inherit; text-align: left; cursor: pointer; }
+.replay-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; padding: 12px; }
+.replay-controls label { display: flex; align-items: center; gap: 8px; }
+.replay-controls input { width: min(360px, 45vw); }
 .admin-back { text-decoration: none; }
 .admin-tables { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .admin-table { display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }

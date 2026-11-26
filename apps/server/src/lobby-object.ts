@@ -138,7 +138,7 @@ export class LobbyObject extends DurableObject<Env> {
 
   /** Each durable reservation owns one ordinary listed ID, including across coordinator retries. */
   async createBenchmarkTable(input: { jobId: string; tableIndex: number; sessionId: string; name: string;
-    style: TableStyle; assignment: BenchmarkTableAssignment }): Promise<string | null> {
+    style: TableStyle; boardSource: "generated" | "imported"; assignment: BenchmarkTableAssignment }): Promise<string | null> {
     const key = this.benchmarkKey(input.jobId, input.tableIndex);
     const id = await this.ctx.storage.transaction(async (tx) => {
       const reserved = await tx.get<string>(key);

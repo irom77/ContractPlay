@@ -6,6 +6,7 @@ const secret = "a".repeat(32);
 const valid: ClientMessage[] = [
   { type: "hello", version: PROTOCOL_VERSION, secret, name: "Ann" },
   { type: "hello", version: PROTOCOL_VERSION, name: "Ann" },
+  { type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" },
   { type: "sit", seat: "north" },
   { type: "leave" },
   { type: "refresh" },
@@ -29,6 +30,13 @@ const valid: ClientMessage[] = [
 const parse = (v: unknown) => parseClientMessage(JSON.stringify(v));
 
 describe("parseClientMessage", () => {
+  it("accepts only an explicit observer hello role", () => {
+    expect(parse({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Watching" }))
+      .toEqual({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Watching" });
+    for (const observer of [false, "true", 1]) {
+      expect(parse({ type: "hello", version: PROTOCOL_VERSION, observer, name: "Watching" })).toBeUndefined();
+    }
+  });
   it("preserves a bounded expected account player ID in hello", () => {
     const hello = { type: "hello", version: PROTOCOL_VERSION, name: "Ann", expectedPlayerId: "account-player" };
     expect(parse(hello)).toEqual(hello);

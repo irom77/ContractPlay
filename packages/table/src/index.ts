@@ -5,6 +5,6 @@ export { botToAct, botWake, canDeal, dealBotSessionHand, chooseBotAction, dealsN
 export { seatSessionBots } from "./seats.js";
 export { nextWake } from "./presence.js";
 export { reduce } from "./reduce.js";
-export { summaryOf, viewFor } from "./view.js";
-export { createDuplicateSession, recordDuplicateResult, sessionRank, sessionStanding } from "./session.js";
+export { observerViewFor, summaryOf, viewFor } from "./view.js";
+export { createDuplicateSession, duplicateBoardScore, recordDuplicateResult, sessionRank, sessionStanding } from "./session.js";
 export type { DuplicateSession, DuplicateSessionBoard, DuplicateSessionStanding } from "./session.js";

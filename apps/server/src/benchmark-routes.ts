@@ -1,3 +1,4 @@
+import { analysisBoard, parseBaseline, profileDiagnostics, recordAnalysis } from "./benchmark-double-dummy.js";
 import { benchmarkOf } from "./benchmark-object.js";
 import { benchmarkProfileVersionId, createBenchmarkProfile } from "@contractplay/benchmark";
 import { BOT_CHARACTERS, cardId, cleanName, SEATS } from "@contractplay/core";
@@ -152,9 +153,9 @@ async function jobsRoute(request: Request, env: Env, store: BenchmarkStore, tail
     if (request.method === "GET") return json({ jobs: await store.listJobs(limit) });
     if (request.method !== "POST") return methodNotAllowed("GET, POST");
     const data = await configBody(request);
-    const { id = crypto.randomUUID(), cohortId, roundIndex = 0 } = data ?? {};
-    if (!isId(id) || !isId(cohortId) || !intBetween(roundIndex, 0, Number.MAX_SAFE_INTEGER)) return badRequest();
-    const job = await benchmarkOf(env).enqueue({ id, cohortId, roundIndex });
+    const { id = crypto.randomUUID(), cohortId } = data ?? {};
+    if (!isId(id) || !isId(cohortId) || data?.roundIndex !== undefined) return badRequest();
+    const job = await benchmarkOf(env).enqueue({ id, cohortId });
     return job ? json(job, 201) : conflict();
   }
   const [id, action] = tail;
@@ -168,7 +169,7 @@ async function jobsRoute(request: Request, env: Env, store: BenchmarkStore, tail
   return changed ? json(changed) : conflict();
 }
 
-async function publicRoute(request: Request, store: BenchmarkStore, path: string[], limit: number | undefined): Promise<Response> {
+async function publicRoute(request: Request, db: D1Database, store: BenchmarkStore, path: string[], limit: number | undefined): Promise<Response> {
   if (request.method !== "GET") return methodNotAllowed("GET");
   const [resource, ...tail] = path;
   if (tail.length === 0) {
@@ -177,10 +178,12 @@ async function publicRoute(request: Request, store: BenchmarkStore, path: string
     if (resource === "results") return json({ results: await store.listPublicResults(limit) });
     return notFound();
   }
-  if (resource === "profiles" && (tail.length === 2 || (tail.length === 3 && tail[2] === "ratings"))) {
+  if (resource === "profiles" && (tail.length === 2 || (tail.length === 3 && (tail[2] === "ratings" || tail[2] === "diagnostics" || tail[2] === "metrics")))) {
     const key = profileKey(tail[0], tail[1]);
     const profile = key && await store.getProfile(key);
     if (!profile) return notFound();
+    if (tail[2] === "diagnostics") return json(await profileDiagnostics(db, profile.profile.profileId, profile.profile.version));
+    if (tail[2] === "metrics") return json(await store.getProfileMetrics(benchmarkProfileVersionId(profile.profile)));
     return tail.length === 2 ? json(profile) : json({ ratings: await store.listRatingHistory(benchmarkProfileVersionId(profile.profile), limit) });
   }
   if (resource === "results" && tail.length === 3) {
@@ -208,11 +211,34 @@ export async function benchmarkRoute(request: Request, env: Env, admin: boolean)
     }
     const limit = limits[0] === undefined ? undefined : Number(limits[0]);
     const store = new BenchmarkStore(env.DB);
-    if (!admin) return await publicRoute(request, store, path, limit);
+    if (!admin) return await publicRoute(request, env.DB, store, path, limit);
 
     const [resource, ...tail] = path;
     if (resource === "profiles") return await profilesAdminRoute(request, store, tail, limit);
     if (resource === "cohorts") return await cohortsRoute(request, store, tail, limit);
+    if (resource === "jobs" && tail.length === 4 && tail[1] === "boards" && tail[3] === "double-dummy") {
+      const [id, , index] = tail;
+      if (!isId(id) || !index || !pathIndex(index, MAX_BENCHMARK_BOARDS - 1)) return notFound();
+      if (request.method === "GET") {
+        const board = await analysisBoard(env.DB, id, Number(index));
+        return board ? json(board) : notFound();
+      }
+      if (request.method !== "POST") return methodNotAllowed("GET, POST");
+      const baseline = parseBaseline(await configBody(request));
+      if (!baseline) return badRequest();
+      const status = await recordAnalysis(env.DB, id, Number(index), baseline);
+      if (status === "missing") return notFound();
+      if (status === "conflict") return conflict();
+      return json({ analyzed: true }, status === "created" ? 201 : 200);
+    }
+    if (resource === "jobs" && tail.length === 4 && tail[1] === "results") {
+      const [id, , tableIndex, boardIndex] = tail;
+      if (!isId(id) || !tableIndex || !boardIndex || !pathIndex(tableIndex, MAX_BENCHMARK_TABLES - 1)
+        || !pathIndex(boardIndex, MAX_BENCHMARK_BOARDS - 1)) return notFound();
+      if (request.method !== "GET") return methodNotAllowed("GET");
+      const result = await store.getReleasedResult(id, Number(tableIndex), Number(boardIndex));
+      return result ? json(result) : notFound();
+    }
     if (resource === "jobs") return await jobsRoute(request, env, store, tail, limit);
     if (resource === "imports" && tail.length === 0) return await importsRoute(request, store, limit);
     return notFound();

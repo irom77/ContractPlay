@@ -53,13 +53,13 @@ Online tables run on a Cloudflare Worker in `apps/server`. The Worker serves the
 
 Pushes to `main` trigger the Cloudflare workflow. It installs dependencies, verifies and builds the web app, then deploys the Worker. The repository's GitHub Actions secrets provide the Cloudflare credentials; keep them out of source control. For a manual deployment, run `pnpm run deploy` from the repository root (plain `pnpm deploy` is a different, built-in pnpm command).
 
-Before pushing a release to `main`, run `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm web:verify`. The deploy workflow does not apply D1 migrations or configure mail: complete the prerequisites below before deploying the sign-in feature. `/admin` and its API remain open without authentication; authorization is separate required work before public production use.
+Before pushing a release to `main`, run `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm web:verify`. The deploy workflow does not apply D1 migrations or configure mail: complete the prerequisites below before deploying features that need them. Benchmark operations at `/admin` use a signed-in session and the `BENCHMARK_ADMIN_ACCOUNT_IDS` allowlist. The separate legacy online-table removal panel and `/api/admin/tables` API remain open without authentication; securing that surface is still required before public production use.
 
 Use `pnpm --filter @contractplay/server exec wrangler deploy --dry-run` (after `pnpm build`) to check that the configuration bundles without deploying.
 
 ### Bot benchmark scheduling
 
-Apply D1 migration `0006_bot_benchmarks.sql` and configure `BENCHMARK_ADMIN_ACCOUNT_IDS` before creating cohorts. Use engine version `contractplay-bots-v1` for the current built-in profiles. Set a cohort's `intervalMinutes` to a positive multiple of five, or leave it null for manual starts. The Worker checks due cohorts every five minutes. The next eligible tick queues a round when the previous job has ended and the queue has room. Pausing a cohort's job holds its place until resume or cancel.
+Apply D1 migration `0006_bot_benchmarks.sql` remotely and configure `BENCHMARK_ADMIN_ACCOUNT_IDS` before creating cohorts; this migration and allowlist are not yet applied/configured in production. Use engine version `contractplay-bots-v1` for the current built-in profiles. Set a cohort's `intervalMinutes` to a positive multiple of five, or leave it null for manual starts. The Worker checks due cohorts every five minutes. The next eligible tick queues a round when the previous job has ended and the queue has room. Pausing a cohort's job holds its place until resume or cancel.
 
 Each job uses one duplicate session. The coordinator executes one job at a time, and the queue allows eight active jobs including paused jobs. Tables play each admitted board on their own alarms. A board that stays unfinished for 30 minutes after its tables start or the job resumes times out. Finished replay facts and released scores survive live table cleanup.
 

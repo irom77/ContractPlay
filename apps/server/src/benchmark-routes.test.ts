@@ -101,6 +101,16 @@ describe("benchmark HTTP routes", () => {
     const job = await write("/jobs", { id: "test-job", cohortId: id });
     expect(job.status).toBe(201);
     expect(await job.json()).toMatchObject({ id: "test-job", status: "queued", cohort: { name: "Rating pool", boardCount: 16 } });
+    const concurrentStarts = await Promise.all([write("/jobs", { cohortId: id }), write("/jobs", { cohortId: id })]);
+    expect(concurrentStarts.map((response) => response.status)).toEqual([201, 201]);
+    const allocatedRounds = await Promise.all(concurrentStarts.map(async (response) => (await response.json<{ roundIndex: number }>()).roundIndex));
+    expect(allocatedRounds).toEqual([1, 2]);
+    const retryBody = { id: "retry-job", cohortId: id };
+    const retry = await write("/jobs", retryBody);
+    expect(retry.status).toBe(201);
+    expect(await retry.json()).toMatchObject({ id: "retry-job", roundIndex: 3 });
+    expect(await (await write("/jobs", retryBody)).json()).toMatchObject({ id: "retry-job", roundIndex: 3 });
+    expect((await write("/jobs", { cohortId: id, roundIndex: 99 })).status).toBe(400);
     expect((await write(`/cohorts/${id}`, { ...configuration, boardCount: 1 }, "PUT")).status).toBe(200);
     expect((await write("/jobs/test-job/pause", {})).status).toBe(200);
     expect((await write("/jobs/test-job/resume", {})).status).toBe(200);
@@ -117,7 +127,14 @@ describe("benchmark HTTP routes", () => {
     expect((await call(`${publicPath}/profiles?limit=1`)).status).toBe(200);
   });
 
-  it("keeps the replay of a completed imported board private while publishing its scores", async () => {
+  it("serves rolling public IMP and matchpoint profile diagnostics", async () => {
+    await write("/profiles", profile);
+    const response = await call(`${publicPath}/profiles/${BOT_CHARACTERS[0]!.id}/v1/metrics`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([]);
+  });
+
+  it("keeps imported replays private publicly and retains them for authorized admin review after upload removal", async () => {
     const upload = await call(`${admin}/imports`, { method: "POST", body: pbn, headers: { Cookie: cookie(tokens.admin) } });
     expect(upload.status).toBe(201);
     const { id: importId } = await upload.json<{ id: string }>();
@@ -125,6 +142,8 @@ describe("benchmark HTTP routes", () => {
     const roster = BOT_CHARACTERS.slice(0, 4).map(({ skill, aggression }) =>
       createBenchmarkProfile({ ...profile, skill, aggression, biddingStyle: "SAYC" }));
     for (const entry of roster) await store.addProfileVersion(entry, 1);
+    expect((await write("/cohorts", { name: "Wrong count", profiles: roster.map(({ profileId, version }) => ({ profileId, version })), boardCount: 2, maxTables: 2,
+      biddingStyle: "SAYC", scoring: "imps", rotationSeed: 1, importId, intervalMinutes: null })).status).toBe(409);
     expect(await store.createCohort("private-cohort", { name: "Private boards", profiles: roster, boardCount: 1, maxTables: 2,
       biddingStyle: "SAYC", scoring: "imps", rotationSeed: 7, importId, intervalMinutes: null }, 2)).toBe(true);
     await store.startJob({ id: "imported-job", cohortId: "private-cohort", roundIndex: 0, now: 3 });
@@ -140,15 +159,40 @@ describe("benchmark HTTP routes", () => {
         contract: null, tricks: null, nsScore: 0, completedAt: 5 })).toBe(true);
     }
 
+    const dd = "/jobs/imported-job/boards/0/double-dummy";
+    expect((await read(dd)).status).toBe(404);
+    expect(await store.finishJob("imported-job", claim.token, "completed", 7)).toBe(true);
+    expect((await call(admin + dd)).status).toBe(401);
+    expect((await call(admin + dd, { headers: { Cookie: cookie(tokens.member) } })).status).toBe(403);
+    expect(await (await read(dd)).json()).toMatchObject({ analyzed: false, board: { number: 8, dealer: "west" } });
+    const sample = { source: "bridge-dds-1.4.0", parNS: 420, tricks: Array.from({ length: 5 }, () => [7, 8, 9, 10]) };
+    expect((await write(dd, { ...sample, tricks: [[14]] })).status).toBe(400);
+    expect((await write(dd, sample)).status).toBe(201);
+    expect((await write(dd, sample)).status).toBe(200);
+    expect((await write(dd, { ...sample, parNS: 430 })).status).toBe(409);
+    expect(await (await read(dd)).json()).toEqual({ analyzed: true });
+    const metric = await call(`${publicPath}/profiles/${seats.north.profileId}/${seats.north.version}/diagnostics`);
+    expect(await metric.json()).toEqual({ source: sample.source, maxTableResults: 128, analyzedTableResults: 2,
+      auction: { samples: 2, meanAbsoluteParGapPoints: 420 }, declarer: { samples: 0, meanTricksBelowOptimum: null },
+      defense: { samples: 0, meanTricksPreventedVsDoubleDummy: null } });
+
     const attempt = await call(`${publicPath}/results/imported-job/0/0`);
     expect(attempt.status).toBe(404);
     expect(await attempt.json()).toEqual({ error: "not-found" });
     expect(await store.getReleasedResult("imported-job", 0, 0)).toMatchObject({ board: { number: 8, dealer: "west" }, actions });
+    const replayPath = `${admin}/jobs/imported-job/results/0/0`;
+    expect((await call(replayPath)).status).toBe(401);
+    expect((await call(replayPath, { headers: { Cookie: cookie(tokens.member) } })).status).toBe(403);
+    await env.DB.prepare("DELETE FROM benchmark_imports WHERE id = ?").bind(importId).run();
+    const adminReplay = await call(replayPath, { headers: { Cookie: cookie(tokens.admin) } });
+    expect(adminReplay.status).toBe(200);
+    expect(await adminReplay.json()).toMatchObject({ board: { number: 8, dealer: "west" }, actions });
+    expect((await call(`${publicPath}/results/imported-job/0/0`)).status).toBe(404);
     const list = await call(`${publicPath}/results`);
     const { results } = await list.json<{ results: unknown[] }>();
     expect(results).toHaveLength(2);
     expect(results[0]).toEqual({ jobId: "imported-job", tableIndex: 0, boardIndex: 0, boardNumber: 8,
-      nsScore: 0, ewScore: 0, tricks: null, completedAt: 5, releasedAt: 5 });
+      scoring: "imps", nsScore: 0, ewScore: 0, tricks: null, completedAt: 5, releasedAt: 5, replayAvailable: false, replayStatus: "private-import" });
   });
 
   it("atomically rejects invalid or oversized PBN and stores only validated board facts on retry", async () => {

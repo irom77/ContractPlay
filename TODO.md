@@ -6,7 +6,7 @@ Status follows the app-wide plan in [`docs/superpowers/plans/2026-10-25-contract
 
 ## Current focus
 
-The core rules, PBN package, and solo client are in place, and the solo app roadmap is complete. Beginner through Expert bots are selectable and differ in both bidding and card play: Beginner bids constructively and answers partner; Intermediate competes with overcalls, takeout doubles, and preempts; Advanced balances, reopens, opens light in third and fourth seat, draws trumps, and ruffs; Expert adds Gerber, splinters, Reverse Drury, Lebensohl, and counts winners in the play. SAYC and 2/1 share one agreement layer that reads every auction from the opening bid, with separate responses where the systems differ. Switchable hints suggest a call or card with a reason and explain the meaning of calls. The Cloudflare deployment serves the web app and online tables together at https://contractplay.niuk.workers.dev; the old GitHub Pages copy is no longer updated. Email sign-in, linked seat recovery, account-gated lobby browsing, and personal online hand archives are implemented. The production site now opens on the account-gated lobby; verify sign-in, real online play, and archive sync on the deployment, then move to `bridge.romaniuk.us`; permissions and invitations remain open.
+The core rules, PBN package, and solo client are in place, and the solo app roadmap is complete. Beginner through Expert bots are selectable and differ in both bidding and card play: Beginner bids constructively and answers partner; Intermediate competes with overcalls, takeout doubles, and preempts; Advanced balances, reopens, opens light in third and fourth seat, draws trumps, and ruffs; Expert adds Gerber, splinters, Reverse Drury, Lebensohl, and counts winners in the play. SAYC and 2/1 share one agreement layer that reads every auction from the opening bid, with separate responses where the systems differ. Switchable hints suggest a call or card with a reason and explain the meaning of calls. The Cloudflare deployment serves the web app and online tables together at https://contractplay.niuk.workers.dev; the old GitHub Pages copy is no longer updated. Email sign-in, linked seat recovery, account-gated lobby browsing, and personal online hand archives are implemented. Bot benchmark engine, protected benchmark operations, public leaderboard, generated-deal replay, and isolated play against a selected benchmark profile are implemented in code; production migration, allowlist configuration, continuous-run verification, and initial calibration review remain before release. The production site now opens on the account-gated lobby; verify sign-in, real online play, and archive sync on the deployment, then move to `bridge.romaniuk.us`; permissions and invitations remain open.
 
 ## Hand records and replays
 
@@ -16,6 +16,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 ## Bots
 
 - [x] Named bots: players' own saved characters that play differently (`docs/superpowers/specs/2026-11-25-bot-traits-design.md`). Parts 1–3 are done: six trait dials with the old aggressiveness presets preserved; own characters in solo with an editor, results and account sync (migration 0005); and own characters at online tables, with owner-only result attribution.
+- [ ] Release continuous bot benchmarks: apply `0006_bot_benchmarks.sql`, configure `BENCHMARK_ADMIN_ACCOUNT_IDS`, deploy the Worker/DO scheduler, and verify bounded scheduled execution, protected benchmark controls, generated public replays, imported PBN privacy, and rating calibration on production. Task implementation and local tests are in `docs/superpowers/plans/2026-11-25-bot-benchmark-leaderboards.md`; no live deployment or production migration is claimed yet.
 
 ## Online multiplayer
 
@@ -26,7 +27,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [ ] Verify cross-device seat recovery and archive sync. Live email delivery and sign-in have been confirmed. Follow [the deployment runbook](docs/platform-delivery.md#email-sign-in-prerequisites).
 - [ ] Verify a deal replay live. Migration 0003 was applied to production on 2026-11-24 (`GET /api/deals/replay` answers 204 while the archive is empty). Finish online hands, or solo hands against bots; at least a day later, check that an even-numbered hand in the same mode shows the "Replayed deal" notice and, when it ends, the comparison.
 - [ ] Add permissions (authorization) beyond the current host and seated-player rules.
-- [ ] Protect `/admin` and its API with authorization before public production use; email sign-in does not restrict them.
+- [ ] Protect the legacy online-table removal panel at `/admin` and `/api/admin/tables` with authorization before public production use; email sign-in does not restrict that separate surface. Benchmark operations under `/admin` use the benchmark session allowlist.
 - [ ] Add invitations to a table.
 - [ ] Add basic optional voice and video chat for players at a table.
 
