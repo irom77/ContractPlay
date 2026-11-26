@@ -348,6 +348,55 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .pos-right .hidden-hand { align-self: flex-end; }
 .pos-left .hidden-hand { align-self: flex-start; }
 
+/* ---------- Fanned hands (hand-layout-fan) ---------- */
+/* The line rules above lay a hand flat; with the fan layout each card keeps its place in that row or column and is then
+   tilted about the edge nearest its holder and bowed toward the centre of the table, as a hand is held at a real table.
+   --fan-p is the card's place in a full 13-card fan (-1 … 1, set by handLayout.ts), so every hand bends on one curve;
+   --fan-spread is the tilt of an outermost card and --fan-arc how far the middle bows in. Cards only move inward from
+   the line layout (the middle comes forward, the edges stay put), so a fan needs no more room than the row it replaces
+   beyond the small tilt of its outer cards, which the slightly smaller steps and cards below absorb. */
+.hand-layout-fan .hand-panel { --h: calc(25 * var(--u)); --step: min(calc(11 * var(--u)), calc((100vw - 43 * var(--u)) / 12)); }
+.online-table .hand-layout-fan .hand-panel { --h: calc(19.5 * var(--u)); --step: min(calc(13 * var(--u)), calc((94vw - 20 * var(--u)) / 12)); }
+.hand-layout-fan .cards-row { --fan-spread: 9deg; --fan-arc: calc(var(--h) * .055); }
+/* The raise (hover, hint, queued) is along the card's own tilt, so a lifted card slides out of the fan, not sideways. */
+.hand-layout-fan .cards-row .playing-card,
+.hand-layout-fan .cards-row .playing-card:is(:hover, .hinted-card, .queued-card),
+.hand-layout-fan .cards-row button.playing-card.queued-card:hover:not(:disabled) {
+  transform-origin: 50% 100%;
+  transform: translateY(calc((var(--fan-p, 0) * var(--fan-p, 0) - 1) * var(--fan-arc))) rotate(calc(var(--fan-p, 0) * var(--fan-spread))) translateY(calc(-1 * var(--raise, 0px)));
+}
+.hand-layout-fan .cards-row .playing-card.hinted-card { --raise: calc(1.6 * var(--u)); }
+@media (hover: hover) { .hand-layout-fan .cards-row button.playing-card:hover:not(:disabled) { --raise: calc(2.5 * var(--u)); } }
+.hand-layout-fan .cards-row .playing-card.queued-card, .hand-layout-fan .cards-row button.playing-card.queued-card:hover:not(:disabled) { --raise: calc(3 * var(--u)); }
+/* Backs at hidden seats: the fan opens toward the centre from the seat's own edge of the table. A side fan bows by
+   moving its ends out toward the window edge, never its middle in toward the trick and anything centred over it. */
+/* A held hand at a fixed seat (online play) fans the same way across its suit groups. Its steps leave out --fan-room,
+   the width its outer cards tilt past the row, and a margin on each side takes the bowed middle and the tilted corners of
+   the outer cards, so the fan stays in the box the line layout gives the hand. */
+.hand-layout-fan .fanned-hand { --fan-spread: 9deg; --fan-arc: calc(var(--h) * .055); --fan-room: calc(var(--h) * .3); }
+.hand-layout-fan .fanned-hand { margin-block: var(--fan-arc); }
+.hand-layout-fan .pos-bottom .fanned-hand .dummy-card,
+.hand-layout-fan .pos-bottom .fanned-hand .dummy-card:is(:hover, .queued-card),
+.hand-layout-fan .pos-bottom .fanned-hand button.dummy-card.queued-card:hover:not(:disabled) {
+  transform-origin: 50% 100%;
+  transform: translateY(calc((var(--fan-p, 0) * var(--fan-p, 0) - 1) * var(--fan-arc))) rotate(calc(var(--fan-p, 0) * var(--fan-spread))) translateY(calc(-1 * var(--raise, 0px)));
+}
+.hand-layout-fan .pos-top .fanned-hand .dummy-card,
+.hand-layout-fan .pos-top .fanned-hand .dummy-card:is(:hover, .queued-card),
+.hand-layout-fan .pos-top .fanned-hand button.dummy-card.queued-card:hover:not(:disabled) {
+  transform-origin: 50% 0;
+  transform: translateY(calc((1 - var(--fan-p, 0) * var(--fan-p, 0)) * var(--fan-arc))) rotate(calc(var(--fan-p, 0) * var(--fan-spread) * -1)) translateY(var(--raise, 0px));
+}
+@media (hover: hover) { .hand-layout-fan .fanned-hand button.dummy-card:hover:not(:disabled) { --raise: calc(1.2 * var(--u)); } }
+.hand-layout-fan .fanned-hand .dummy-card.queued-card, .hand-layout-fan .fanned-hand button.dummy-card.queued-card:hover:not(:disabled) { --raise: calc(1.6 * var(--u)); }
+/* Side columns of backs keep clear of the seat's name above them. */
+.hand-layout-fan .pos-left .hidden-hand, .hand-layout-fan .pos-right .hidden-hand { margin-block: calc(var(--h) * .12); }
+.hand-layout-fan .hidden-hand { --fan-spread: 10deg; --fan-arc: calc(var(--h) * .09); }
+.hand-layout-fan .pos-top .card-back { transform-origin: 50% 0; transform: translateY(calc((1 - var(--fan-p, 0) * var(--fan-p, 0)) * var(--fan-arc))) rotate(calc(var(--fan-p, 0) * var(--fan-spread) * -1)); }
+.hand-layout-fan .pos-bottom .card-back { transform-origin: 50% 100%; transform: translateY(calc((var(--fan-p, 0) * var(--fan-p, 0) - 1) * var(--fan-arc))) rotate(calc(var(--fan-p, 0) * var(--fan-spread))); }
+.hand-layout-fan .pos-left .card-back { transform-origin: 0 50%; transform: translateX(calc(var(--fan-p, 0) * var(--fan-p, 0) * var(--fan-arc) * -1)) rotate(calc(var(--fan-p, 0) * var(--fan-spread))); }
+.hand-layout-fan .pos-right .card-back { transform-origin: 100% 50%; transform: translateX(calc(var(--fan-p, 0) * var(--fan-p, 0) * var(--fan-arc))) rotate(calc(var(--fan-p, 0) * var(--fan-spread) * -1)); }
+
 /* ---------- Centre of the table ---------- */
 .trick-area, .last-trick-spot { --h: calc(19 * var(--u)); --dx: calc(11 * var(--u)); --dy: calc(8 * var(--u)); }
 .trick-area { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
@@ -618,19 +667,19 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .online-table .dummy-on-left { --bottom-left: var(--side-dummy); }
 .online-table .dummy-on-right { --bottom-left: var(--hint-room); --bottom-right: var(--side-dummy); }
 .online-table .pos-bottom.has-fixed-hand { right: var(--bottom-right); left: var(--bottom-left); transform: none; }
-.online-table .pos-bottom .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--bottom-left) - var(--bottom-right) - 42 * var(--u)) / 9)); }
+.online-table .pos-bottom .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--bottom-left) - var(--bottom-right) - 42 * var(--u) - var(--fan-room, 0px)) / 9)); }
 .online-table.play-layout .hint-controls p { max-width: calc(var(--hint-room) - 2 * var(--u)); }
 .online-table .table-status { max-width: calc(25 * var(--u)); }
 .online-table .table-tools-row { flex-direction: column; align-items: flex-start; }
 .online-table .hand-on-top .pos-top.has-fixed-hand { right: calc(28 * var(--u)); left: var(--tools-room); width: auto; transform: none; }
-.online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--tools-room) - 70 * var(--u)) / 9)); }
+.online-table .hand-on-top .pos-top .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--tools-room) - 70 * var(--u) - var(--fan-room, 0px)) / 9)); }
 .online-table .table-surface.dummy-on-right .hint-controls { right: auto; left: calc(2 * var(--u)); align-items: flex-start; }
 .online-table .table-surface.dummy-on-right .hint-controls p { text-align: left; }
 /* Tall, narrow windows: your hand takes the full width with larger cards, in the bidding and the play alike, and the
    Hints corner moves up above it instead of taking room beside it. */
 @media (max-aspect-ratio: 4/5) {
   .online-table .table-surface, .online-table .dummy-on-left, .online-table .dummy-on-right { --bottom-left: calc(2 * var(--u)); --bottom-right: calc(2 * var(--u)); --own-h: calc(22 * var(--u)); }
-  .online-table .pos-bottom .dummy-table-hand { --h: var(--own-h); --step: max(calc(2.6 * var(--u)), calc((100vw - 4 * var(--u) - 4 * .7 * var(--own-h) - 2.4 * var(--u)) / 9)); }
+  .online-table .pos-bottom .dummy-table-hand { --h: var(--own-h); --step: max(calc(2.6 * var(--u)), calc((100vw - 4 * var(--u) - 4 * .7 * var(--own-h) - 2.4 * var(--u) - var(--fan-room, 0px)) / 9)); }
   .online-table .hint-controls { bottom: calc(var(--own-h) + 9 * var(--u)); }
 }
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -129,3 +129,32 @@ describe("bot seat badges", () => {
     expect(container.querySelector(".seat-south .seat-compass")!.classList.contains("bot-compass")).toBe(false);
   });
 });
+
+describe("hand layout", () => {
+  const fanOf = (element: Element | null | undefined) => (element as HTMLElement | null | undefined)?.style.getPropertyValue("--fan-p");
+
+  it("fans the held hand and the backs by default, but not dummy", () => {
+    const { container } = renderTable(publicGame(afterOpeningLead(), ["north", "south"]));
+    expect(container.querySelector(".table-panel")?.classList).toContain("hand-layout-fan");
+    const held = [...container.querySelectorAll(".seat-north .fanned-hand .table-card")];
+    expect(held).toHaveLength(13);
+    expect(held.map(fanOf)).toEqual(["-1.0000", "-0.8333", "-0.6667", "-0.5000", "-0.3333", "-0.1667", "0.0000", "0.1667", "0.3333", "0.5000", "0.6667", "0.8333", "1.0000"]);
+    expect(container.querySelector(".seat-south .dummy-table-hand")?.classList).not.toContain("fanned-hand");
+    expect(fanOf(container.querySelector(".seat-south .table-card"))).toBe("");
+    expect(fanOf(container.querySelector(".seat-east .card-back"))).toBe("-0.9167");
+  });
+
+  it("lays every hand in a line when asked", () => {
+    const { container } = renderTable(publicGame(afterOpeningLead(), ["north", "south"]), { handLayout: "line" });
+    expect(container.querySelector(".table-panel")?.classList).toContain("hand-layout-line");
+    expect(container.querySelector(".fanned-hand")).toBeNull();
+    expect(container.querySelectorAll("[style*='--fan-p']")).toHaveLength(0);
+  });
+
+  it("fans the hand zone", () => {
+    const { container } = renderTable(publicGame(newGame(), ["north"]), { showBottomHand: true, fixedSeatHands: false });
+    const cards = [...container.querySelectorAll(".hand-zone .playing-card")];
+    expect(cards).toHaveLength(13);
+    expect([fanOf(cards[0]), fanOf(cards[12])]).toEqual(["-1.0000", "1.0000"]);
+  });
+});
