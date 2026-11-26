@@ -151,7 +151,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(card).getByRole("heading", { name: "N–S win the rubber 2–0" }).querySelector(".pad-result-games")?.textContent).toBe("2–0");
     // West, a person who has stepped away, keeps the widest seat label; the table measures every seat so the panel
     // can be placed clear of them all.
-    expect(screen.getByText("Annabelle")).toBeTruthy();
+    expect(screen.getByText("Annabelle Fitzgerald").getAttribute("title")).toBe("Annabelle Fitzgerald");
     const surface = document.querySelector<HTMLElement>(".table-surface.hands-revealed")!;
     for (const side of ["top", "right", "bottom", "left"]) expect(surface.style.getPropertyValue(`--measured-${side}-room`)).toMatch(/^\d+px$/);
   },

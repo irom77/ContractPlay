@@ -730,8 +730,9 @@ function botSeatsOf(seats: Readonly<Record<Seat, SeatInfo>>): Seat[] {
 
 function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatInfo; isHost: boolean; onHandToBot: (() => void) | undefined }) {
   if (info.kind === "empty") return null;
+  const name = info.kind === "bot" ? botName(info) : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name;
   return <span className="online-seat-label">
-    <span className="online-seat-name">{info.kind === "bot" ? botName(info) : info.standIn !== undefined ? `bot playing for ${info.name}` : info.name}</span>
+    <span className="online-seat-name" title={name}>{name}</span>
     {info.kind === "human" && info.autoPlay ? <span className="online-badge">auto play</span> : null}
     {info.kind === "human" && info.away ? <span className="online-badge">away</span> : null}
     {isHost ? <span className="online-badge">host</span> : null}

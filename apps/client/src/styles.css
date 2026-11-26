@@ -450,7 +450,7 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
   top: calc((var(--room-top) + 100% - var(--room-bottom)) / 2); max-height: calc(100% - var(--room-top) - var(--room-bottom) - var(--u)); }
 .hands-revealed .score-panel.scorecard-panel { gap: calc(.6 * var(--u)); padding: calc(1.4 * var(--u)) calc(2.4 * var(--u)); }
 .hands-revealed .scorecard-panel h2 { font-size: max(18px, calc(3.2 * var(--u))); }
-.hands-revealed .scorecard-panel .scorecard { grid-template-columns: minmax(calc(24 * var(--u)), calc(42 * var(--u))) minmax(calc(22 * var(--u)), calc(34 * var(--u))); grid-template-rows: auto auto 1fr; grid-template-areas: "pad status" "pad breakdown" "pad actions"; align-items: start; column-gap: calc(1.6 * var(--u)); width: auto; }
+.hands-revealed .scorecard-panel .scorecard { grid-template-columns: minmax(min(calc(24 * var(--u)), 52%), calc(42 * var(--u))) minmax(min(calc(22 * var(--u)), 44%), calc(34 * var(--u))); grid-template-rows: auto auto 1fr; grid-template-areas: "pad status" "pad breakdown" "pad actions"; align-items: start; column-gap: calc(1.6 * var(--u)); width: auto; }
 .hands-revealed .scorecard-panel .pad { grid-area: pad; }
 .hands-revealed .scorecard-panel .pad-status, .hands-revealed .scorecard-panel .pad-result { grid-area: status; }
 .hands-revealed .scorecard-panel .pad-breakdown { grid-area: breakdown; }
@@ -630,6 +630,10 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
   .online-table .hint-controls { bottom: calc(var(--own-h) + 9 * var(--u)); }
 }
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* With every hand face up the result panel sits between the seats, so a long name at a side seat wraps onto two lines
+   (the full name is its tooltip) instead of widening the seat and squeezing the panel. */
+.hands-revealed .pos-left .online-seat-label, .hands-revealed .pos-right .online-seat-label { max-width: max(110px, calc(14 * var(--u))); }
+.hands-revealed .pos-left .online-seat-name, .hands-revealed .pos-right .online-seat-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; white-space: normal; overflow-wrap: anywhere; }
 .pos-right .online-seat-label { justify-content: flex-end; }
 .online-badge { border-radius: 99px; padding: 1px 7px; background: rgba(255, 255, 255, .14); color: var(--gold); font-size: var(--text-s); font-weight: 700; }
 .online-seat-button { min-height: max(26px, calc(4 * var(--u))); }
