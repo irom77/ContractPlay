@@ -13,7 +13,7 @@ const BOARD_TIMEOUT_MS = 30 * 60_000;
 type Progress = { phase: "assign" | "boards" | "tables" | "session" | "admit" | "deal" | "wait";
   tableIds: string[]; boardIndex: number; nextTable: number; retries: number; deadline?: number };
 type Lease = { id: string; token: string };
-type Cleanup = { id: string; nextTable: number; count: number };
+type Cleanup = { id: string; nextTable: number; count: number; nextAt: number; retries: number };
 const runKey = (id: string) => `run:${id}`;
 const cleanupKey = (id: string) => `cleanup:${id}`;
 const sessionId = (id: string) => `benchmark:${id}`;
@@ -73,11 +73,28 @@ export class BenchmarkObject extends DurableObject<Env> {
     await this.ctx.blockConcurrencyWhile(async () => {
       // Leave a durable recovery wake across external I/O even if execution stops before saving the cursor.
       await this.ctx.storage.setAlarm(Date.now() + LEASE_MS);
-      const cleanup = (await this.ctx.storage.list<Cleanup>({ prefix: "cleanup:", limit: 1 })).values().next().value;
+      const after = await this.ctx.storage.get<string>("cleanup-cursor") ?? "";
+      let cleanups = await this.ctx.storage.list<Cleanup>({ prefix: "cleanup:", limit: 100, ...(after ? { startAfter: after } : {}) });
+      if (cleanups.size === 0 && after) {
+        await this.ctx.storage.delete("cleanup-cursor");
+        cleanups = await this.ctx.storage.list<Cleanup>({ prefix: "cleanup:", limit: 100 });
+      }
+      const cleanupKeys = [...cleanups.keys()];
+      const cleanup = [...cleanups.values()].find((item) => item.nextAt <= Date.now());
+      const cursor = cleanup ? cleanupKey(cleanup.id) : cleanupKeys[cleanupKeys.length - 1];
+      if (cursor) await this.ctx.storage.put("cleanup-cursor", cursor);
       if (cleanup) {
-        await this.cleanup(cleanup);
-        await this.wake();
-        return;
+        try {
+          await this.cleanup(cleanup);
+          await this.wake();
+          return;
+        } catch (error) {
+          const retries = cleanup.retries + 1;
+          const nextAt = Date.now() + Math.min(POLL_MS * 2 ** Math.min(retries - 1, 5), 5 * 60_000);
+          await this.ctx.storage.put(cleanupKey(cleanup.id), { ...cleanup, retries, nextAt });
+          console.error("benchmark cleanup failed", cleanup.id, error);
+          // Leave the cleanup durable, but let another cohort use this alarm while it backs off.
+        }
       }
       const store = this.store;
       let lease = await this.ctx.storage.get<Lease>("lease");
@@ -88,7 +105,10 @@ export class BenchmarkObject extends DurableObject<Env> {
         if (!job) {
           await this.ctx.storage.delete("lease");
           const expiry = await store.nextClaimExpiry();
-          if (expiry !== null) await this.ctx.storage.setAlarm(Math.max(Date.now() + STEP_MS, expiry));
+          const cleanupWake = cleanups.size ? Date.now() + POLL_MS : null;
+          const nextWake = [expiry, cleanupWake].filter((value): value is number => value !== null).reduce<number | null>(
+            (earliest, value) => earliest === null || value < earliest ? value : earliest, null);
+          if (nextWake !== null) await this.ctx.storage.setAlarm(Math.max(Date.now() + STEP_MS, nextWake));
           else await this.ctx.storage.deleteAlarm();
           return;
         }
@@ -214,7 +234,7 @@ export class BenchmarkObject extends DurableObject<Env> {
   private async queueCleanup(job: BenchmarkJob): Promise<void> {
     const key = cleanupKey(job.id);
     if (!await this.ctx.storage.get(key)) {
-      await this.ctx.storage.put<Cleanup>(key, { id: job.id, nextTable: 0, count: job.cohort.maxTables });
+      await this.ctx.storage.put<Cleanup>(key, { id: job.id, nextTable: 0, count: job.cohort.maxTables, nextAt: Date.now(), retries: 0 });
     }
   }
 

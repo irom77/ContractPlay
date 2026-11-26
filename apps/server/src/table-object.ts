@@ -122,19 +122,43 @@ export class TableObject extends DurableObject<Env> {
     if (!Number.isSafeInteger(boardIndex) || boardIndex < 0 || !state?.sessionId || state.benchmark?.engineVersion !== BENCHMARK_ENGINE_VERSION) return false;
     if (state.handNumber > boardIndex) {
       if (await this.ctx.storage.getAlarm() === null) await this.arm(state);
+      await this.publishBenchmarkState(state);
       return true;
     }
     const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, boardIndex);
     if (!board) return false;
     const current = await this.load();
     if (!current) return false;
-    if (current.handNumber > boardIndex) return true;
+    if (current.handNumber > boardIndex) {
+      await this.publishBenchmarkState(current);
+      return true;
+    }
     const out = dealBotSessionHand(current, { ...board, index: boardIndex }, Date.now());
     if (out.refused) return false;
     await this.save(out.state);
-    await this.broadcast(out.state);
-    await this.lobby().update(summaryOf(out.state));
+    await this.publishBenchmarkState(out.state);
     return true;
+  }
+
+  private async publishBenchmarkState(state: TableState): Promise<void> {
+    const broadcasted = await this.ctx.storage.get<number>("benchmark:publishedBroadcast") ?? 0;
+    if (broadcasted < state.handNumber) {
+      try {
+        await this.broadcast(state);
+        await this.ctx.storage.put("benchmark:publishedBroadcast", state.handNumber);
+      } catch (error) {
+        console.error("benchmark table broadcast failed", state.id, state.handNumber, error);
+      }
+    }
+    const listed = await this.ctx.storage.get<number>("benchmark:publishedLobby") ?? 0;
+    if (listed < state.handNumber) {
+      try {
+        await this.lobby().update(summaryOf(state));
+        await this.ctx.storage.put("benchmark:publishedLobby", state.handNumber);
+      } catch (error) {
+        console.error("benchmark lobby publication failed", state.id, state.handNumber, error);
+      }
+    }
   }
 
   async deleteBenchmark(jobId: string): Promise<TableSummary | undefined> {
