@@ -90,6 +90,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const menu = screen.getByRole("group", { name: "Game menu" });
     expect(menu.closest("details")!.open).toBe(true);
     expect(within(menu).getByRole("button", { name: "Back to lobby" })).toBeTruthy();
+    expect(within(menu).getByRole("button", { name: "Lay cards in a line" })).toBeTruthy();
     expect((within(menu).getByRole("button", { name: "Take back" }) as HTMLButtonElement).disabled).toBe(false);
     expect(within(menu).getByRole("button", { name: "Cancel this hand" })).toBeTruthy();
     expect(within(menu).getByRole("button", { name: "Scores" })).toBeTruthy();
@@ -226,6 +227,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const dialog = screen.getByRole("dialog", { name: "Settings" });
     expect((within(dialog).getByRole("combobox", { name: "Opponents" }) as HTMLSelectElement).value).toBe("bots");
     expect(within(dialog).getByRole("checkbox", { name: "Play forced cards automatically" })).toBeTruthy();
+    expect((within(dialog).getByRole("combobox", { name: "Cards" }) as HTMLSelectElement).value).toBe("fan");
   },
   "solo-hands": () => {
     const dialog = screen.getByRole("dialog", { name: "Recent hands" });

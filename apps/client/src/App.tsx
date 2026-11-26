@@ -50,6 +50,7 @@ import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard
 import { ClaimPanel } from "./table/ClaimPanel.js";
 import { DraggableBanner } from "./table/DraggableBanner.js";
 import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
+import { loadHandLayout, saveHandLayout, type HandLayout } from "./table/handLayout.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
 import { fetchReplay, replayNotice, useSoloResultPost } from "./replays.js";
@@ -184,6 +185,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
     try { return persistence.storage.getItem(hintsStorageKey) === "on"; } catch { return false; }
   });
   const [forcedPlayOn, setForcedPlayOn] = useState(() => forcedPlayEnabled(persistence.storage));
+  const [handLayout, setHandLayout] = useState(() => loadHandLayout(persistence.storage));
   // The position a take-back returned to: a forced card there waits for the player instead of replaying at once.
   const [takenBackTo, setTakenBackTo] = useState<GameState>();
   const [scoring, setScoring] = useState<ScoringFormat>(initialSetup.scoring);
@@ -553,6 +555,11 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
     try { persistence.storage.setItem(forcedPlayStorageKey, next ? "on" : "off"); } catch { /* the choice just won't be remembered */ }
   }
 
+  function chooseHandLayout(next: HandLayout) {
+    setHandLayout(next);
+    saveHandLayout(persistence.storage, next);
+  }
+
   function chooseScoring(next: ScoringFormat) {
     setScoring(next);
   }
@@ -904,6 +911,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
     {scoring === "single" ? <label>Vulnerability<select aria-label="Vulnerability" value={vulnerability} onChange={(event) => setVulnerability(event.target.value as Vulnerability)}>{vulnerabilities.map((value) => <option key={value} value={value}>{value === "None" ? "None" : value === "Both" ? "Both" : `${value} vulnerable`}</option>)}</select></label> : null}
     <label>Opponents<select aria-label="Opponents" value={playAgainstBots ? "bots" : "manual"} onChange={(event) => setPlayAgainstBots(event.target.value === "bots")}><option value="manual">Manual table</option><option value="bots">Bots</option></select></label>
     {playAgainstBots ? <><label>Your seat<select aria-label="Your seat" value={userSeat} onChange={(event) => setUserSeat(event.target.value as Seat)}>{seats.map((seat) => <option key={seat} value={seat}>{seatNames[seat]}</option>)}</select></label><BotCastFields cast={cast} onChange={setCast} records={castRecords} own={ownCharacters} onOwnChange={saveOwn} initialEditing={preview?.editingCharacter} />{castHasCustom(cast, ownCharacters) ? <><label>Bot skill<select aria-label="Bot skill" value={botSkill} onChange={(event) => setBotSkill(event.target.value as SkillLevel)}><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="advanced">Advanced</option><option value="expert">Expert</option></select></label><label>Bot aggressiveness<select aria-label="Bot aggressiveness" value={botAggression} onChange={(event) => setBotAggression(event.target.value as Aggression)}>{aggressionOptions}</select></label></> : null}<label>Bot bidding style<select aria-label="Bot bidding style" value={biddingStyle} onChange={(event) => setBiddingStyle(event.target.value as "SAYC" | "2/1")}><option value="SAYC">Basic SAYC</option><option value="2/1">Basic 2/1</option></select></label></> : null}
+    <label>Cards<select aria-label="Cards" value={handLayout} onChange={(event) => chooseHandLayout(event.target.value as HandLayout)}><option value="fan">Fanned</option><option value="line">In a line</option></select></label>
     <label className="setup-check"><input type="checkbox" checked={hintsOn} onChange={toggleHints} />Show hints while bidding and playing</label>
     <label className="setup-check"><input type="checkbox" checked={forcedPlayOn} onChange={toggleForcedPlay} />Play forced cards automatically</label>
   </>;
@@ -1021,7 +1029,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
     { id: "take-back", label: "Take back", disabled: !game || game.history.cursor === 0, title: "Undo the last call or card to choose again", onSelect: takeBack },
     ...(handLive && !botsFinishing ? [{ id: "auto-play", label: "Auto play this hand",
       title: "A bot makes your calls and plays your cards until this hand ends, then you play again", onSelect: () => setBotsFinishHandId(currentHandId) }] : []),
-    ...(benchmarkPractice ? [] : [{ id: "settings", label: "Settings", title: "Scoring, dealer, opponents, hints, and forced cards for the next deal", onSelect: () => setDialog("settings") }]),
+    ...(benchmarkPractice ? [] : [{ id: "settings", label: "Settings", title: "Scoring, dealer, opponents, cards, hints, and forced cards", onSelect: () => setDialog("settings") }]),
     ...(scoring === "rubber" || inRubber ? [{ id: "rubber", label: "Scores", title: "The rubber scorecard: above and below the line, games, totals, and the last hand's points", onSelect: () => setDialog("rubber") }] : []),
     ...(benchmarkPractice ? [] : [{ id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") }]),
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
@@ -1127,6 +1135,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
           game={shownGame}
           bottomSeat={bottomSeat}
           botSeats={playAgainstBots ? seats.filter((seat) => seat !== userSeat) : undefined}
+          handLayout={handLayout}
           seatLabel={(seat) => {
             const character = playAgainstBots ? castCharacterAt(cast, seat, userSeat, ownCharacters) : undefined;
             return character ? <span className="online-seat-label bot-name-tag" title={`${character.name}: ${character.blurb}`}><span className="online-seat-name">{character.name}</span></span> : null;

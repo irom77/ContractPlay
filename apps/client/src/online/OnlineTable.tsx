@@ -9,6 +9,7 @@ import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FullscreenButton, useFullscreen } from "../table/FullscreenButton.js";
 import { ReloadButton } from "../table/ReloadButton.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
+import { browserStorage, handLayoutMenuLabel, loadHandLayout, saveHandLayout, type HandLayout } from "../table/handLayout.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { bottomSeatFor } from "../table/bottomSeat.js";
 import { TableView } from "../table/TableView.js";
@@ -252,6 +253,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const connection = useRef<TableConnection | undefined>(undefined);
   const previousHand = useRef<number | undefined>(undefined);
   const [forcedPlayOn] = useState(() => forcedPlayEnabled(storage));
+  const [handLayout, setHandLayout] = useState(() => loadHandLayout(storage));
+  const switchHandLayout = () => { const next: HandLayout = handLayout === "fan" ? "line" : "fan"; setHandLayout(next); saveHandLayout(storage, next); };
+  const handLayoutItem: GameMenuItem = { id: "hand-layout", label: handLayoutMenuLabel(handLayout), onSelect: switchHandLayout,
+    title: handLayout === "fan" ? "Lay every hand flat in a row, remembered in this browser" : "Hold every hand in a curved fan, remembered in this browser" };
   // A take-back is on its way; the view it brings is remembered so a forced card there waits for the player.
   const takeBackSent = useRef(false);
   const [takenBackTo, setTakenBackTo] = useState<number>();
@@ -577,6 +582,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
         title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(view.revision) }] : []),
       ...rubberItem,
       { id: "hands", label: "Recent hands", onSelect: onRecentHands, title: "Review recent finished hands; you keep your seat" },
+      handLayoutItem,
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",
@@ -603,6 +609,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
         <div className={`game-layout online-table ${game.phase === "auction" ? "auction-layout" : "play-layout"}`}>
           <TableView
             game={game}
+            handLayout={handLayout}
             bottomSeat={bottomSeatFor(game, yourSeat, !!game.contract && cardDecider(game, view.seats, game.contract.declarer) === yourSeat)}
             actingSeat={actingSeat}
             dealing={dealing}
@@ -671,6 +678,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: yourSeat ? "Keep your seat and return to the lobby" : "Return to the lobby" },
       { id: "seating", label: "Seating", onSelect: openSeating, title: "Change seats, bots, and skill levels before the next deal" },
       ...rubberItem,
+      handLayoutItem,
       ...(yourSeat ? [{ id: "leave", label: "Leave the table", tone: "danger" as const, disabled: status !== "open" || leaving,
         title: "Give up your seat and return to the lobby", onSelect: () => { setLeaving(true); send({ type: "leave" }); } }] : [])
     ];
@@ -679,6 +687,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
         <div className="game-layout online-table play-layout result-layout">
           <TableView
             game={game}
+            handLayout={handLayout}
             bottomSeat={yourSeat ? bottomSeatFor(game, yourSeat, !!game.contract && cardDecider(game, view.seats, game.contract.declarer) === yourSeat) : "south"}
             displayedTrick={[]}
             showCalls={false}
@@ -758,7 +767,7 @@ function ObserverTable({ view, onLeave, status }: { view: TableViewData; onLeave
     : game.phase === "complete" ? "Hand complete" : "Passed out";
   return <main className="app-shell">
     <div className={`game-layout online-table ${game.phase === "auction" ? "auction-layout" : "play-layout"}`}>
-      <TableView game={game} bottomSeat="south" displayedTrick={game.currentTrick}
+      <TableView game={game} bottomSeat="south" displayedTrick={game.currentTrick} handLayout={loadHandLayout(browserStorage())}
         showCalls={callsOpen} onToggleCalls={() => setCallsOpen((open) => !open)}
         lastTrickOpen={lastTrickOpen} onToggleLastTrick={() => setLastTrickOpen((open) => !open)}
         showBottomHand={false} fixedSeatHands showBacksAtBottom cardsDisabled bidsDisabled statusText={statusText}

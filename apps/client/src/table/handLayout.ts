@@ -28,3 +28,24 @@ export function fanCardStyle(layout: HandLayout, index: number, count: number): 
   if (layout !== "fan") return undefined;
   return { "--fan-p": fanPosition(index, count).toFixed(4) } as CSSProperties;
 }
+
+/** Shared by solo and online play, and remembered in this browser: "line" lays hands flat, anything else fans them. */
+export const handLayoutStorageKey = "contractplay.handLayout";
+
+export function loadHandLayout(storage: Pick<Storage, "getItem"> | undefined): HandLayout {
+  try { return storage?.getItem(handLayoutStorageKey) === "line" ? "line" : defaultHandLayout; } catch { return defaultHandLayout; }
+}
+
+export function saveHandLayout(storage: Pick<Storage, "setItem"> | undefined, layout: HandLayout): void {
+  try { storage?.setItem(handLayoutStorageKey, layout); } catch { /* the choice just won't be remembered */ }
+}
+
+/** The browser's storage when it can be reached (pages without a storage of their own, such as a replay). */
+export function browserStorage(): Storage | undefined {
+  try { return window.localStorage; } catch { return undefined; }
+}
+
+/** The game-menu entry that switches layouts, named for what it does next. */
+export function handLayoutMenuLabel(layout: HandLayout): string {
+  return layout === "fan" ? "Lay cards in a line" : "Hold cards in a fan";
+}

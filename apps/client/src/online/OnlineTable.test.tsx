@@ -1042,6 +1042,22 @@ describe("OnlineTable connection", () => {
       expect(details.open).toBe(false);
     });
 
+    it("switches the cards between a fan and a line, and remembers it", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      expect(document.querySelector(".table-panel")?.classList).toContain("hand-layout-fan");
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(item("Lay cards in a line"));
+      expect(document.querySelector(".table-panel")?.classList).toContain("hand-layout-line");
+      expect(service.storage.getItem("contractplay.handLayout")).toBe("line");
+      expect(item("Hold cards in a fan")).toBeTruthy();
+      service.unmount();
+      const reloaded = setup({ storage: service.storage });
+      reloaded.push(live(newGame()));
+      expect(document.querySelector(".table-panel")?.classList).toContain("hand-layout-line");
+    });
+
     it("sits a full-screen toggle beside the menu", async () => {
       const service = setup();
       service.push(live(newGame()));

@@ -202,7 +202,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, take back your last card, cancel the hand, or leave.",
+    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, take back your last card, lay the cards in a line instead of a fan, cancel the hand, or leave.",
     build: () => ({ ...playUntilView({ east: "Alex" }, "east", moment(["east"], 2)), menuOpen: true })
   },
   {
@@ -412,7 +412,7 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", menuOpen: true })
   },
   {
-    id: "solo-settings", title: "Solo: settings", detail: "Settings from the game menu: scoring, dealer, opponents, your seat, bot skill and style, hints, and forced cards.",
+    id: "solo-settings", title: "Solo: settings", detail: "Settings from the game menu: scoring, dealer, opponents, your seat, bot skill and style, cards fanned or in a line, hints, and forced cards.",
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", dialog: "settings" })
   },
   {

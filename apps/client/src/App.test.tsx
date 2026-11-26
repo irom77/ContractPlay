@@ -494,6 +494,18 @@ describe("bridge table", () => {
     expect(loadSoloData(window.localStorage).currentGame!.currentTrick).toHaveLength(1);
   });
 
+  it("switches the cards between a fan and a line from Settings, and remembers it", () => {
+    storeCurrentGame(gameAfterPlays(4));
+    const { unmount } = render(<App />);
+    expect(document.querySelector(".table-panel")?.classList).toContain("hand-layout-fan");
+    setSetting("Cards", "line");
+    expect(document.querySelector(".table-panel")?.classList).toContain("hand-layout-line");
+    expect(window.localStorage.getItem("contractplay.handLayout")).toBe("line");
+    unmount();
+    render(<App />);
+    expect(document.querySelector(".table-panel")?.classList).toContain("hand-layout-line");
+  });
+
   it("leaves forced cards to the player when that setting is off", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem("contractplay.forcedPlay", "off");
