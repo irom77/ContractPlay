@@ -186,9 +186,10 @@ function BotLeaderboardPanel({ baseUrl, api }: { baseUrl: string; api: LobbyApi 
           : ranked.length === 0 ? <p className="quiet-copy">No bots are rated yet. Bots play duplicate benchmark rounds on the server; ratings appear here once a round is complete.</p>
             : <ol className="lobby-leaderboard">{ranked.map((rating, index) => <li key={rating.competitorId}>
               <span className="lobby-leaderboard-rank" aria-hidden="true">{index + 1}</span>
-              <span className="lobby-leaderboard-name">{nameOf(rating.competitorId)}</span>
+              <span className="lobby-leaderboard-name" title={nameOf(rating.competitorId)}>{nameOf(rating.competitorId)}</span>
               <span className="lobby-leaderboard-rating">{Math.round(rating.rating)}</span>
-              <span className="quiet-copy">{rating.sampleBoards} boards{rating.eligible ? "" : " · provisional"}</span>
+              <span className="quiet-copy lobby-leaderboard-stats">{[`${rating.sampleBoards} boards`, `${rating.handsPlayed} hands`, ...(rating.eligible ? [] : ["provisional"])]
+                .map((fact, index) => <span key={fact}>{index ? " · " : ""}<span className="lobby-leaderboard-fact">{fact}</span></span>)}</span>
             </li>)}</ol>}
       <button className="secondary-button" type="button" onClick={() => { window.location.hash = "#/leaderboard"; }}>Full leaderboard</button>
     </div> : null}

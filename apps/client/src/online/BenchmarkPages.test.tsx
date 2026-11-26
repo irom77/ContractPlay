@@ -13,7 +13,7 @@ describe("benchmark public pages", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       const path = input.toString();
       if (path.endsWith("/leaderboard")) return Response.json({ ratings: [
-        { competitorId, rating: 1540, deviation: 140, volatility: 0.06, sampleBoards: 12, ratedAt: Date.UTC(2026, 10, 25), algorithmVersion: "glicko-2", scoreTransformVersion: "sigmoid-12", eligible: false },
+        { competitorId, rating: 1540, deviation: 140, volatility: 0.06, sampleBoards: 12, handsPlayed: 24, ratedAt: Date.UTC(2026, 10, 25), algorithmVersion: "glicko-2", scoreTransformVersion: "sigmoid-12", eligible: false },
         { competitorId: JSON.stringify(["bold", "v1"]), rating: 1600, deviation: 80, volatility: 0.05, sampleBoards: 24, ratedAt: Date.UTC(2026, 10, 25), algorithmVersion: "glicko-2", scoreTransformVersion: "sigmoid-12", eligible: true }
       ] });
       if (path.endsWith("/results")) return Response.json({ results: [
@@ -36,6 +36,9 @@ describe("benchmark public pages", () => {
     expect(screen.getByRole("heading", { name: "Eligible rankings" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Provisional ratings" })).toBeTruthy();
     expect(screen.getByText("timid · v3")).toBeTruthy();
+    expect(screen.getAllByRole("columnheader", { name: "Hands" })).toHaveLength(2);
+    const timidRow = screen.getByText("timid · v3").closest("tr")!;
+    expect([...timidRow.querySelectorAll("td")].map((cell) => cell.textContent)).toContain("24");
     expect(screen.getByText(/Imported deal replay is private/)).toBeTruthy();
     expect(screen.getByText(/Replay expired under the retention policy/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Replay" }).getAttribute("href")).toContain("/generated/");

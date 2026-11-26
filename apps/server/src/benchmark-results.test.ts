@@ -56,6 +56,10 @@ it("replays released bidding and card play, rates a mirrored session once and re
   expect(await store.listLeaderboard()).toEqual([]);
   expect(await store.finishRatedJob("session", "claim", 6)).toBe(true);
   expect(await store.finishRatedJob("session", "claim", 7)).toBe(true);
+  // One deal played at both tables, with all four profiles seated at each: one board but two hands apiece.
+  const leaderboard = await store.listLeaderboard();
+  expect(leaderboard).toHaveLength(4);
+  expect(leaderboard.every(rating => rating.sampleBoards === 1 && rating.handsPlayed === 2)).toBe(true);
   expect((await store.listPublicResults()).every(item => item.replayAvailable)).toBe(true);
   const released = (await store.getPublicResult("session", 0, 0))!;
   expect(released.board).toEqual(board);

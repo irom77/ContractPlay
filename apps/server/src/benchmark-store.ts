@@ -113,6 +113,8 @@ type RatingPeriodRow = {
 type RatingRow = RatingState & { competitorId: string };
 type RatingArchiveRow = RatingRow & Omit<RatingPeriodRow, "observationsJson" | "id"> & { jobId: string };
 export type BenchmarkRating = RatingArchiveRow & RatingSnapshot;
+/** A leaderboard row also counts the hands behind the rating: one per released board at each table where the profile sat. */
+export type BenchmarkLeaderboardRating = BenchmarkRating & { handsPlayed: number };
 const ratingColumns = `s.competitor_id AS competitorId, s.rating, s.deviation, s.volatility, s.sample_boards AS sampleBoards`;
 const ratingArchiveColumns = `${ratingColumns}, p.job_id AS jobId, p.rated_at AS ratedAt,
   p.algorithm_version AS algorithmVersion, p.score_transform_version AS scoreTransformVersion`;
@@ -560,19 +562,29 @@ export class BenchmarkStore {
   }
 
   /** Use the latest algorithm/transform series so ratings with different meanings never compete on one list. */
-  async listLeaderboard(limit = 25): Promise<BenchmarkRating[]> {
+  async listLeaderboard(limit = 25): Promise<BenchmarkLeaderboardRating[]> {
     const { results } = await this.db.prepare(`WITH series AS (
       SELECT algorithm_version, score_transform_version FROM benchmark_rating_periods ORDER BY rated_at DESC, rowid DESC LIMIT 1
     ), ranked AS (
-      SELECT ${ratingArchiveColumns}, ROW_NUMBER() OVER(PARTITION BY s.competitor_id ORDER BY p.rated_at DESC, p.rowid DESC) AS sequence
+      SELECT ${ratingArchiveColumns}, p.rowid AS periodRow,
+        ROW_NUMBER() OVER(PARTITION BY s.competitor_id ORDER BY p.rated_at DESC, p.rowid DESC) AS sequence
       FROM benchmark_rating_snapshots s JOIN benchmark_rating_periods p ON p.id = s.period_id
       JOIN benchmark_profile_versions v ON json_extract(s.competitor_id,'$[0]')=v.profile_id
         AND json_extract(s.competitor_id,'$[1]')=v.version AND v.retired_at IS NULL
       JOIN series ON series.algorithm_version = p.algorithm_version AND series.score_transform_version = p.score_transform_version
     )
-    SELECT competitorId, rating, deviation, volatility, sampleBoards, jobId, ratedAt, algorithmVersion, scoreTransformVersion
+    SELECT competitorId, rating, deviation, volatility, sampleBoards, jobId, ratedAt, algorithmVersion, scoreTransformVersion,
+      -- The same rated sessions as sampleBoards: every period of this series up to the profile's latest snapshot.
+      (SELECT COUNT(*) FROM benchmark_rating_periods hp
+        JOIN benchmark_table_assignments a ON a.job_id = hp.job_id
+        JOIN benchmark_results r ON r.job_id = a.job_id AND r.table_index = a.table_index AND r.released_at IS NOT NULL
+        WHERE hp.algorithm_version = ranked.algorithmVersion AND hp.score_transform_version = ranked.scoreTransformVersion
+          AND (hp.rated_at < ranked.ratedAt OR (hp.rated_at = ranked.ratedAt AND hp.rowid <= ranked.periodRow))
+          AND EXISTS (SELECT 1 FROM json_each(a.seats_json) seat
+            WHERE json_extract(seat.value, '$.profileId') = json_extract(ranked.competitorId, '$[0]')
+              AND json_extract(seat.value, '$.version') = json_extract(ranked.competitorId, '$[1]'))) AS handsPlayed
     FROM ranked WHERE sequence = 1 ORDER BY (sampleBoards >= 20 AND deviation < 100) DESC, rating DESC, competitorId LIMIT ?`)
-      .bind(pageSize(limit)).all<RatingArchiveRow>();
+      .bind(pageSize(limit)).all<RatingArchiveRow & { handsPlayed: number }>();
     return results.map((rating) => ({ ...rating, eligible: isLeaderboardEligible(rating) }));
   }
 }

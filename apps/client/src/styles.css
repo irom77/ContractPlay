@@ -72,7 +72,11 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .history-controls { bottom: var(--u); left: calc(2 * var(--u)); }
 .hint-controls { right: calc(2 * var(--u)); bottom: var(--u); flex-direction: column; align-items: flex-end; }
 .session-progress { position: absolute; z-index: 7; top: calc(2 * var(--u)); right: calc(2 * var(--u)); max-width: calc(34 * var(--u)); margin: 0; border-radius: 6px; padding: calc(.7 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .88); color: var(--ink); font-size: var(--text-s); line-height: 1.25; }
-.lobby-leaderboard { margin: 0 0 calc(1.4 * var(--u)); padding: 0; list-style: none; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: calc(.7 * var(--u)) calc(1.2 * var(--u)); align-items: baseline; white-space: nowrap; }
+.lobby-leaderboard { margin: 0 0 calc(1.4 * var(--u)); padding: 0; list-style: none; display: grid; grid-template-columns: auto minmax(min(9em, 40%), 1fr) auto auto; gap: calc(.7 * var(--u)) calc(1.2 * var(--u)); align-items: baseline; white-space: nowrap; }
+/* On a narrow screen the boards and hands wrap under each other rather than squeezing the bot's name. */
+.lobby-leaderboard-stats { white-space: normal; }
+.lobby-leaderboard-fact { white-space: nowrap; }
+.lobby-leaderboard-name { overflow: hidden; text-overflow: ellipsis; }
 .lobby-leaderboard li { display: contents; }
 .lobby-leaderboard-rank { color: var(--muted, rgba(255, 255, 255, .6)); font-variant-numeric: tabular-nums; text-align: right; }
 .lobby-leaderboard-rating { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
