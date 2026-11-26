@@ -86,12 +86,12 @@ async function seatGuest(id: string, secret: string, seat: "north" | "east") {
 
 const accountHello = { type: "hello", version: PROTOCOL_VERSION, name: "Untrusted name" };
 
-async function makeBenchmark(id: string, listed = true) {
+async function makeBenchmark(id: string, listed = true, boardSource: "generated" | "imported" = "generated") {
   const stub = env.TABLES.get(env.TABLES.idFromName(id));
   const previous = (await stored(id))!;
   const profiles = Object.fromEntries(["north", "east", "south", "west"].map((seat) => [seat, { profileId: `bot-${seat}`, version: "v1" }]));
   await runInDurableObject(stub, (_instance, context) => context.storage.put("state", {
-    ...previous, listed, benchmark: { jobId: "observer-test", tableIndex: 0, engineVersion: "contractplay-bots-v1", boardSource: "generated", profiles }
+    ...previous, listed, benchmark: { jobId: "observer-test", tableIndex: 0, engineVersion: "contractplay-bots-v1", boardSource, profiles }
   }));
   await evictDurableObject(stub);
   return previous;
@@ -125,6 +125,17 @@ describe("benchmark observers", () => {
     reconnected.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
     expect(await reconnected.view()).toMatchObject({ observer: true, benchmark: true });
     expect((await stored(id))?.connections).toEqual(before?.connections);
+  });
+
+  it("refuses a signed-in observer at an imported-board benchmark table, even if listed", async () => {
+    const id = await table(true);
+    await makeBenchmark(id, true, "imported");
+    const before = await stored(id);
+    const signedIn = await account();
+    const observer = await socket(id, { Cookie: signedIn.cookie });
+    observer.send({ type: "hello", version: PROTOCOL_VERSION, observer: true, name: "Observer" });
+    expect(await observer.next()).toEqual({ type: "gone" });
+    expect(await stored(id)).toEqual(before);
   });
 
   it("rejects observer hello for an ordinary or unlisted table without changing table state", async () => {

@@ -113,7 +113,7 @@ export class TableObject extends DurableObject<Env> {
       characters[seat] = bot.id;
       profiles[seat] = { profileId: profile.profileId, version: profile.version };
     }
-    const fresh = { ...createTable({ ...input, scoring: "duplicate", listed: true, at: Date.now() }),
+    const fresh = { ...createTable({ ...input, scoring: "duplicate", listed: input.boardSource === "generated", at: Date.now() }),
       benchmark: { jobId: input.jobId, tableIndex: input.tableIndex, profiles, engineVersion: BENCHMARK_ENGINE_VERSION, boardSource: input.boardSource }, sessionId: input.sessionId };
     const out = seatSessionBots(fresh, characters);
     if (out.refused) throw new Error("Could not seat benchmark profiles");
@@ -293,7 +293,8 @@ export class TableObject extends DurableObject<Env> {
     const parsed = parseClientMessage(message);
     if (parsed?.type !== "hello") return send(ws, { type: "refused", reason: "bad-message", view: await this.view(state, undefined) });
     if (parsed.observer) {
-      if (parsed.secret !== undefined || parsed.expectedPlayerId !== undefined || !state.listed || !state.benchmark) return this.gone(ws);
+      // Only generated boards can be watched: the play of an imported deal would reveal the uploaded cards.
+      if (parsed.secret !== undefined || parsed.expectedPlayerId !== undefined || !state.listed || state.benchmark?.boardSource !== "generated") return this.gone(ws);
       if (!attachmentOf(ws)?.account) {
         send(ws, { type: "refused", reason: "not-allowed" });
         ws.close(1008, "sign in required");

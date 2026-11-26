@@ -136,18 +136,24 @@ export class LobbyObject extends DurableObject<Env> {
     }
   }
 
-  /** Each durable reservation owns one ordinary listed ID, including across coordinator retries. */
+  /**
+   * Each durable reservation owns one table ID, including across coordinator retries. Generated boards are listed so
+   * anyone signed in can watch; imported boards are unlisted, as watching their play would reveal the uploaded deals.
+   */
   async createBenchmarkTable(input: { jobId: string; tableIndex: number; sessionId: string; name: string;
     style: TableStyle; boardSource: "generated" | "imported"; assignment: BenchmarkTableAssignment }): Promise<string | null> {
     const key = this.benchmarkKey(input.jobId, input.tableIndex);
+    const listed = input.boardSource === "generated";
+    const prefix = listed ? LISTED : UNLISTED;
+    const limit = listed ? this.limits.listed : this.limits.unlisted;
     const id = await this.ctx.storage.transaction(async (tx) => {
       const reserved = await tx.get<string>(key);
       if (reserved) return reserved;
-      if ((await tx.list({ prefix: LISTED, limit: this.limits.listed + 1 })).size >= this.limits.listed) return null;
+      if ((await tx.list({ prefix, limit: limit + 1 })).size >= limit) return null;
       for (let attempt = 0; attempt < 10; attempt++) {
-        const candidate = randomTableId(LISTED_ID_LENGTH);
-        if (await tx.get(LISTED + candidate)) continue;
-        await tx.put({ [key]: candidate, [LISTED + candidate]: { listed: true } });
+        const candidate = randomTableId(listed ? LISTED_ID_LENGTH : UNLISTED_ID_LENGTH);
+        if (await tx.get(prefix + candidate)) continue;
+        await tx.put({ [key]: candidate, [prefix + candidate]: { listed } });
         return candidate;
       }
       throw new Error("Could not reserve a benchmark table");
@@ -166,7 +172,7 @@ export class LobbyObject extends DurableObject<Env> {
     await this.ctx.storage.transaction(async (tx) => {
       await tx.delete(key);
       if (other) await tx.put<Entry>(LISTED + id, { listed: true, summary: other });
-      else await tx.delete(LISTED + id);
+      else await tx.delete([LISTED + id, UNLISTED + id]);
     });
   }
 

@@ -5,7 +5,7 @@ import { createBenchmarkProfile, createRotation } from "@contractplay/benchmark"
 import type { TableState } from "@contractplay/table";
 import migration from "../migrations/0006_bot_benchmarks.sql?raw";
 import { BenchmarkStore } from "./benchmark-store.js";
-import { generatedSessionBoards, lobbyOf } from "./lobby-object.js";
+import { generatedSessionBoards, lobbyOf, UNLISTED_ID_LENGTH } from "./lobby-object.js";
 
 const store = new BenchmarkStore(env.DB);
 const coordinator = () => env.BENCHMARKS.get(env.BENCHMARKS.idFromName("benchmarks"));
@@ -172,6 +172,22 @@ it("releases a failed reservation without deleting a different table already usi
   expect((await stateOf(id))?.name).toBe("Existing table");
   expect(await lobby.list()).toContainEqual(expect.objectContaining({ id, name: "Existing table" }));
   expect(await runInDurableObject(lobby, (_, ctx) => ctx.storage.get("benchmark:collision:0"))).toBeUndefined();
+});
+
+it("reserves imported-board benchmark tables unlisted, so they never appear in Open tables", async () => {
+  await configure("imported-hidden");
+  const cohort = (await store.getCohort("imported-hidden"))!;
+  const profiles = await Promise.all(cohort.profiles.map(async (key) => (await store.getProfile(key))!.profile));
+  const [assignment] = createRotation(profiles, cohort.rotationSeed, 0, cohort.maxTables);
+  const lobby = lobbyOf(env);
+  const tableId = await lobby.createBenchmarkTable({ jobId: "imported-hidden", tableIndex: 0, sessionId: "benchmark:imported-hidden",
+    name: "Imported 1", style: cohort.biddingStyle, boardSource: "imported", assignment: assignment! });
+  expect(tableId).toHaveLength(UNLISTED_ID_LENGTH);
+  expect((await lobby.list()).map(({ id }) => id)).not.toContain(tableId);
+  expect(await lobby.listAll()).toContainEqual(expect.objectContaining({ id: tableId, listed: false }));
+  expect((await stateOf(tableId!))?.listed).toBe(false);
+  await lobby.releaseBenchmarkTable("imported-hidden", 0);
+  expect((await lobby.listAll()).map(({ id }) => id)).not.toContain(tableId);
 });
 
 it("backs off a failing cleanup while advancing a different benchmark job", async () => {
