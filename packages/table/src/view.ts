@@ -18,7 +18,7 @@ const seatsFor = (state: TableState, viewer?: PlayerId): Record<Seat, SeatInfo> 
 
 export function summaryOf(state: TableState): TableSummary {
   const seats = seatsFor(state);
-  return { id: state.id, name: state.name, style: state.style, scoring: scoringOf(state), aggression: state.aggression ?? "normal", seats, handInProgress: !betweenHands(state) };
+  return { id: state.id, ...(state.benchmark ? { benchmark: true } : {}), name: state.name, style: state.style, scoring: scoringOf(state), aggression: state.aggression ?? "normal", seats, handInProgress: !betweenHands(state) };
 }
 
 /**

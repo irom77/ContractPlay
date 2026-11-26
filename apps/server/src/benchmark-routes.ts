@@ -1,3 +1,4 @@
+import { benchmarkOf } from "./benchmark-object.js";
 import { benchmarkProfileVersionId, createBenchmarkProfile } from "@contractplay/benchmark";
 import { BOT_CHARACTERS, cardId, cleanName, SEATS } from "@contractplay/core";
 import { parsePbn } from "@contractplay/pbn";
@@ -52,7 +53,7 @@ function cohortInput(data: Record<string, unknown> | undefined): BenchmarkCohort
     || !isStyle(biddingStyle) || (scoring !== "imps" && scoring !== "matchpoints")
     || !intBetween(rotationSeed, 0, 0xFFFFFFFF)
     || (importId !== null && (typeof importId !== "string" || !IMPORT_ID.test(importId)))
-    || (intervalMinutes !== null && !intBetween(intervalMinutes, 1, Math.floor(Number.MAX_SAFE_INTEGER / 60_000)))) return undefined;
+    || (intervalMinutes !== null && (!intBetween(intervalMinutes, 5, Math.floor(Number.MAX_SAFE_INTEGER / 60_000)) || intervalMinutes % 5 !== 0))) return undefined;
   const keys: BenchmarkProfileKey[] = [];
   for (const item of profiles) {
     const key = isRecord(item) ? profileKey(item.profileId, item.version) : undefined;
@@ -146,14 +147,14 @@ async function cohortsRoute(request: Request, store: BenchmarkStore, tail: strin
   return json(await store.getCohort(id));
 }
 
-async function jobsRoute(request: Request, store: BenchmarkStore, tail: string[], limit: number | undefined): Promise<Response> {
+async function jobsRoute(request: Request, env: Env, store: BenchmarkStore, tail: string[], limit: number | undefined): Promise<Response> {
   if (tail.length === 0) {
     if (request.method === "GET") return json({ jobs: await store.listJobs(limit) });
     if (request.method !== "POST") return methodNotAllowed("GET, POST");
     const data = await configBody(request);
     const { id = crypto.randomUUID(), cohortId, roundIndex = 0 } = data ?? {};
     if (!isId(id) || !isId(cohortId) || !intBetween(roundIndex, 0, Number.MAX_SAFE_INTEGER)) return badRequest();
-    const job = await store.startJob({ id, cohortId, roundIndex, now: Date.now() });
+    const job = await benchmarkOf(env).enqueue({ id, cohortId, roundIndex });
     return job ? json(job, 201) : conflict();
   }
   const [id, action] = tail;
@@ -163,7 +164,7 @@ async function jobsRoute(request: Request, store: BenchmarkStore, tail: string[]
   const job = await store.getJob(id);
   if (!job) return notFound();
   if (!jobAction(action)) return json(job);
-  const changed = await store.changeJobStatus(id, action, Date.now());
+  const changed = await benchmarkOf(env)[action](id);
   return changed ? json(changed) : conflict();
 }
 
@@ -212,7 +213,7 @@ export async function benchmarkRoute(request: Request, env: Env, admin: boolean)
     const [resource, ...tail] = path;
     if (resource === "profiles") return await profilesAdminRoute(request, store, tail, limit);
     if (resource === "cohorts") return await cohortsRoute(request, store, tail, limit);
-    if (resource === "jobs") return await jobsRoute(request, store, tail, limit);
+    if (resource === "jobs") return await jobsRoute(request, env, store, tail, limit);
     if (resource === "imports" && tail.length === 0) return await importsRoute(request, store, limit);
     return notFound();
   } catch {

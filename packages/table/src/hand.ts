@@ -60,6 +60,20 @@ export function dealHand(state: TableState, player: PlayerId, at: number, random
     const ready = state.nextHandReady ?? [];
     return ready.includes(player) ? { state } : accept(state, { nextHandReady: [...ready, player] });
   }
+  return startHand(state, at, random);
+}
+
+/** Coordinator-only start for a released duplicate board at a fully automated table. */
+export function dealBotSessionHand(state: TableState, board: NonNullable<TableState["sessionBoard"]>, at: number): Outcome {
+  if (!state.sessionId || scoringOf(state) !== "duplicate" || !betweenHands(state) || board.index !== state.handNumber
+    || !SEATS.every((seat) => {
+      const occupant = state.seats[seat];
+      return occupant.kind === "bot" && !occupant.custom && occupant.character !== undefined && botCharacter(occupant.character)?.skill === occupant.skill;
+    })) return refuse(state, "not-ready");
+  return startHand({ ...state, sessionBoard: board }, at);
+}
+
+function startHand(state: TableState, at: number, random?: () => number): Outcome {
   const handNumber = state.handNumber + 1;
   const sessionBoard = state.sessionBoard?.index === handNumber - 1 ? state.sessionBoard : undefined;
   if (state.sessionId && !sessionBoard) return refuse(state, "not-ready");

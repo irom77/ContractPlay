@@ -3,6 +3,7 @@ import { createDeck, deal, shuffle } from "@contractplay/core";
 import type { Aggression, Vulnerability } from "@contractplay/core";
 import { MAX_TABLE_NAME } from "@contractplay/protocol";
 import type { TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
+import type { BenchmarkTableAssignment } from "@contractplay/benchmark";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 
 /** Listed and unlisted tables are capped separately, so neither kind can starve the other. */
@@ -23,6 +24,16 @@ const SALT = "salt";
 const DELETE_BATCH = 128;
 
 function secureRandom(): number { return crypto.getRandomValues(new Uint32Array(1))[0]! / 2 ** 32; }
+
+export function generatedSessionBoards(boardCount: number): DuplicateSessionBoard[] {
+  const vulnerability: readonly Vulnerability[] = ["None", "NS", "EW", "Both", "NS", "EW", "Both", "None", "EW", "Both", "None", "NS", "Both", "None", "NS", "EW"];
+  return Array.from({ length: boardCount }, (_, index) => ({
+    number: index + 1,
+    deal: deal(shuffle(createDeck(), secureRandom)),
+    dealer: (["north", "east", "south", "west"] as const)[index % 4]!,
+    vulnerability: vulnerability[index % vulnerability.length]!
+  }));
+}
 
 /** A lobby entry; `summary` is missing while the table is being created (the id is reserved). */
 type Entry = { listed: boolean; summary?: TableSummary };
@@ -110,13 +121,7 @@ export class LobbyObject extends DurableObject<Env> {
       }
       tableIds.push(created.id);
     }
-    const vulnerability: readonly Vulnerability[] = ["None", "NS", "EW", "Both", "NS", "EW", "Both", "None", "EW", "Both", "None", "NS", "Both", "None", "NS", "EW"];
-    const boards = input.boards ?? Array.from({ length: input.boardCount }, (_, index) => ({
-      number: index + 1,
-      deal: deal(shuffle(createDeck(), secureRandom)),
-      dealer: (["north", "east", "south", "west"] as const)[index % 4]!,
-      vulnerability: vulnerability[index % vulnerability.length]!
-    }));
+    const boards = input.boards ?? generatedSessionBoards(input.boardCount);
     const sessionStub = this.env.SESSIONS.get(this.env.SESSIONS.idFromName(sessionId));
     try {
       if (!(await sessionStub.create({ id: sessionId, tables: tableIds, boards, scoring: input.scoring }))) throw new Error("session id collision");
@@ -129,6 +134,44 @@ export class LobbyObject extends DurableObject<Env> {
       await this.rollbackTables(tableIds);
       throw error;
     }
+  }
+
+  /** Each durable reservation owns one ordinary listed ID, including across coordinator retries. */
+  async createBenchmarkTable(input: { jobId: string; tableIndex: number; sessionId: string; name: string;
+    style: TableStyle; assignment: BenchmarkTableAssignment }): Promise<string | null> {
+    const key = this.benchmarkKey(input.jobId, input.tableIndex);
+    const id = await this.ctx.storage.transaction(async (tx) => {
+      const reserved = await tx.get<string>(key);
+      if (reserved) return reserved;
+      if ((await tx.list({ prefix: LISTED, limit: this.limits.listed + 1 })).size >= this.limits.listed) return null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const candidate = randomTableId(LISTED_ID_LENGTH);
+        if (await tx.get(LISTED + candidate)) continue;
+        await tx.put({ [key]: candidate, [LISTED + candidate]: { listed: true } });
+        return candidate;
+      }
+      throw new Error("Could not reserve a benchmark table");
+    });
+    if (!id) return null;
+    const summary = await this.env.TABLES.get(this.env.TABLES.idFromName(id)).createBenchmark({ ...input, id });
+    await this.update(summary);
+    return id;
+  }
+
+  async releaseBenchmarkTable(jobId: string, index: number): Promise<void> {
+    const key = this.benchmarkKey(jobId, index);
+    const id = await this.ctx.storage.get<string>(key);
+    if (!id) return;
+    const other = await this.env.TABLES.get(this.env.TABLES.idFromName(id)).deleteBenchmark(jobId);
+    await this.ctx.storage.transaction(async (tx) => {
+      await tx.delete(key);
+      if (other) await tx.put<Entry>(LISTED + id, { listed: true, summary: other });
+      else await tx.delete(LISTED + id);
+    });
+  }
+
+  private benchmarkKey(jobId: string, index: number): string {
+    return `benchmark:${jobId}:${index}`;
   }
 
   private async rollbackTables(ids: readonly string[]): Promise<void> {

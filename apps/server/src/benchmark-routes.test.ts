@@ -92,7 +92,10 @@ describe("benchmark HTTP routes", () => {
       biddingStyle: "SAYC", scoring: "imps", rotationSeed: 7, intervalMinutes: 240 };
     expect((await write("/cohorts", { ...configuration, profiles: [...members.slice(1), members[1]] })).status).toBe(400);
     expect((await write("/cohorts", { ...configuration, maxTables: 9 })).status).toBe(400);
-    const created = await write("/cohorts", configuration);
+    for (const intervalMinutes of [1, 7]) {
+      expect((await write("/cohorts", { ...configuration, intervalMinutes })).status).toBe(400);
+    }
+    const created = await write("/cohorts", { ...configuration, intervalMinutes: 5 });
     expect(created.status).toBe(201);
     const { id } = await created.json<{ id: string }>();
     const job = await write("/jobs", { id: "test-job", cohortId: id });

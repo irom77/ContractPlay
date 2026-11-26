@@ -50,6 +50,7 @@ CREATE TABLE benchmark_jobs (
   CHECK ((status = 'running') = (claim_token IS NOT NULL AND claim_expires_at IS NOT NULL))
 );
 CREATE INDEX benchmark_jobs_claimable ON benchmark_jobs(status, claim_expires_at, created_at, id);
+CREATE INDEX benchmark_jobs_cohort_recent ON benchmark_jobs(cohort_id, created_at DESC, id DESC);
 CREATE INDEX benchmark_jobs_recent ON benchmark_jobs(created_at DESC, id);
 
 CREATE TABLE benchmark_table_assignments (

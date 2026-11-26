@@ -57,6 +57,12 @@ Before pushing a release to `main`, run `pnpm typecheck`, `pnpm lint`, `pnpm tes
 
 Use `pnpm --filter @contractplay/server exec wrangler deploy --dry-run` (after `pnpm build`) to check that the configuration bundles without deploying.
 
+### Bot benchmark scheduling
+
+Apply D1 migration `0006_bot_benchmarks.sql` and configure `BENCHMARK_ADMIN_ACCOUNT_IDS` before creating cohorts. Use engine version `contractplay-bots-v1` for the current built-in profiles. Set a cohort's `intervalMinutes` to a positive multiple of five, or leave it null for manual starts. The Worker checks due cohorts every five minutes. The next eligible tick queues a round when the previous job has ended and the queue has room. Pausing a cohort's job holds its place until resume or cancel.
+
+Each job uses one duplicate session. The coordinator executes one job at a time, and the queue allows eight active jobs including paused jobs. Tables play each admitted board on their own alarms. A board that stays unfinished for 30 minutes after its tables start or the job resumes times out. Finished replay facts and released scores survive live table cleanup.
+
 ### Email sign-in prerequisites
 
 The production D1 database is provisioned and its migrations are applied. Resend sender domain `romaniuk.us` is verified, and the production Worker secret `RESEND_API_KEY` is set. The configured sender is `ContractPlay <signin@romaniuk.us>`; real delivery, cross-device seat recovery, and archive sync still need live verification. All commands below run from the repository root and use `apps/server/wrangler.jsonc` through the server workspace.

@@ -1,3 +1,4 @@
+import type { BenchmarkObject } from "./benchmark-object.js";
 import type { LobbyObject } from "./lobby-object.js";
 import type { TableObject } from "./table-object.js";
 import type { SessionObject } from "./session-object.js";
@@ -20,6 +21,7 @@ declare global {
       /** Worker secret (or ignored local .dev.vars); never store in Wrangler vars. */
       RESEND_API_KEY?: string;
       TABLES: DurableObjectNamespace<TableObject>;
+      BENCHMARKS: DurableObjectNamespace<BenchmarkObject>;
       LOBBY: DurableObjectNamespace<LobbyObject>;
       SESSIONS: DurableObjectNamespace<SessionObject>;
     }

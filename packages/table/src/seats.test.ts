@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { seatSessionBots } from "./seats.js";
+import { createTable } from "./state.js";
 import { newTable, send, sendOk } from "./test-helpers.js";
 
 describe("seats", () => {
@@ -79,4 +81,15 @@ describe("seats", () => {
     expect(JSON.stringify(start)).toBe(frozen);
     expect(send(c, "alice", { type: "leave" }).state).toBe(c);
   });
+});
+
+it("seats the four named bots only at an empty duplicate session table before play", () => {
+  const blank = createTable({ id: "id", name: "Session", scoring: "duplicate", listed: true, at: 0, style: "SAYC" });
+  const characters = { north: "tess", east: "will", south: "bea", west: "dex" };
+  const state = { ...blank, sessionId: "session" };
+  expect(seatSessionBots(blank, characters).refused).toBe("not-ready");
+  expect(seatSessionBots(state, { ...characters, north: "unknown" }).state).toBe(state);
+  const seated = seatSessionBots(state, characters);
+  expect(seated.state.seats.north).toEqual({ kind: "bot", character: "tess", skill: "beginner" });
+  expect(seatSessionBots(seated.state, characters).refused).toBe("not-ready");
 });

@@ -268,6 +268,31 @@ export class BenchmarkStore {
     return row && readJob(row);
   }
 
+  /** Keep an active runner fenced while its separate table alarms play a board. */
+  async renewClaim(id: string, token: string, now: number, leaseMs: number): Promise<BenchmarkJob | null> {
+    const row = await this.db.prepare(`UPDATE benchmark_jobs SET claim_expires_at = ?4 WHERE id = ?1 AND status = 'running'
+      AND claim_token = ?2 AND claim_expires_at > ?3 RETURNING ${jobColumns}`).bind(id, token, now, now + leaseMs).first<JobRow>();
+    return row && readJob(row);
+  }
+
+  async nextClaimExpiry(): Promise<number | null> {
+    return this.db.prepare("SELECT MIN(claim_expires_at) AS expiry FROM benchmark_jobs WHERE status = 'running'").first<number>("expiry");
+  }
+
+  async dueCohorts(now: number): Promise<{ id: string; roundIndex: number }[]> {
+    // Each cohort looks up one indexed job. Historical replays and completed runs can grow independently.
+    const { results } = await this.db.prepare(`SELECT c.id,
+        CASE WHEN last.round_index = 9007199254740991 THEN 0 ELSE COALESCE(last.round_index + 1, 0) END AS roundIndex
+      FROM benchmark_cohorts c LEFT JOIN benchmark_jobs last ON last.id = (
+        SELECT j.id FROM benchmark_jobs j WHERE j.cohort_id = c.id ORDER BY j.created_at DESC, j.id DESC LIMIT 1
+      )
+      WHERE c.retired_at IS NULL AND json_extract(c.config_json, '$.intervalMinutes') IS NOT NULL AND ${validCohort("c.config_json")}
+        AND (last.id IS NULL OR last.created_at + json_extract(c.config_json, '$.intervalMinutes') * 60000 <= ?1)
+        AND c.id NOT IN (SELECT cohort_id FROM benchmark_jobs WHERE status IN (${activeStatuses}))
+      ORDER BY COALESCE(last.created_at, 0), c.id LIMIT ?2`).bind(now, MAX_ACTIVE_JOBS).all<{ id: string; roundIndex: number }>();
+    return results;
+  }
+
   async releaseJobClaim(id: string, token: string, now: number): Promise<boolean> {
     const { meta } = await this.db.prepare(`UPDATE benchmark_jobs SET status = 'queued', claim_token = NULL, claim_expires_at = NULL,
       updated_at = ?3 WHERE id = ?1 AND claim_token = ?2 AND claim_expires_at > ?3`).bind(id, token, now).run();
@@ -342,6 +367,11 @@ export class BenchmarkStore {
           WHERE r.job_id = ?1 AND r.board_index = ?2 - 1 AND r.released_at IS NOT NULL))`)
       .bind(id, boardIndex, claim.token, claim.now).run();
     return meta.changes === 1;
+  }
+
+  async boardStarted(id: string, boardIndex: number): Promise<boolean> {
+    return Boolean(await this.db.prepare("SELECT 1 FROM benchmark_boards WHERE job_id = ? AND board_index = ? AND started_at IS NOT NULL")
+      .bind(id, boardIndex).first());
   }
 
   /** Results stay private until every table assigned to the job has returned a result on the same board. */

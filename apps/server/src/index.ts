@@ -1,3 +1,4 @@
+import { benchmarkOf } from "./benchmark-object.js";
 import { MAX_MESSAGE_BYTES, MAX_TABLE_NAME, PROTOCOL_VERSION, TABLE_SCORINGS, cleanName } from "@contractplay/protocol";
 import type { TableScoring, TableStyle } from "@contractplay/protocol";
 import { AGGRESSIONS, SEATS } from "@contractplay/core";
@@ -15,6 +16,7 @@ import { VERIFIED_ACCOUNT_HEADER } from "./table-object.js";
 import type { VerifiedAccount } from "./table-object.js";
 
 // The entry module may only export handlers and Durable Object classes.
+export { BenchmarkObject } from "./benchmark-object.js";
 export { LobbyObject } from "./lobby-object.js";
 export { TableObject } from "./table-object.js";
 export { SessionObject } from "./session-object.js";
@@ -111,6 +113,9 @@ async function connectTable(request: Request, env: Env, id: string): Promise<Res
 }
 
 export default {
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    await benchmarkOf(env).enqueueDue(controller.scheduledTime);
+  },
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
@@ -135,6 +140,7 @@ export default {
       const rawId = adminTable[1]!.toUpperCase();
       if (!TABLE_ID.test(rawId)) return Response.json({ error: "bad-request" }, { status: 400 });
       const response = await env.TABLES.get(env.TABLES.idFromName(rawId)).fetch("https://table/_admin/delete", { method: "DELETE" });
+      if (response.status === 409) return Response.json({ error: "benchmark-managed" }, { status: 409 });
       return response.status === 204 ? response : Response.json({ error: "not-found" }, { status: 404 });
     }
     if (path === "/api/tables") {

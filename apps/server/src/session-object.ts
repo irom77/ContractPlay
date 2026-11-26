@@ -1,16 +1,21 @@
 import { DurableObject } from "cloudflare:workers";
 import { createDuplicateSession, recordDuplicateResult, sessionRank, sessionStanding } from "@contractplay/table";
 import type { DuplicateSession, DuplicateSessionBoard } from "@contractplay/table";
+import { BenchmarkStore } from "./benchmark-store.js";
 
 const STATE_KEY = "session";
+type StoredSession = DuplicateSession & { benchmarkJobId?: string };
 
 /** One duplicate session: the private shared boards and serialized cross-table results. */
 export class SessionObject extends DurableObject<Env> {
-  private state: DuplicateSession | null | undefined;
+  private state: StoredSession | null | undefined;
 
-  async create(input: { id: string; tables: readonly string[]; boards: readonly DuplicateSessionBoard[]; scoring: "matchpoints" | "imps" }): Promise<boolean> {
-    if (await this.load()) return false;
-    this.state = createDuplicateSession(input);
+  async create(input: { id: string; tables: readonly string[]; boards: readonly DuplicateSessionBoard[]; scoring: "matchpoints" | "imps"; benchmarkJobId?: string }): Promise<boolean> {
+    const existing = await this.load();
+    if (existing) return input.benchmarkJobId !== undefined && existing.benchmarkJobId === input.benchmarkJobId
+      && existing.tables.length === input.tables.length && existing.tables.every((id, index) => id === input.tables[index]);
+    const { benchmarkJobId, ...session } = input;
+    this.state = { ...createDuplicateSession(session), ...(benchmarkJobId ? { benchmarkJobId } : {}) };
     await this.ctx.storage.put(STATE_KEY, this.state);
     return true;
   }
@@ -24,6 +29,7 @@ export class SessionObject extends DurableObject<Env> {
   async boardFor(tableId: string, boardIndex: number): Promise<DuplicateSessionBoard | undefined> {
     const state = await this.load();
     if (!state || !state.tables.includes(tableId) || boardIndex !== state.currentBoard) return undefined;
+    if (state.benchmarkJobId && !await new BenchmarkStore(this.env.DB).boardStarted(state.benchmarkJobId, boardIndex)) return undefined;
     return state.boards[boardIndex];
   }
 
@@ -34,10 +40,14 @@ export class SessionObject extends DurableObject<Env> {
     const next = recordDuplicateResult(state, tableId, boardIndex, nsScore);
     if (!next) return false;
     if (next !== state) {
-      this.state = next;
-      await this.ctx.storage.put(STATE_KEY, next);
+      this.state = state.benchmarkJobId ? { ...next, benchmarkJobId: state.benchmarkJobId } : next;
+      await this.ctx.storage.put(STATE_KEY, this.state);
     }
     return true;
+  }
+
+  async currentBoardIndex(): Promise<number | undefined> {
+    return (await this.load())?.currentBoard;
   }
 
   /** Does not return boards, deals, auctions, or play. */
@@ -64,8 +74,8 @@ export class SessionObject extends DurableObject<Env> {
     } : undefined;
   }
 
-  private async load(): Promise<DuplicateSession | null> {
-    if (this.state === undefined) this.state = (await this.ctx.storage.get<DuplicateSession>(STATE_KEY)) ?? null;
+  private async load(): Promise<StoredSession | null> {
+    if (this.state === undefined) this.state = (await this.ctx.storage.get<StoredSession>(STATE_KEY)) ?? null;
     return this.state;
   }
 }

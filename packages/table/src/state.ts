@@ -19,6 +19,9 @@ export type TableState = Readonly<{
   aggression?: Aggression;
   /** Durable duplicate-session coordinator id; only generated-session table views carry this. */
   sessionId?: string;
+  /** Server-managed table. Profiles are immutable version references owned by the benchmark job. */
+  benchmark?: Readonly<{ jobId: string; tableIndex: number; engineVersion: string;
+    profiles: Readonly<Record<Seat, Readonly<{ profileId: string; version: string }>>> }>;
   /** The current released board, copied from the coordinator immediately before dealing. */
   sessionBoard?: Readonly<{ index: number; number: number; deal: Deal; dealer: Seat; vulnerability: GameState["vulnerability"] }>;
   /**

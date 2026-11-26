@@ -1,7 +1,7 @@
 import { SEATS, createDeck, deal, validatePlay } from "@contractplay/core";
 import type { GameAction, Seat } from "@contractplay/core";
 import { describe, expect, it } from "vitest";
-import { botToAct, botWake, dealsNow, isReplayHand, readyNeeded, replayVulnerability } from "./hand.js";
+import { botToAct, botWake, dealBotSessionHand, dealsNow, isReplayHand, readyNeeded, replayVulnerability } from "./hand.js";
 import { viewFor } from "./view.js";
 import { reduce } from "./reduce.js";
 import { afterOnePassedOut, fourHumans, othersReady, newTable, playOut, replayRecord, seededRandom, send, sendOk, tableWithBots } from "./test-helpers.js";
@@ -450,5 +450,18 @@ describe("ready for the next hand", () => {
     expect("nextHandReady" in cancelled).toBe(false);
     // With no hand on the table there is nothing to look over, so the next deal is immediate.
     expect(sendOk(cancelled, "p1", { type: "deal" }, 1, seededRandom(4)).handNumber).toBe(3);
+  });
+});
+
+describe("trusted all-bot session starts", () => {
+  it("requires four built-in bots and the matching duplicate board; players cannot trigger it", () => {
+    const board = { index: 0, number: 8, dealer: "west", vulnerability: "Both", deal: deal(createDeck()) } as const;
+    const seats = Object.fromEntries(SEATS.map((seat) => [seat, { kind: "bot", skill: "beginner", character: "ray" }])) as TableState["seats"];
+    const state = { ...newTable(), scoring: "duplicate", sessionId: "round", seats } as const;
+    expect(send(state, "observer", { type: "deal" }).refused).toBe("not-seated");
+    expect(dealBotSessionHand(state, board, 10).state.game).toMatchObject({ dealer: "west", vulnerability: "Both", initialDeal: board.deal });
+    expect(dealBotSessionHand({ ...state, seats: { ...seats, east: { kind: "empty" } } }, board, 10).refused).toBe("not-ready");
+    expect(dealBotSessionHand(state, { ...board, index: 1 }, 10).refused).toBe("not-ready");
+    expect(dealBotSessionHand(dealBotSessionHand(state, board, 10).state, { ...board, index: 1 }, 11).refused).toBe("not-ready");
   });
 });

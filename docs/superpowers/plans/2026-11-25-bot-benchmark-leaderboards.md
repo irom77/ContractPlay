@@ -105,14 +105,14 @@
 - Consumes: `BenchmarkStore`, profile snapshots, and `createRotation` from Tasks 1–2; existing table/session creation and alarm-driven bot actions.
 - Produces: a `BenchmarkObject` Durable Object with `enqueue`, `pause`, `resume`, `cancel`, `status`, and bounded `alarm` processing. Every external side effect is keyed by a persisted job/round/table/board ID.
 
-- [ ] **Step 1: Write coordinator and table-transition tests** for one-unit-per-alarm progress, retry-safe table/session creation, pause/resume/cancel, cap enforcement, recovery after partial creation, and trusted all-bot deal starts.
-- [ ] **Step 2: Add the `BenchmarkObject` Durable Object and binding**; alarms claim or advance at most one bounded unit, then persist progress before arming the next alarm.
-- [ ] **Step 3: Add scheduled-event dispatch** to enqueue due configured jobs and route all execution through the coordinator object; configure a conservative cron and make cadence configurable.
-- [ ] **Step 4: Extend lobby/table setup with internal benchmark-only operations** that seat the four assigned profiles through the validated transition path before the first hand and store only their immutable profile/version IDs in table/session metadata. Add a trusted all-bot deal-start transition that is unavailable in client protocol messages.
-- [ ] **Step 5: Reuse existing duplicate sessions** so every comparison round shares exact boards; rotate profile seats/partners by stored seed and assignment, using generated deals by default and parsed PBN facts when configured.
-- [ ] **Step 6: Persist completion progress idempotently** from finished table hands; admit each board using the current job lease, and release the next board only after existing duplicate-session synchronization confirms all tables completed and the coordinator authorizes that board.
-- [ ] **Step 7: Add lifecycle cleanup** for failed setup, cancellation, and completed sessions without deleting retained result/replay records.
-- [ ] **Step 8: Verify coordinator and existing server suites** with `pnpm --filter @contractplay/server test`.
+- [x] **Step 1: Write coordinator and table-transition tests** for one-unit-per-alarm progress, retry-safe table/session creation, pause/resume/cancel, cap enforcement, recovery after partial creation, and trusted all-bot deal starts.
+- [x] **Step 2: Add the `BenchmarkObject` Durable Object and binding**; alarms claim or advance at most one bounded unit, then persist progress before arming the next alarm.
+- [x] **Step 3: Add scheduled-event dispatch** to enqueue due configured jobs and route all execution through the coordinator object; check every five minutes and accept cohort intervals in five-minute increments.
+- [x] **Step 4: Extend lobby/table setup with internal benchmark-only operations** that seat the four assigned profiles through the validated transition path before the first hand and store only their immutable profile/version IDs in table/session metadata. Add a trusted all-bot deal-start transition that is unavailable in client protocol messages.
+- [x] **Step 5: Reuse existing duplicate sessions** so every comparison round shares exact boards; rotate profile seats/partners by stored seed and assignment, using generated deals by default and parsed PBN facts when configured.
+- [x] **Step 6: Persist completion progress idempotently** from finished table hands; admit each board using the current job lease, and release the next board only after existing duplicate-session synchronization confirms all tables completed and the coordinator authorizes that board.
+- [x] **Step 7: Add lifecycle cleanup** for failed setup, cancellation, and completed sessions without deleting retained result/replay records.
+- [x] **Step 8: Verify coordinator and existing server suites** with `pnpm --filter @contractplay/server test`.
 
 ### Task 4: Replayable immutable results and calibrated rating updates
 

@@ -26,15 +26,18 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "contractplay-auth", "database_id": "fb6cbdfd-a347-4771-a29a-582f52ff96f2", "migrations_dir": "migrations" }
   ],
+  "triggers": { "crons": ["*/5 * * * *"] },
   "durable_objects": {
     "bindings": [
       { "name": "TABLES", "class_name": "TableObject" },
       { "name": "LOBBY", "class_name": "LobbyObject" },
+      { "name": "BENCHMARKS", "class_name": "BenchmarkObject" },
       { "name": "SESSIONS", "class_name": "SessionObject" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["TableObject", "LobbyObject"] },
-    { "tag": "v2", "new_sqlite_classes": ["SessionObject"] }
+    { "tag": "v2", "new_sqlite_classes": ["SessionObject"] },
+    { "tag": "v3", "new_sqlite_classes": ["BenchmarkObject"] }
   ]
 }

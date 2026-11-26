@@ -120,7 +120,7 @@ function hostDeadline(state: TableState): number | undefined {
 
 /** When the table expires, if nobody is connected: sooner when no human has ever connected. */
 function expiryDeadline(state: TableState): number | undefined {
-  if (Object.keys(state.connections).length > 0) return undefined;
+  if (state.benchmark || Object.keys(state.connections).length > 0) return undefined;
   return state.lastHumanAt + (state.unvisited ? UNVISITED_TABLE_MS : EMPTY_TABLE_MS);
 }
 

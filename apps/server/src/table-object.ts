@@ -1,8 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, parseClientMessage } from "@contractplay/protocol";
 import type { ServerMessage, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
-import type { Aggression } from "@contractplay/core";
-import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, dealsNow, createTable, isReplayHand, nextWake, reduce, replayVulnerability, summaryOf, viewFor } from "@contractplay/table";
+import { botCharacter, SEATS, type Aggression, type Seat } from "@contractplay/core";
+import type { BenchmarkTableAssignment } from "@contractplay/benchmark";
+import { BenchmarkStore } from "./benchmark-store.js";
+import { BOT_PAUSE_MS, botToAct, botWake, chooseBotAction, dealBotSessionHand, dealsNow, createTable, isReplayHand, nextWake, reduce, replayVulnerability, seatSessionBots, summaryOf, viewFor } from "@contractplay/table";
 import type { Outcome, PlayerId, TableEvent, TableState } from "@contractplay/table";
 import { lobbyOf } from "./lobby-object.js";
 import { AuthStore } from "./auth-store.js";
@@ -14,6 +16,9 @@ export const VERIFIED_ACCOUNT_HEADER = "X-ContractPlay-Account";
 export type VerifiedAccount = Pick<Account, "id" | "primaryPlayerId" | "displayName">;
 
 const STATE_KEY = "state";
+const REPORTED_HAND = "benchmarkReportedHand";
+/** Bump when the executable built-in bidding/play strategy changes. */
+export const BENCHMARK_ENGINE_VERSION = "contractplay-bots-v1";
 const isFinished = (state: TableState): boolean => state.game?.phase === "complete" || state.game?.phase === "passed-out";
 /** Most open sockets one table accepts that have completed `hello`. */
 export const MAX_SOCKETS_PER_TABLE = 32;
@@ -87,6 +92,58 @@ export class TableObject extends DurableObject<Env> {
     return summaryOf(state);
   }
 
+  async createBenchmark(input: { id: string; jobId: string; tableIndex: number; sessionId: string; name: string;
+    style: TableStyle; assignment: BenchmarkTableAssignment }): Promise<TableSummary> {
+    const existing = await this.load();
+    if (existing) {
+      if (existing.benchmark?.jobId !== input.jobId || existing.benchmark.tableIndex !== input.tableIndex) throw new Error("Table ID collision");
+      return summaryOf(existing);
+    }
+    const characters = {} as Record<Seat, string>;
+    const profiles = {} as Record<Seat, { profileId: string; version: string }>;
+    for (const seat of SEATS) {
+      const profile = input.assignment[seat];
+      const bot = botCharacter(profile.profileId);
+      if (!bot || profile.engineVersion !== BENCHMARK_ENGINE_VERSION || bot.skill !== profile.skill
+        || bot.aggression !== profile.aggression || input.style !== profile.biddingStyle) throw new Error("Unsupported benchmark profile");
+      characters[seat] = bot.id;
+      profiles[seat] = { profileId: profile.profileId, version: profile.version };
+    }
+    const fresh = { ...createTable({ ...input, scoring: "duplicate", listed: true, at: Date.now() }),
+      benchmark: { jobId: input.jobId, tableIndex: input.tableIndex, profiles, engineVersion: BENCHMARK_ENGINE_VERSION }, sessionId: input.sessionId };
+    const out = seatSessionBots(fresh, characters);
+    if (out.refused) throw new Error("Could not seat benchmark profiles");
+    await this.save(out.state);
+    return summaryOf(out.state);
+  }
+
+  async startBenchmarkBoard(boardIndex: number): Promise<boolean> {
+    const state = await this.load();
+    if (!Number.isSafeInteger(boardIndex) || boardIndex < 0 || !state?.sessionId || state.benchmark?.engineVersion !== BENCHMARK_ENGINE_VERSION) return false;
+    if (state.handNumber > boardIndex) {
+      if (await this.ctx.storage.getAlarm() === null) await this.arm(state);
+      return true;
+    }
+    const board = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).boardFor(state.id, boardIndex);
+    if (!board) return false;
+    const current = await this.load();
+    if (!current) return false;
+    if (current.handNumber > boardIndex) return true;
+    const out = dealBotSessionHand(current, { ...board, index: boardIndex }, Date.now());
+    if (out.refused) return false;
+    await this.save(out.state);
+    await this.broadcast(out.state);
+    await this.lobby().update(summaryOf(out.state));
+    return true;
+  }
+
+  async deleteBenchmark(jobId: string): Promise<TableSummary | undefined> {
+    const state = await this.load();
+    if (!state) return;
+    if (state.benchmark?.jobId !== jobId) return state.listed ? summaryOf(state) : undefined;
+    await this.erase();
+  }
+
   /** Used only while the lobby is assembling a new multi-table duplicate session. */
   async bindSession(sessionId: string): Promise<TableSummary | undefined> {
     const state = await this.load();
@@ -99,6 +156,7 @@ export class TableObject extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname === "/_admin/delete") {
       if (request.method !== "DELETE") return new Response("method not allowed", { status: 405 });
+      if ((await this.load())?.benchmark) return new Response("Managed by the benchmark coordinator", { status: 409 });
       return await this.deleteAdmin() ? new Response(null, { status: 204 }) : new Response(null, { status: 404 });
     }
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") return new Response("expected a WebSocket", { status: 426 });
@@ -137,6 +195,7 @@ export class TableObject extends DurableObject<Env> {
       await this.reportFinishedSessionHand(state);
       return send(ws, { type: "view", view: await this.view(state, me.player) });
     }
+    if (state.benchmark) return send(ws, { type: "refused", reason: "not-allowed", view: await this.view(state, me.player) });
     const out = await this.dispatch({ type: "message", player: me.player, message: parsed, at: Date.now() });
     if (out.refused) send(ws, { type: "refused", reason: out.refused, view: await this.view(out.state, me.player) });
   }
@@ -165,6 +224,11 @@ export class TableObject extends DurableObject<Env> {
       await this.reconcile();
       const current = await this.load();
       const due = current ? botWake(current) : undefined;
+      if (current?.benchmark && isFinished(current)) await this.reportFinishedSessionHand(current);
+      if (current?.benchmark && current.benchmark.engineVersion !== BENCHMARK_ENGINE_VERSION) {
+        await this.ctx.storage.deleteAlarm();
+        return;
+      }
       if (current && botToAct(current) !== undefined && due !== undefined && Date.now() >= due) {
         const action = await chooseBotAction(current);
         if (action) await this.dispatch({ type: "bot", revision: current.revision, action, at: Date.now() });
@@ -285,7 +349,9 @@ export class TableObject extends DurableObject<Env> {
       const attachment = attachmentOf(ws);
       return attachment && attachment.player === undefined ? [Math.max(attachment.acceptedAt + HELLO_TIMEOUT_MS, now)] : [];
     }));
-    const at = Math.min(wake === undefined ? Infinity : (wake > now ? wake : now + floorMs), backstop, hello);
+    const report = state?.benchmark && isFinished(state) && await this.ctx.storage.get<number>(REPORTED_HAND) !== state.handNumber
+      ? now + 10_000 : Infinity;
+    const at = Math.min(report, wake === undefined ? Infinity : (wake > now ? wake : now + floorMs), backstop, hello);
     if (at === Infinity) await this.ctx.storage.deleteAlarm();
     else await this.ctx.storage.setAlarm(at);
   }
@@ -318,11 +384,7 @@ export class TableObject extends DurableObject<Env> {
     if (out.state === beforeReduce) return { ...out, state };
     await this.save(out.state);
     await this.reportFinishedSessionHand(out.state);
-    const sessionStatus = await this.sessionStatus(out.state);
-    for (const ws of this.ctx.getWebSockets()) {
-      const me = identityOf(ws);
-      if (me) send(ws, { type: "view", view: viewFor(out.state, me.player, sessionStatus) });
-    }
+    await this.broadcast(out.state);
     const summary = summaryOf(out.state);
     if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state))) {
       // the change is already stored and sent; a missed lobby update is repaired by the next change to the lobby row
@@ -335,6 +397,16 @@ export class TableObject extends DurableObject<Env> {
     // after the broadcast, so archive latency never delays the result
     if (!isFinished(state) && isFinished(out.state)) await this.archiveFinishedHand(out.state);
     return out;
+  }
+
+  private async broadcast(state: TableState): Promise<void> {
+    const sockets = this.ctx.getWebSockets();
+    if (!sockets.length) return;
+    const sessionStatus = await this.sessionStatus(state);
+    for (const ws of sockets) {
+      const me = identityOf(ws);
+      if (me) send(ws, { type: "view", view: viewFor(state, me.player, sessionStatus) });
+    }
   }
 
   private async sessionStatus(state: TableState) {
@@ -364,6 +436,17 @@ export class TableObject extends DurableObject<Env> {
   private async reportFinishedSessionHand(state: TableState): Promise<void> {
     if (!state.sessionId || !state.handNumber || !state.game || (state.game.phase !== "complete" && state.game.phase !== "passed-out")) return;
     const nsScore = state.game.phase === "complete" ? state.game.score?.score ?? 0 : 0;
+    if (state.benchmark) {
+      if (await this.ctx.storage.get<number>(REPORTED_HAND) === state.handNumber) return;
+      // A durable retry alarm was armed with the finished state. Persist the replay before the session can advance.
+      await new BenchmarkStore(this.env.DB).recordResult({ jobId: state.benchmark.jobId, tableIndex: state.benchmark.tableIndex,
+        boardIndex: state.handNumber - 1, actions: state.game.history.actions.slice(0, state.game.history.cursor),
+        contract: state.game.contract ?? null, tricks: state.game.score?.tricksTaken ?? null, nsScore, completedAt: state.turnSince });
+      const reported = await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).report(state.id, state.handNumber - 1, nsScore);
+      if (!reported) throw new Error("Benchmark session rejected finished hand");
+      await this.ctx.storage.put(REPORTED_HAND, state.handNumber);
+      return;
+    }
     try { await this.env.SESSIONS.get(this.env.SESSIONS.idFromName(state.sessionId)).report(state.id, state.handNumber - 1, nsScore); }
     catch { console.warn("table: session result report failed; a later refresh will retry"); }
   }
@@ -383,6 +466,10 @@ export class TableObject extends DurableObject<Env> {
   /** Removes the lobby entry first, so a failed removal leaves the table for the alarm's retry instead of a stale lobby row. */
   private async expire(state: TableState, closeSockets = false): Promise<void> {
     await this.lobby().remove(state.id);
+    await this.erase(closeSockets);
+  }
+
+  private async erase(closeSockets = true): Promise<void> {
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.state = null;

@@ -1,7 +1,7 @@
 import type { Seat, SkillLevel } from "@contractplay/core";
 import type { CustomBot } from "@contractplay/protocol";
 import { botCharacter, SEATS } from "@contractplay/core";
-import { accept, betweenHands, hostAfter, refuse, seatOf, without, withoutClaim, withoutGame, withoutHost, type Outcome, type PlayerId, type SeatState, type TableState } from "./state.js";
+import { accept, betweenHands, hostAfter, refuse, scoringOf, seatOf, without, withoutClaim, withoutGame, withoutHost, type Outcome, type PlayerId, type SeatState, type TableState } from "./state.js";
 
 function withSeat(state: TableState, seat: Seat, value: SeatState): TableState["seats"] {
   return { ...state.seats, [seat]: value };
@@ -27,6 +27,19 @@ export function leave(state: TableState, player: PlayerId): Outcome {
   const othersSeated = SEATS.some((other) => other !== seat && state.seats[other].kind === "human");
   if (!othersSeated) return vacate(withoutGame(state), seat, player);
   return vacate(state, seat, player, { kind: "bot", skill: "intermediate" });
+}
+
+/** Trusted setup for a fresh duplicate table, before clients or any game can occupy a seat. */
+export function seatSessionBots(state: TableState, characters: Readonly<Record<Seat, string>>): Outcome {
+  if (!state.sessionId || scoringOf(state) !== "duplicate" || state.handNumber !== 0 || state.game
+    || SEATS.some((seat) => state.seats[seat].kind !== "empty")) return refuse(state, "not-ready");
+  const seats = { ...state.seats };
+  for (const seat of SEATS) {
+    const bot = botCharacter(characters[seat]);
+    if (!bot) return refuse(state, "not-allowed");
+    seats[seat] = { kind: "bot", character: bot.id, skill: bot.skill };
+  }
+  return accept(state, { seats });
 }
 
 /** Seats a bot of this skill, or with `character` that named bot at its own skill. */
