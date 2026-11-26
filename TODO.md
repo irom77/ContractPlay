@@ -16,7 +16,7 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 ## Bots
 
 - [x] Named bots: players' own saved characters that play differently (`docs/superpowers/specs/2026-11-25-bot-traits-design.md`). Parts 1–3 are done: six trait dials with the old aggressiveness presets preserved; own characters in solo with an editor, results and account sync (migration 0005); and own characters at online tables, with owner-only result attribution.
-- [ ] Release continuous bot benchmarks: `0006_bot_benchmarks.sql` was applied and `BENCHMARK_ADMIN_ACCOUNT_IDS` configured in production on 2026-11-26; deploy the Worker/DO scheduler, and verify bounded scheduled execution, protected benchmark controls, generated public replays, imported PBN privacy, and rating calibration on production. Task implementation and local tests are in `docs/superpowers/plans/2026-11-25-bot-benchmark-leaderboards.md`; live operation is not yet verified.
+- [ ] Release continuous bot benchmarks: `0006_bot_benchmarks.sql` was applied and `BENCHMARK_ADMIN_ACCOUNT_IDS` configured in production on 2026-11-26, and the Worker/DO scheduler is deployed; verify bounded scheduled execution, protected benchmark controls, generated public replays, imported PBN privacy, and rating calibration on production. Task implementation and local tests are in `docs/superpowers/plans/2026-11-25-bot-benchmark-leaderboards.md`; live operation is not yet verified.
 
 ## Online multiplayer
 
