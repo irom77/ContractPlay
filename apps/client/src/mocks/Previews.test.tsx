@@ -147,6 +147,13 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(card).getAllByRole("img", { name: /to N–S$/ })).toHaveLength(2);
     expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/N–S win game 2[\s\S]*\+700 rubber bonus/);
     for (const name of ["Deal a new rubber", "Seating", "Back to lobby", "Leave the table", "Close"]) expect(within(card).getByRole("button", { name })).toBeTruthy();
+    // The winner sits on its own banner (it pulses in the stylesheet), with the games score kept on one line.
+    expect(within(card).getByRole("heading", { name: "N–S win the rubber 2–0" }).querySelector(".pad-result-games")?.textContent).toBe("2–0");
+    // West, a person who has stepped away, keeps the widest seat label; the table measures every seat so the panel
+    // can be placed clear of them all.
+    expect(screen.getByText("Annabelle")).toBeTruthy();
+    const surface = document.querySelector<HTMLElement>(".table-surface.hands-revealed")!;
+    for (const side of ["top", "right", "bottom", "left"]) expect(surface.style.getPropertyValue(`--measured-${side}-room`)).toMatch(/^\d+px$/);
   },
   "duplicate-session": () => {
     expect(document.querySelector(".session-progress")?.textContent).toBe("Board 3 complete · waiting for other tables · Place 1 of 4 · 66.7% matchpoints");

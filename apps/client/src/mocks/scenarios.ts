@@ -238,12 +238,14 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "rubber-won", title: "Rubber won", detail: "North–South already have game 1 from 3NT; 4♠ makes game 2 and the rubber: the scorecard ends with the 700 rubber bonus, the final score, and Deal a new rubber, Seating, Back to lobby, or Leave the table.",
+    id: "rubber-won", title: "Rubber won", detail: "North–South already have game 1 from 3NT; 4♠ makes game 2 and the rubber: the winner pulses on a gold banner, and the scorecard ends with the 700 rubber bonus, the final score, and Deal a new rubber, Seating, Back to lobby, or Leave the table. The panel keeps clear of West (Annabelle, away) and their points.",
     build: () => {
-      const people: People = { north: "Alex" };
+      // West is a person who has stepped away: their name, tag and points make the widest seat label, which the
+      // result panel must not cover.
+      const people: People = { north: "Alex", west: "Annabelle" };
       const earlier = [scoreRubberHand("preview-3nt", { level: 3, strain: "notrump", declarer: "south", doubled: 0 }, 9, "None")];
-      const state = playUntil(bid(dealt(table("Friday club", people, others("north")), earlier), 8), (game) => game.phase === "complete");
-      return view(state, "north", people);
+      const played = playUntil(bid(dealt(table("Friday club", people, ["east", "south"]), earlier), 8), (game) => game.phase === "complete");
+      return view(run(played, { type: "disconnect", player: player("west"), at: AT }), "north", people);
     }
   },
   {

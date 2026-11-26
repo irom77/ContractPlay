@@ -312,7 +312,11 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .hands-revealed .pos-right > .seat-auction-calls { justify-content: flex-end; }
 .hands-revealed .pos-left .dummy-table-hand, .hands-revealed .pos-right .dummy-table-hand { --h: var(--side-h); --step: var(--side-step); }
 .hcp-badge { flex: none; border-radius: 999px; padding: calc(.25 * var(--u)) calc(1 * var(--u)); background: var(--gold); color: var(--deep); font-size: var(--text-s); font-weight: 800; white-space: nowrap; }
-.hands-revealed .score-panel { z-index: 5; gap: var(--u); min-width: 0; width: max-content; max-width: calc(100% - 2 * (var(--side-room) + 2 * var(--u))); padding: calc(2 * var(--u)) calc(3 * var(--u)); --side-room: calc(4 * var(--u) + var(--side-h) * .7 + 4 * var(--side-step)); }
+.hands-revealed .score-panel { z-index: 5; gap: var(--u); min-width: 0; width: max-content; padding: calc(2 * var(--u)) calc(3 * var(--u));
+  /* Centred in the room between the side seats (as measured by the table, labels and all), with a margin either side. */
+  --side-room: calc(4 * var(--u) + var(--side-h) * .7 + 4 * var(--side-step) + .5 * var(--u));
+  --room-left: var(--measured-left-room, var(--side-room)); --room-right: var(--measured-right-room, var(--side-room));
+  left: calc((var(--room-left) + 100% - var(--room-right)) / 2); max-width: calc(100% - var(--room-left) - var(--room-right) - 3 * var(--u)); }
 .result-totals { font-size: var(--text-m) !important; }
 .result-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--u); }
 .online-result .contract-outcome { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; margin: 0; }
@@ -323,7 +327,6 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
   .hands-revealed .pos-top { top: calc(21 * var(--u)); }
   .hands-revealed .pos-bottom { bottom: calc(2 * var(--u)); }
   .hands-revealed .pos-left, .hands-revealed .pos-right { top: 44%; }
-  .hands-revealed .score-panel { top: 73%; max-width: calc(100% - 4 * var(--u)); }
 }
 
 /* ---------- Card backs at hidden seats ---------- */
@@ -401,7 +404,13 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .scorecard { --pad-ink: #1f2f3a; --rule: #6f8fa6; --paper: #fbf6df; display: grid; gap: calc(.8 * var(--u)); width: min(100%, calc(52 * var(--u))); min-width: min(260px, 100%); color: #d6e0d8; text-align: center; }
 .scorecard .pad-status { margin: 0; color: #c9d6cc; font-size: var(--text-s); }
 .pad-result { display: grid; gap: 2px; }
-.pad-result h3 { margin: 0; color: var(--gold); font: 800 var(--text-l)/1.2 system-ui, sans-serif; }
+/* The rubber's winner stands out on a gold banner that pulses a few times when the rubber ends, then stays lit. */
+.pad-result h3 { margin: 0; border: 2px solid var(--gold); border-radius: 8px; padding: calc(.4 * var(--u)) calc(1 * var(--u)); background: rgba(240, 190, 60, .18); color: var(--gold); font: 800 var(--text-l)/1.2 system-ui, sans-serif; box-shadow: 0 0 calc(1.6 * var(--u)) rgba(240, 190, 60, .45); animation: rubber-won-pulse 1.1s ease-in-out 6; }
+.pad-result-games { white-space: nowrap; }
+@keyframes rubber-won-pulse {
+  50% { background: var(--gold); color: #1d2a12; box-shadow: 0 0 calc(3 * var(--u)) rgba(240, 190, 60, .9); }
+}
+@media (prefers-reduced-motion: reduce) { .pad-result h3 { animation: none; } }
 .pad-result p { margin: 0; font-size: var(--text-m); }
 .pad { position: relative; display: grid; border: 1px solid #c9bf94; border-radius: 4px; padding: calc(.6 * var(--u)) calc(.8 * var(--u)); background: var(--paper) repeating-linear-gradient(transparent 0 calc(2.6 * var(--u) - 1px), rgba(111, 143, 166, .14) calc(2.6 * var(--u) - 1px) calc(2.6 * var(--u))); color: var(--pad-ink); box-shadow: 0 calc(.6 * var(--u)) calc(1.6 * var(--u)) #0006, inset 0 0 0 1px #fffbe8; font: 600 var(--text-m)/1.35 "Segoe Print", "Bradley Hand", "Comic Sans MS", "Chalkboard SE", cursive; font-variant-numeric: tabular-nums; }
 .pad-row { display: grid; grid-template-columns: 1fr 1fr; }
@@ -436,17 +445,22 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .score-panel.scorecard-panel { max-height: calc(100% - 4 * var(--u)); overflow-y: auto; overscroll-behavior: contain; background: #0c2822; }
 /* With the deal face-up, the result panel stays in the band between the north and south hands so neither seat head
    (nor its HCP badge) is covered: the pad sits beside the status, the last hand's points and the buttons. */
-.hands-revealed .score-panel { --edge-band: calc(var(--edge-h) + 7 * var(--u)); max-height: calc(100% - 2 * var(--edge-band)); overflow-y: auto; overscroll-behavior: contain; }
+.hands-revealed .score-panel { --edge-band: calc(var(--edge-h) + 7 * var(--u)); overflow-y: auto; overscroll-behavior: contain;
+  --room-top: var(--measured-top-room, var(--edge-band)); --room-bottom: var(--measured-bottom-room, var(--edge-band));
+  top: calc((var(--room-top) + 100% - var(--room-bottom)) / 2); max-height: calc(100% - var(--room-top) - var(--room-bottom) - var(--u)); }
 .hands-revealed .score-panel.scorecard-panel { gap: calc(.6 * var(--u)); padding: calc(1.4 * var(--u)) calc(2.4 * var(--u)); }
 .hands-revealed .scorecard-panel h2 { font-size: max(18px, calc(3.2 * var(--u))); }
-.hands-revealed .scorecard-panel .scorecard { grid-template-columns: minmax(calc(32 * var(--u)), calc(42 * var(--u))) minmax(calc(26 * var(--u)), calc(34 * var(--u))); grid-template-rows: auto auto 1fr; grid-template-areas: "pad status" "pad breakdown" "pad actions"; align-items: start; column-gap: calc(1.6 * var(--u)); width: auto; }
+.hands-revealed .scorecard-panel .scorecard { grid-template-columns: minmax(calc(24 * var(--u)), calc(42 * var(--u))) minmax(calc(22 * var(--u)), calc(34 * var(--u))); grid-template-rows: auto auto 1fr; grid-template-areas: "pad status" "pad breakdown" "pad actions"; align-items: start; column-gap: calc(1.6 * var(--u)); width: auto; }
 .hands-revealed .scorecard-panel .pad { grid-area: pad; }
 .hands-revealed .scorecard-panel .pad-status, .hands-revealed .scorecard-panel .pad-result { grid-area: status; }
 .hands-revealed .scorecard-panel .pad-breakdown { grid-area: breakdown; }
 .hands-revealed .scorecard-panel .pad-actions { grid-area: actions; align-self: end; }
+/* A won rubber offers five ways on, too many for the narrow column: they take a row under the whole card. */
+.hands-revealed .scorecard-panel .scorecard-final { grid-template-rows: auto 1fr auto; grid-template-areas: "pad status" "pad breakdown" "actions actions"; }
+.hands-revealed .scorecard-panel .scorecard-final .pad-actions { align-self: start; }
+.hands-revealed .scorecard-panel .pad-actions > button { min-height: 0; padding: calc(.9 * var(--u)) calc(1.8 * var(--u)); }
 /* Tall, narrow windows put the panel below the side hands, with room to stack the scorecard in one column. */
 @media (max-aspect-ratio: 4/5) {
-  .hands-revealed .score-panel { max-height: calc(100% - 4 * var(--u)); }
   .hands-revealed .scorecard-panel .scorecard { grid-template-columns: none; grid-template-rows: none; grid-template-areas: none; width: min(100%, calc(52 * var(--u))); }
   .hands-revealed .scorecard-panel .scorecard > * { grid-area: auto; }
 }

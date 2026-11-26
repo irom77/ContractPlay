@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import { cardId, SUITS, trickWinner, tricksWonBySide, type Bid, type Card, type Seat, type TrickCard } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import { highCardPoints } from "@contractplay/bots";
@@ -81,6 +81,9 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
   <text x="120" y="50">♠</text><text x="212" y="132">♥</text><text x="120" y="214">♦</text><text x="28" y="132">♣</text>
 </svg>;
 
+
+/** The narrowest result panel worth fitting between the side seats rather than laying over them, in pixels. */
+const MIN_PANEL_WIDTH = 320;
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, showBacksAtBottom = false, exposedSeat,
@@ -103,6 +106,31 @@ export function TableView({
   const dummyPosition = dummySeat ? tablePositions[(seats.indexOf(dummySeat) - seats.indexOf(bottomSeat) + 4) % 4]! : undefined;
   const dummyVisible = !!contract && (game.currentTrick.length > 0 || game.completedTricks.length > 0 || phase === "complete");
   const revealed = revealedHands && (phase === "complete" || phase === "passed-out") ? revealedHands : undefined;
+  const surfaceRef = useRef<HTMLDivElement>(null);
+  // With every hand face-up, the result panel must stay clear of all four seats: their names, tags, high-card points
+  // and calls as well as their cards. The CSS estimates the room from the card sizes; this measures what is there.
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (!revealed || !surface) return;
+    const measure = () => {
+      const bounds = surface.getBoundingClientRect();
+      const seat = (position: string) => surface.querySelector(`.pos-${position}`)?.getBoundingClientRect();
+      const [top, right, bottom, left] = [seat("top"), seat("right"), seat("bottom"), seat("left")];
+      const rooms = { top: top ? top.bottom - bounds.top : 0, right: right ? bounds.right - right.left : 0,
+        bottom: bottom ? bounds.bottom - bottom.top : 0, left: left ? left.right - bounds.left : 0 };
+      // A phone held upright has no usable room between the side hands; there the panel spans the table over them.
+      if (bounds.width - rooms.left - rooms.right < MIN_PANEL_WIDTH) rooms.left = rooms.right = 0;
+      for (const [side, room] of Object.entries(rooms)) surface.style.setProperty(`--measured-${side}-room`, `${Math.ceil(Math.max(0, room))}px`);
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    observer?.observe(surface);
+    for (const seat of surface.querySelectorAll(".seat")) observer?.observe(seat);
+    return () => {
+      observer?.disconnect();
+      for (const side of ["top", "right", "bottom", "left"]) surface.style.removeProperty(`--measured-${side}-room`);
+    };
+  });
   const fixedPlayHands = fixedSeatHands && liveTurnPhase(phase);
   // A dummy at a side seat is a column as wide as its longest suit; the bottom hand is laid out beside it.
   const sideDummy = fixedPlayHands && dummyVisible && dummySeat && (dummyPosition === "left" || dummyPosition === "right") ? dummyPosition : undefined;
@@ -132,7 +160,7 @@ export function TableView({
 
   return (
     <section className={`table-panel${dealing ? " dealing" : ""}`} aria-label={ariaLabel}>
-      <div className={`table-surface ${revealed ? "hands-revealed" : ""} ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
+      <div ref={surfaceRef} className={`table-surface ${revealed ? "hands-revealed" : ""} ${phase === "play" && showCalls ? "calls-shown" : ""} ${sideDummy ? `dummy-on-${sideDummy}` : ""} ${handOnTop ? "hand-on-top" : ""}`} style={sideDummySpan ? { "--dummy-span": sideDummySpan } as CSSProperties : undefined}>
         {tableWatermark}
         <div className={`table-status${contract ? " has-contract" : ""}`}>
           {contract ? <button style={{ gridRow: `1 / span ${1 + (contract ? 1 : 0) + (matchScore ? 1 : 0)}` }} className="contract-badge" type="button" disabled={phase !== "play"} aria-expanded={showCalls} aria-label={`${showCalls ? "Hide" : "Show"} auction, ${game.auction.length} calls. Contract ${callLabel(`${contract.level}${contract.strain}` as Bid)} by ${seatNames[contract.declarer]}`} title={phase === "play" ? `${showCalls ? "Hide" : "Show"} the bidding` : undefined} onClick={onToggleCalls}>

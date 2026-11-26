@@ -98,7 +98,7 @@ export function Scorecard({ summary, hands, names = compassSideNames, passedOut 
   const lastLabel = last?.detail ? <>{contractText(last.detail.contract)} by {seatName(last.detail.contract.declarer)}</> : null;
   return <section className={`scorecard ${winner ? "scorecard-final" : ""}`} aria-label="Scorecard">
     {winner ? <header className="pad-result" role="status">
-      <h3>{names[winner].short} win the rubber {summary.gamesWon[winner]}–{summary.gamesWon[other(winner)]}</h3>
+      <h3>{names[winner].short} win the rubber <span className="pad-result-games">{summary.gamesWon[winner]}–{summary.gamesWon[other(winner)]}</span></h3>
       <p>Final score {names.NS.short} {summary.totals.NS} · {names.EW.short} {summary.totals.EW}{lead ? ` · ${names[lead].short} by ${Math.abs(summary.totals.NS - summary.totals.EW)} points` : " · level on points"}</p>
     </header> : <p className="pad-status">{status}</p>}
     <div className="pad" role="group" aria-label="Rubber scorecard">
