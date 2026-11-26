@@ -129,6 +129,15 @@ export async function listTables(baseUrl: string): Promise<TableSummary[]> {
   return (await response.json()) as TableSummary[];
 }
 
+/** One bot profile's current rating, as the public leaderboard lists it; `competitorId` is `[profileId, version]` as JSON. */
+export type LeaderboardRating = { competitorId: string; rating: number; deviation: number; sampleBoards: number; eligible: boolean };
+
+export async function listLeaderboard(baseUrl: string): Promise<LeaderboardRating[]> {
+  const response = await fetch(`${baseUrl}/api/benchmarks/leaderboard`);
+  if (!response.ok) throw new Error(`Listing the leaderboard failed (${response.status})`);
+  return ((await response.json()) as { ratings: LeaderboardRating[] }).ratings;
+}
+
 export async function createTable(baseUrl: string, input: { name: string; style: TableStyle; scoring: TableScoring; aggression?: Aggression; listed: boolean }): Promise<{ id: string } | { error: string }> {
   try {
     const response = await fetch(`${baseUrl}/api/tables`, {

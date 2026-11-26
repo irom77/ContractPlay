@@ -59,7 +59,8 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
   }, [data]);
   const connect = useMemo(() => data.kind === "table" ? fixedConnection(data.view) : undefined, [data]);
   const lobbyApi = useMemo(() => data.kind === "lobby"
-    ? { listTables: () => Promise.resolve(data.tables), createTable: () => Promise.resolve({ error: "preview" }), createSession: () => Promise.resolve({ error: "preview" }) }
+    ? { listTables: () => Promise.resolve(data.tables), createTable: () => Promise.resolve({ error: "preview" }), createSession: () => Promise.resolve({ error: "preview" }),
+        ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}) }
     : undefined, [data]);
   if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={previewAuth} onOpenTable={() => {}} onPlaySolo={() => {}} onRecentHands={() => {}} />;
   return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} {...(data.observer ? { observer: true as const } : {})} />;

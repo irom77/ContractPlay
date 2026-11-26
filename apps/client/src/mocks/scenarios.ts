@@ -4,6 +4,7 @@ import type { SoloPreview } from "../App.js";
 import type { PartnerResult } from "../partnerResults.js";
 import type { TableSummary, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
+import type { LeaderboardRating } from "../online/connection.js";
 import { handName } from "../handNames.js";
 import { botToAct, createTable, observerViewFor, reduce, rubberHandId, summaryOf, viewFor, type TableEvent, type TableState } from "@contractplay/table";
 
@@ -131,7 +132,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
   game.completedTricks.length >= tricks && game.currentTrick.length > 0 && seats.includes(game.currentActor);
 
 export type PreviewData =
-  | { kind: "lobby"; viewerName: string; tables: TableSummary[] }
+  | { kind: "lobby"; viewerName: string; tables: TableSummary[]; leaderboard?: LeaderboardRating[] }
   | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; ownCharacters?: readonly OwnCharacter[]; observer?: true }
   | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
@@ -146,7 +147,7 @@ const others = (seat: Seat) => SEATS.filter((s) => s !== seat);
 
 const onlineScreens: readonly PreviewScreen[] = [
   {
-    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats, conservative bots, and Careful Cora named at East) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked. Renaming here changes only the preview.",
+    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats, conservative bots, and Careful Cora named at East) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked; below them the Bot leaderboard panel starts open and says no bots are rated yet. Renaming here changes only the preview.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
       const open = { ...table("Beginners welcome", { west: "Chris" }, [], { east: "cora" }), aggression: "conservative" as const };
@@ -478,10 +479,13 @@ const laterScreens: readonly PreviewScreen[] = [
     build: () => newDealWithGina({ editingCharacter: GINA.id })
   },
   {
-    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats.",
+    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats. Below New duplicate session, the Bot leaderboard panel lists the top-rated bots, with provisional ratings marked, and links to the full leaderboard.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
-      return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(bid(dealt(benchmarkTable()), 3)), summaryOf(playing)] };
+      const rated = (id: string, rating: number, sampleBoards: number, eligible: boolean): LeaderboardRating =>
+        ({ competitorId: JSON.stringify([id, "v1"]), rating, deviation: eligible ? 80 : 160, sampleBoards, eligible });
+      return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(bid(dealt(benchmarkTable()), 3)), summaryOf(playing)],
+        leaderboard: [rated("will", 1462, 32, true), rated("kim", 1581, 32, true), rated("bea", 1530, 32, true), rated("sam", 1497, 16, false)] };
     }
   },
   {

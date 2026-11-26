@@ -7,8 +7,9 @@ import { boardSetFromPbn } from "../boardSet.js";
 import { castHasCustom, loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { BotCastFields } from "../table/BotCastFields.js";
 import { loadPartnerResults, opponentStats, partnerStats } from "../partnerResults.js";
-import { createSession as defaultCreateSession, createTable as defaultCreateTable, listTables as defaultListTables } from "./connection.js";
-import type { SessionBoardInput } from "./connection.js";
+import { createSession as defaultCreateSession, createTable as defaultCreateTable, listLeaderboard as defaultListLeaderboard, listTables as defaultListTables } from "./connection.js";
+import type { LeaderboardRating, SessionBoardInput } from "./connection.js";
+import { botCharacter } from "@contractplay/bots";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
 import { SignInTour } from "./SignInTour.js";
 import { currentAccount, requestMagicLink, signOut, updateDisplayName, type AccountSession } from "./auth.js";
@@ -36,6 +37,8 @@ export type LobbyApi = {
   listTables(baseUrl: string): Promise<TableSummary[]>;
   createTable: typeof defaultCreateTable;
   createSession: typeof defaultCreateSession;
+  /** The bot leaderboard panel's ratings; without it the panel shows that no bots are rated yet. */
+  listLeaderboard?(baseUrl: string): Promise<LeaderboardRating[]>;
 };
 
 export type LobbyProps = {
@@ -52,7 +55,7 @@ export type LobbyProps = {
   expandedPanels?: boolean;
 };
 
-const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession };
+const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession, listLeaderboard: defaultListLeaderboard };
 
 function createErrorText(error: string): string {
   if (error === "too-many-tables") return "There are too many open tables right now. Try again later.";
@@ -152,6 +155,43 @@ function PanelToggle({ title, open, controls, badge, onToggle }: { title: string
       <span>{title}</span>{badge}
     </button>
   </h2>;
+}
+
+const LEADERBOARD_ROWS = 5;
+
+/** The top of the bot benchmark leaderboard: open from the start, ranked bots first, with a link to the full page. */
+function BotLeaderboardPanel({ baseUrl, api }: { baseUrl: string; api: LobbyApi }) {
+  const [open, setOpen] = useState(true);
+  const [ratings, setRatings] = useState<LeaderboardRating[]>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!api.listLeaderboard) { setRatings([]); return; }
+    api.listLeaderboard(baseUrl).then((list) => { if (active) setRatings(list); }, () => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [api, baseUrl]);
+  const ranked = [...(ratings ?? [])].sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.rating - a.rating).slice(0, LEADERBOARD_ROWS);
+  const nameOf = (competitorId: string) => {
+    try { const [id, version] = JSON.parse(competitorId) as [string, string]; return `${botCharacter(id)?.name ?? id} · ${version}`; }
+    catch { return competitorId; }
+  };
+  return <section className={`lobby-panel collapsible-panel${open ? " open" : ""}`} aria-label="Bot leaderboard">
+    <div className="section-heading">
+      <PanelToggle title="Bot leaderboard" open={open} controls="lobby-leaderboard" onToggle={() => setOpen((value) => !value)} />
+    </div>
+    {open ? <div id="lobby-leaderboard" className="collapsible-body">
+      {failed ? <p className="quiet-copy">Couldn't load the bot leaderboard right now.</p>
+        : ratings === undefined ? <p className="quiet-copy">Loading ratings…</p>
+          : ranked.length === 0 ? <p className="quiet-copy">No bots are rated yet. Bots play duplicate benchmark rounds on the server; ratings appear here once a round is complete.</p>
+            : <ol className="lobby-leaderboard">{ranked.map((rating, index) => <li key={rating.competitorId}>
+              <span className="lobby-leaderboard-rank" aria-hidden="true">{index + 1}</span>
+              <span className="lobby-leaderboard-name">{nameOf(rating.competitorId)}</span>
+              <span className="lobby-leaderboard-rating">{Math.round(rating.rating)}</span>
+              <span className="quiet-copy">{rating.sampleBoards} boards{rating.eligible ? "" : " · provisional"}</span>
+            </li>)}</ol>}
+      <button className="secondary-button" type="button" onClick={() => { window.location.hash = "#/leaderboard"; }}>Full leaderboard</button>
+    </div> : null}
+  </section>;
 }
 
 /** The online name form: saves the display name (keeping the device secret) and hands back the identity. */
@@ -350,7 +390,6 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
-            <a className="secondary-button" href="/#/leaderboard">Bot leaderboard</a>
             <AccountName name={account.displayName} onRename={onRename} /><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
           </span>
@@ -439,6 +478,7 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
           <button className="primary-button" type="submit" disabled={creating}>Create session</button>
           </div> : null}
         </form>
+        <BotLeaderboardPanel baseUrl={baseUrl} api={api} />
         {alert ? <p className="error-message" role="alert">{alert}</p> : null}
       </section>
     </main>

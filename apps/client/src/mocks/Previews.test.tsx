@@ -22,6 +22,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(session).getByRole("img", { name: "Experimental" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Recent hands" })).toBeTruthy();
     expect(screen.getByText("Signed in as Alex")).toBeTruthy();
+    // The bot leaderboard panel starts open; with no rated bots it says so instead of an empty list.
+    expect(await screen.findByText(/No bots are rated yet/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Bot leaderboard" })).toBeNull();
     expect(screen.getByRole("button", { name: "Change name" })).toBeTruthy();
     const user = userEvent.setup();
     await user.click(tables);
@@ -346,6 +349,17 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByText("Bot benchmark")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Watch Benchmark · round 12" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Watch Friday club" })).toBeNull();
+    // The bot leaderboard sits open below New duplicate session: ranked bots first by rating, then provisional ones.
+    const board = screen.getByRole("region", { name: "Bot leaderboard" });
+    const session = screen.getByRole("form", { name: "New duplicate session" });
+    expect(session.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(board).getByRole("button", { name: "Bot leaderboard", expanded: true })).toBeTruthy();
+    expect(within(board).getAllByRole("listitem").map((item) => item.querySelector(".lobby-leaderboard-name")?.textContent))
+      .toEqual(["Sharp Kim · v1", "Bold Bea · v1", "Weekly Will · v1", "Steady Sam · v1"]);
+    expect(within(board).getByText("16 boards · provisional")).toBeTruthy();
+    await user.click(within(board).getByRole("button", { name: "Full leaderboard" }));
+    expect(window.location.hash).toBe("#/leaderboard");
+    window.location.hash = "";
   },
   "benchmark-watch": () => {
     const table = screen.getByRole("region", { name: "Benchmark match Benchmark · round 12, read-only observer" });
