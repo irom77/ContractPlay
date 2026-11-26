@@ -349,7 +349,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
   },
   "benchmark-watch": () => {
     const table = screen.getByRole("region", { name: "Benchmark match Benchmark · round 12, read-only observer" });
-    expect(screen.getByText("Watching bot benchmark · read-only")).toBeTruthy();
+    // The observer note sits under the top-left controls, clear of the status card in the top-right corner.
+    expect(screen.getByText("Watching bot benchmark · read-only").closest(".table-tools")).toBeTruthy();
+    expect(document.querySelector(".session-progress")).toBeNull();
     expect(within(table).getByRole("button", { name: "Back to open tables" })).toBeTruthy();
     // Hands stay concealed while the board is in play, and there are no gameplay controls.
     expect(table.querySelectorAll(".table-card[aria-label*=' of ']").length).toBeLessThan(16);

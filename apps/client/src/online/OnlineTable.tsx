@@ -765,7 +765,8 @@ function ObserverTable({ view, onLeave, status }: { view: TableViewData; onLeave
         matchScore={view.totals} revealedHands={view.revealed}
         tools={<><button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button>
           <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
-        overlay={<><p className="session-progress" role="status">Watching bot benchmark · read-only</p>{statusLine}</>} />
+        toolsNote={<p className="observer-note" role="status">Watching bot benchmark · read-only</p>}
+        overlay={statusLine} />
     </div>
   </main>;
 }

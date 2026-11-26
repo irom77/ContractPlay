@@ -104,4 +104,27 @@ describe("BenchmarkAdmin", () => {
     expect(screen.queryByText(/retired profile/)).toBeNull();
     expect(fetcher).toHaveBeenCalledWith(expect.stringContaining("/profiles/older-profile/v1"), expect.objectContaining({ credentials: "same-origin" }));
   });
+
+  it("says when a saved profile version already exists instead of claiming it was added", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const path = input.toString();
+      if (init?.method === "POST") { calls += 1; return calls === 1 ? Response.json({}, { status: 201 }) : calls === 2 ? Response.json({}, { status: 200 }) : Response.json({}, { status: 409 }); }
+      return Response.json(path.endsWith("/profiles") ? { profiles: [] } : path.endsWith("/cohorts") ? { cohorts: [] } : path.endsWith("/jobs") ? { jobs: [] } : { imports: [] });
+    }));
+    render(<BenchmarkAdmin baseUrl="https://x.test" />);
+    await screen.findByRole("heading", { name: "Benchmark operations" });
+    const user = userEvent.setup();
+    const save = async () => {
+      await user.click(screen.getByRole("button", { name: "Add profile" }));
+      await user.click(screen.getByRole("button", { name: "Save profile" }));
+    };
+    await save();
+    expect(await screen.findByText("Profile version saved.")).toBeTruthy();
+    await save();
+    expect(await screen.findByText(/A beginner · normal profile v1 already exists; nothing was added/)).toBeTruthy();
+    expect(screen.queryByText("Profile version saved.")).toBeNull();
+    await save();
+    expect((await screen.findByRole("alert")).textContent).toContain("already exists with other settings. Save it under a new version.");
+  });
 });

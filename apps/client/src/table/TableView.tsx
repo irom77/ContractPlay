@@ -71,6 +71,7 @@ export type TableViewProps = {
   /** A new hand has just been dealt: a deck is shuffled and dealt in the middle, and the cards and calls appear once it is done. */
   dealing?: boolean | undefined;
   tools?: React.ReactNode;               // menu + fullscreen (top-left)
+  toolsNote?: React.ReactNode;           // a short note under the tools, clear of the status card
   overlay?: React.ReactNode;             // score panel, review/history controls, hint controls, messages
 };
 
@@ -83,7 +84,7 @@ const tableWatermark = <svg className="table-watermark" viewBox="0 0 240 240" ar
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, showBacksAtBottom = false, exposedSeat,
-  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, dealing = false, tools, overlay
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, dealing = false, tools, toolsNote, overlay
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
   const phase = game.phase;
@@ -152,6 +153,7 @@ export function TableView({
 
         <div className="table-tools">
           <div className="table-tools-row">{tools}</div>
+          {toolsNote}
         </div>
 
         {seats.map((seat) => {

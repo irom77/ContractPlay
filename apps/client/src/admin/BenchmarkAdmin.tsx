@@ -49,10 +49,14 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function request(path: string, method = "POST", body?: unknown) {
+    const response = await send(path, method, body);
+    return response.status === 204 ? undefined : response.json();
+  }
+  async function send(path: string, method = "POST", body?: unknown) {
     const response = await fetch(`${api}${prefix}${path}`, { method, credentials: "same-origin", ...(body === undefined ? {} : { headers: jsonHeaders, body: JSON.stringify(body) }) });
     if (response.status === 401 || response.status === 403) { setAuthorized(false); throw new Error(response.status === 401 ? "Sign in with an allowlisted benchmark administrator account." : "Your account is not an allowlisted benchmark administrator."); }
     if (!response.ok) throw new Error(`Request failed (${response.status})`);
-    return response.status === 204 ? undefined : response.json();
+    return response;
   }
   async function mutate(work: () => Promise<unknown>, message: string | ((value: unknown) => string)) {
     setBusy(true); setError(""); setNotice("");
@@ -66,7 +70,15 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
     if (await mutate(() => request("/jobs", "POST", { id, cohortId }), message)) pendingJobIds.current.delete(operationKey);
   }
   async function addProfile() {
-    await mutate(() => request("/profiles", "POST", profileDraft), "Profile version saved.");
+    const { skill, aggression, version } = profileDraft;
+    await mutate(async () => {
+      try { return (await send("/profiles", "POST", profileDraft)).status; }
+      catch (cause) {
+        if (cause instanceof Error && cause.message === "Request failed (409)") throw new Error(`A ${skill} · ${aggression} profile ${version} already exists with other settings. Save it under a new version.`);
+        throw cause;
+      }
+    },
+      (status) => status === 201 ? "Profile version saved." : `A ${skill} · ${aggression} profile ${version} already exists; nothing was added. Change the skill or aggressiveness, or use a new version.`);
     setProfileForm(false);
   }
   async function addCohort() {
