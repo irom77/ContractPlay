@@ -367,6 +367,8 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByText("Watching bot benchmark · read-only").closest(".table-tools")).toBeTruthy();
     expect(document.querySelector(".session-progress")).toBeNull();
     expect(within(table).getByRole("button", { name: "Back to open tables" })).toBeTruthy();
+    // A reload control sits with the table tools, apart from any Take back.
+    expect(within(table).getByRole("button", { name: "Reload page" }).closest(".table-tools")).toBeTruthy();
     // Hands stay concealed while the board is in play, and there are no gameplay controls.
     expect(table.querySelectorAll(".table-card[aria-label*=' of ']").length).toBeLessThan(16);
     expect(screen.queryByRole("button", { name: /claim/i })).toBeNull();

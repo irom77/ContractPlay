@@ -39,6 +39,7 @@ import { boardLabel, boardSetFromLin, boardSetFromPbn, boardSetFromPbnAndUsebio,
 import { createClientPersistenceAdapter } from "./platformPersistence.js";
 import { isNativeClient, openHandFiles, savePbnFile } from "./nativeFiles.js";
 import { FullscreenButton, useFullscreen } from "./table/FullscreenButton.js";
+import { ReloadButton } from "./table/ReloadButton.js";
 import { createHandName, savedHandName } from "./handNames.js";
 import { aggressionOptions, cardLabel, claimRejectedText, claimText, compactCallLabel, pendingClaimText, contractText, isCallAvailable, partnerOf, samePartnership, seatNames, seats } from "./table/labels.js";
 import { TableView } from "./table/TableView.js";
@@ -936,7 +937,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
       <div className="recent-actions"><button type="button" onClick={() => resumeBoardSet(entry)}>Resume</button><button type="button" onClick={() => resumeBoardSet(entry, true)}>Restart</button><button type="button" onClick={() => { void exportBoardSet(entry); }}>Export backup</button><button type="button" onClick={() => deleteBoardSet(entry)}>Delete</button></div>
     </li>)}</ul></> : null}
   </section>;
-  const fullscreenButton = <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} />;
+  const fullscreenButton = <><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /><ReloadButton /></>;
   const version = <span className="header-version">Version {__CONTRACTPLAY_VERSION__}</span>;
   const dialogTitles: Record<MenuDialog, string> = { settings: "Settings", rubber: "Scores", hands: "Recent hands", about: "ContractPlay" };
   // The scorecard calls the user's partnership "We" against bots; otherwise the compass sides.

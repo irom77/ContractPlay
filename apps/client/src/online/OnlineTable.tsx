@@ -7,6 +7,7 @@ import { createHandName, savedHandName } from "../handNames.js";
 import { retainHandHistory } from "../handHistoryRetention.js";
 import { GameMenu, type GameMenuItem } from "../table/GameMenu.js";
 import { FullscreenButton, useFullscreen } from "../table/FullscreenButton.js";
+import { ReloadButton } from "../table/ReloadButton.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { bottomSeatFor } from "../table/bottomSeat.js";
@@ -629,7 +630,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             hintedCards={visiblePlayHint?.cardIds}
             explainCall={explainCallFor(game)}
             matchScore={score}
-            tools={<><GameMenu items={menuItems} defaultOpen={menuOpen} /><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
+            tools={<><GameMenu items={menuItems} defaultOpen={menuOpen} /><span className="table-tools-icons"><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /><ReloadButton /></span></>}
             overlay={<>
               {view.session ? <p className="session-progress" role="status">{sessionLabel(view.session)}</p> : null}
               {claimPanel}
@@ -692,7 +693,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             botSeats={botSeatsOf(view.seats)}
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat} onHandToBot={undefined} seat={seat} />}
             matchScore={score}
-            tools={<><GameMenu items={resultMenu} /><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
+            tools={<><GameMenu items={resultMenu} /><span className="table-tools-icons"><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /><ReloadButton /></span></>}
             overlay={<>
               {resultClosed ? null : <section className={`score-panel result-panel ${rubberSummary ? "scorecard-panel" : ""}`} aria-label="Hand result">
                 <HandResultSummary game={game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />
@@ -764,7 +765,7 @@ function ObserverTable({ view, onLeave, status }: { view: TableViewData; onLeave
         seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={false} onHandToBot={undefined} seat={seat} />}
         matchScore={view.totals} revealedHands={view.revealed}
         tools={<><button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button>
-          <FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /></>}
+          <span className="table-tools-icons"><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /><ReloadButton /></span></>}
         toolsNote={<p className="observer-note" role="status">Watching bot benchmark · read-only</p>}
         overlay={statusLine} />
     </div>

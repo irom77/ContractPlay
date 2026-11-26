@@ -3,6 +3,7 @@ import type { Seat } from "@contractplay/core";
 import type { SeatInfo, TableSummary } from "@contractplay/protocol";
 import { botName, seatNames, seats } from "../table/labels.js";
 import { BenchmarkAdmin } from "./BenchmarkAdmin.js";
+import { ReloadButton } from "../table/ReloadButton.js";
 
 type AdminTable = TableSummary & { listed: boolean };
 
@@ -59,7 +60,7 @@ export function Admin({ baseUrl }: { baseUrl: string }) {
       <section className="empty-table lobby admin-page" aria-label="Online table administration">
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay admin</span>
-          <a className="secondary-button admin-back" href="/#/online">Back to lobby</a>
+          <span className="table-tools-row"><a className="secondary-button admin-back" href="/#/online">Back to lobby</a><ReloadButton /></span>
         </div>
         <section className="lobby-panel admin-panel">
           <div className="section-heading">

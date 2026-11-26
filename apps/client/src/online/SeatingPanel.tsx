@@ -5,6 +5,7 @@ import type { OwnCharacter } from "@contractplay/persistence";
 import { ContractOutcome } from "../table/ResultSummary.js";
 import { botCharacter } from "@contractplay/core";
 import { aggressionNames, botName, claimText, contractText, onlineBotOptions, seatNames, seats, setBotFor, skillNames, traitSummary } from "../table/labels.js";
+import { ReloadButton } from "../table/ReloadButton.js";
 
 export type Outgoing = Exclude<ClientMessage, { type: "hello" }>;
 
@@ -81,6 +82,7 @@ export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, sco
           <span className="table-tools-row">
             <button className="secondary-button" type="button" onClick={onCopy}>Copy table link</button>
             {backButton}
+            <ReloadButton />
           </span>
         </div>
         <div className="lobby-panel">

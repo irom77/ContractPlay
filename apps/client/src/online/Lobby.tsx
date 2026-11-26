@@ -13,6 +13,7 @@ import { botCharacter } from "@contractplay/bots";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
 import { SignInTour } from "./SignInTour.js";
 import { currentAccount, requestMagicLink, signOut, updateDisplayName, type AccountSession } from "./auth.js";
+import { ReloadButton } from "../table/ReloadButton.js";
 
 import { syncOnlineHands } from "./handHistory.js";
 import { syncBotResults } from "./botResultsSync.js";
@@ -392,6 +393,7 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
           <span className="table-tools-row">
             <AccountName name={account.displayName} onRename={onRename} /><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
+            <ReloadButton />
           </span>
         </div>
         <section className={`lobby-panel collapsible-panel${tablesOpen ? " open" : ""}`} aria-label="Open tables">
