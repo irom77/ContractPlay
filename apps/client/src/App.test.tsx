@@ -1410,7 +1410,8 @@ describe("bridge table", () => {
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet.records[0].field).toEqual([
       { nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false }
     ]));
-    expect(JSON.stringify(JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet).match(/12|14/)).toBeNull();
+    // The board set's own id is random and may contain the digits by chance; the pair numbers must not be stored.
+    expect(JSON.stringify({ ...JSON.parse(window.localStorage.getItem("contractplay.solo")!).boardSet, id: undefined }).match(/12|14/)).toBeNull();
   });
 
   it("imports a real BridgeWebs archive through the browser file picker", async () => {

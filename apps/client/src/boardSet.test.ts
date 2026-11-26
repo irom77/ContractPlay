@@ -18,7 +18,8 @@ describe("boardSetFromPbn", () => {
     const xml = "<USEBIO><SESSION><BOARD><BOARD_NUMBER>7</BOARD_NUMBER><TRAVELLER_LINE><NS_PAIR_NUMBER>12</NS_PAIR_NUMBER><EW_PAIR_NUMBER>14</EW_PAIR_NUMBER><CONTRACT>4S</CONTRACT><PLAYED_BY>N</PLAYED_BY><TRICKS>10</TRICKS><SCORE>420</SCORE></TRAVELLER_LINE></BOARD></SESSION></USEBIO>";
     const { set, diagnostics } = boardSetFromPbnAndUsebio(pbn, xml);
     expect(set?.records[0]?.field).toEqual([{ nsScore: 420, contract: "4S", declarer: "north", tricks: 10, multiplicity: 1, artificial: false }]);
-    expect(JSON.stringify(set)).not.toMatch(/12|14/);
+    // The set's own id is random and may contain the digits by chance; the pair numbers must not appear anywhere else.
+    expect(JSON.stringify({ ...set, id: undefined })).not.toMatch(/12|14/);
     expect(diagnostics).toEqual([]);
   });
 
