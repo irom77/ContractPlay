@@ -27,6 +27,17 @@ From the repository root, run `pnpm build`, then `node apps/server/scripts/calib
 pnpm --filter @contractplay/server test src/benchmark-rating-calibration.test.ts
 ```
 
+## Live review, 2026-11-27
+
+We reviewed the production cohort after its first runs. It had played 38 sessions of 8 boards (304 boards, 608 table results) between 2026-11-26 15:53 and 2026-11-27 10:38 UTC. The cohort has four SAYC profiles: Kim (Expert), Sam (Advanced, conservative), Bea (Advanced, aggressive) and Will (Intermediate). All results came from the public result routes.
+
+- **Ratings are computed as designed.** Replaying all 38 sessions through the production IMP table and `ratingPeriodUpdate`, with the `scoreSession` and `rateSession` attribution, reproduces every live rating and deviation exactly: 152 snapshots, zero difference.
+- **The rotation is fair.** Every session seats the two partnerships in opposite directions at its two tables. The 12 seatings each ran three or four times, which is three full rotations plus two sessions. Each profile has 18–20 appearances in each seat. It has 28 with one partner and 24 with each of the other two. The uneven count comes from the two extra sessions, not from the rotation.
+- **The ordering follows skill.** Kim averages +0.76 ± 0.62 cross-IMPs a board (95% interval over sessions), Bea +0.24 ± 0.66, Sam +0.14 ± 0.66 and Will −1.14 ± 0.55. Their ratings, in the same order, are 1532, 1500, 1508 and 1460, each with a deviation of 76. Only Will is separated from the others beyond noise. Sam and Bea have swapped places over time, and the three Advanced and Expert profiles overlap within their deviations.
+- **Live margins are much smaller than in calibration.** The absolute session margin has a median of 1.125 cross-IMPs a board, a 75th percentile of 2.375, a 90th percentile of 4.0 and a maximum of 4.5. The fixture's figures were roughly 4, 5, 6.25 and 9. Both tables reached the same contract on 255 of 304 boards (84%), and the same score on 83. The fixture spanned all twelve profiles from Beginner to Expert, while this cohort spans only Intermediate to Expert. At the live upper quartile, the 10.5 scale gives a score of 0.627 rather than the intended 0.75. A margin of 1 IMP a board is worth about 38 rating points.
+
+The scale has no bias: it keeps the ordering and is symmetric. With close cohorts it compresses the spread and makes deviations shrink slowly. The 72-point gap between Kim and Will is smaller than twice either deviation. Fitting the same rule to this cohort's upper quartile would give a scale of 5.0. That would need a new transform version, and old ratings would not compare with new ones. Whether to change it is a product decision. We leave `cross-imp-per-board-10.5-v1` in place. The 2/1 style has not run live yet.
+
 ## Replay and retention boundary
 
 An imported PBN upload is reduced to board facts; the source file and traveller data are never retained. A job snapshots the imported/generated source kind and copies parsed board facts into its own board rows, so later removal of the reusable import set does not affect a completed replay. Imported replays remain private to authenticated benchmark administrators by default; generated completed replays are available through the public result route. Replay payloads are compacted after 90 days or when they fall outside the newest 10,000 board records, whichever comes first. Board scores, session summaries, diagnostics, rating periods, and rating history remain retained.
