@@ -224,7 +224,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     const menu = screen.getByRole("group", { name: "Game menu" });
     expect(menu.closest("details")!.open).toBe(true);
     expect(within(menu).getAllByRole("button").map((button) => button.textContent)).toEqual(
-      ["Online tables", "Claim", "Take back", "Auto play this hand", "Settings", "Scores", "Recent hands", "About ContractPlay", "Deal a new hand"]);
+      ["Online tables", "Claim", "Take back", "Auto play this hand", "Settings", "Bid with one tap", "Scores", "Recent hands", "About ContractPlay", "Deal a new hand"]);
     // No Take back or Redo buttons on the table itself.
     expect(document.querySelector(".history-controls")).toBeNull();
   },
@@ -388,6 +388,13 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(table.querySelectorAll(".table-card[aria-label*=' of ']").length).toBeLessThan(16);
     expect(screen.queryByRole("button", { name: /claim/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /menu/i })).toBeNull();
+  },
+  "auction-confirm": () => {
+    // 2♠ is picked but not made: it is ringed, its meaning shows under the box, and Bid 2♠ makes it.
+    expect(screen.getByRole("button", { name: "2 spades" }).classList.contains("selected-bid")).toBe(true);
+    expect(document.querySelector(".call-preview [role=status]")?.textContent).toMatch(/^2♠ \S/);
+    expect(screen.getByRole("button", { name: "Confirm 2♠" }).textContent).toBe("Bid 2♠");
+    expect(screen.getByText("Your call")).toBeTruthy();
   }
 };
 

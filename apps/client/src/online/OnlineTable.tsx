@@ -10,6 +10,7 @@ import { FullscreenButton, useFullscreen } from "../table/FullscreenButton.js";
 import { ReloadButton } from "../table/ReloadButton.js";
 import { FORCED_PLAY_MS, forcedPlayEnabled } from "../table/forcedPlay.js";
 import { browserStorage, handLayoutMenuLabel, loadHandLayout, saveHandLayout, type HandLayout } from "../table/handLayout.js";
+import { confirmCallsMenuItem, loadConfirmCalls, saveConfirmCalls } from "../table/confirmCalls.js";
 import { queuedPlay, queueStillValid, type QueuedCard } from "../table/queuedCard.js";
 import { bottomSeatFor } from "../table/bottomSeat.js";
 import { TableView } from "../table/TableView.js";
@@ -54,6 +55,8 @@ export type OnlineTableProps = {
   rubberOpen?: boolean;
   /** Starts with this card queued (the UI previews show a queued card this way). */
   initialQueued?: QueuedCard;
+  /** Starts with this call picked in the bidding box, its meaning shown (the UI previews show a picked call this way). */
+  initialSelectedCall?: Bid;
 };
 
 function refusalText(reason: RefusalReason): string | undefined {
@@ -212,7 +215,7 @@ export function OnlineTable({ storage, onLeave, ...props }: OnlineTableProps) {
   return <ConnectedTable {...props} storage={storage} onLeave={onLeave} {...(props.observer ? {} : { identity: account ?? identity! })} observer={props.observer === true} />;
 }
 
-function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, observer = false, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued }: Omit<OnlineTableProps, "observer"> & { identity?: Identity | AccountSession; observer?: boolean }) {
+function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, identity, observer = false, connect = defaultConnect, menuOpen = false, rubberOpen = false, initialQueued, initialSelectedCall }: Omit<OnlineTableProps, "observer"> & { identity?: Identity | AccountSession; observer?: boolean }) {
   const accountIdentity = identity && "playerId" in identity ? identity : undefined;
   const playerId = accountIdentity?.playerId;
   const [ownCharacters, setOwnCharacters] = useState<readonly OwnCharacter[]>(() => charactersFor(loadOwnCharacters(storage), playerId));
@@ -255,6 +258,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const [forcedPlayOn] = useState(() => forcedPlayEnabled(storage));
   const [handLayout, setHandLayout] = useState(() => loadHandLayout(storage));
   const switchHandLayout = () => { const next: HandLayout = handLayout === "fan" ? "line" : "fan"; setHandLayout(next); saveHandLayout(storage, next); };
+  const [confirmCallsOn, setConfirmCallsOn] = useState(() => loadConfirmCalls(storage));
+  const confirmItem = confirmCallsMenuItem(confirmCallsOn, () => { const next = !confirmCallsOn; setConfirmCallsOn(next); saveConfirmCalls(storage, next); });
   const handLayoutItem: GameMenuItem = { id: "hand-layout", label: handLayoutMenuLabel(handLayout), onSelect: switchHandLayout,
     title: handLayout === "fan" ? "Lay every hand flat in a row, remembered in this browser" : "Hold every hand in a curved fan, remembered in this browser" };
   // A take-back is on its way; the view it brings is remembered so a forced card there waits for the player.
@@ -589,6 +594,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
       { id: "hands", label: "Recent hands", onSelect: onRecentHands, title: "Review recent finished hands; you keep your seat" },
       seatingItem,
       handLayoutItem,
+      confirmItem,
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
         title: "Undo your last call or card, and any bot play since, to choose again",
@@ -638,6 +644,10 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
             seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={view.host === seat}
               onHandToBot={canHandToBot(seat) ? () => send({ type: "handToBot", seat }) : undefined} seat={seat} />}
             onBid={(bid) => act({ type: "bid", seat: game.currentActor, bid })}
+            confirmCalls={confirmCallsOn ? {
+              meaning: (bid: Bid) => explainBid([...game.auction, { seat: game.currentActor, bid }], game.auction.length, view.style, "expert"),
+              initial: initialSelectedCall
+            } : undefined}
             onPlay={(seat, card) => act({ type: "play", seat, card })}
             hintedBid={visibleBidHint?.bid}
             hintedCards={visiblePlayHint?.cardIds}

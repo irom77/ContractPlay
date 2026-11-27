@@ -133,7 +133,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
 
 export type PreviewData =
   | { kind: "lobby"; viewerName: string; tables: LobbyTable[]; leaderboard?: LeaderboardRating[] }
-  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; ownCharacters?: readonly OwnCharacter[]; observer?: true }
+  | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; selectedCall?: Bid; ownCharacters?: readonly OwnCharacter[]; observer?: true }
   | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
 
@@ -202,7 +202,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, recent hands, seating (read-only until the hand ends, with Back to the table), take back your last card, lay the cards in a line instead of a fan, cancel the hand, or leave.",
+    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, recent hands, seating (read-only until the hand ends, with Back to the table), take back your last card, lay the cards in a line instead of a fan, bid with one tap instead of confirming each call, cancel the hand, or leave.",
     build: () => ({ ...playUntilView({ east: "Alex" }, "east", moment(["east"], 2)), menuOpen: true })
   },
   {
@@ -408,7 +408,7 @@ export const soloScreens: readonly PreviewScreen[] = [
     build: () => solo(soloGame(8, (game) => game.completedTricks.length >= 6 && game.currentTrick.length === 0 && ["north", "south"].includes(game.currentActor)), { userSeat: "north", claiming: true })
   },
   {
-    id: "solo-menu", title: "Solo: game menu", detail: "Mid-hand with the menu open, as at an online table: claim, take back, auto play, then settings, the rubber, recent hands, and dealing again.",
+    id: "solo-menu", title: "Solo: game menu", detail: "Mid-hand with the menu open, as at an online table: claim, take back, auto play, then settings, one-tap bidding, the rubber, recent hands, and dealing again.",
     build: () => solo(soloGame(8, moment(["north", "south"], 2)), { userSeat: "north", menuOpen: true })
   },
   {
@@ -493,6 +493,10 @@ const laterScreens: readonly PreviewScreen[] = [
   {
     id: "benchmark-watch", title: "Watching a bot benchmark table", detail: "A read-only observer at a bot benchmark table mid-play: the auction and the tricks so far, every hand face-down until the duplicate board is complete, and no seating, claim, or menu controls.",
     build: () => ({ kind: "table", viewerName: "Alex", view: observerViewFor(playUntil(bid(dealt(benchmarkTable()), 8), moment(["east", "west"], 3))), observer: true })
+  },
+  {
+    id: "auction-confirm", title: "Auction: checking a call before making it", detail: "Partner opened 1♠ and East passed; you tapped 2♠ once: it is ringed, what it tells partner shows under the bidding box, and Bid 2♠ (or a second tap) makes it. Bid with one tap in the game menu turns this off.",
+    build: () => ({ ...view(bid(dealt(table("Friday club", you, others("south"))), 2), "south", you), selectedCall: "2spades" })
   }
 ];
 
@@ -513,7 +517,7 @@ export const previewScreens: readonly PreviewScreen[] = [...onlineScreens, ...so
  */
 export const previewCategories: readonly { name: string; ids: readonly string[] }[] = [
   { name: "Lobby, seating & sign-in", ids: ["lobby", "seating", "solo-setup", "solo-characters", "email-sign-in", "email-link-sent", "benchmark-lobby"] },
-  { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction"] },
+  { name: "Bidding", ids: ["auction", "auction-hints", "solo-auction", "auction-confirm"] },
   { name: "Card play", ids: ["declaring", "bot-declares", "defending-left", "defending-right", "queued", "solo-declaring", "solo-bot-declares", "solo-replayed-deal", "benchmark-watch"] },
   { name: "Menus, claims & auto play", ids: ["game-menu", "auto-play", "claim-answer", "solo-auto-play", "solo-claim", "solo-menu", "solo-settings", "solo-hands"] },
   { name: "Results & scoring", ids: ["result", "rubber-score", "rubber-won", "duplicate-session", "solo-result", "solo-rubber-won", "solo-field-result", "solo-replay-result", "online-replay-result", "result-waiting"] },

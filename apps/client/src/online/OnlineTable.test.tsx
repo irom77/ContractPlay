@@ -2,6 +2,7 @@
 import { Profiler } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
+import { explainBid } from "@contractplay/bots";
 import { applyAction, claimSeatFor, createDeck, createGameState, deal, legalCards, TRAIT_PRESETS, type GameAction, type GameState, type HandRecord, type Seat } from "@contractplay/core";
 import { loadSoloData, saveSoloData, type StorageLike } from "@contractplay/persistence";
 import type { ClientMessage, PublicGame, RefusalReason, SeatInfo, TableView } from "@contractplay/protocol";
@@ -379,6 +380,12 @@ describe("your own characters", () => {
   });
 });
 
+/** Picks a call in the bidding box and confirms it, as Confirm each call (on by default) asks. */
+async function makeCall(user: { click(element: Element): Promise<void> }, name: string) {
+  await user.click(screen.getByRole("button", { name }));
+  await user.click(screen.getByRole("button", { name: /^Confirm / }));
+}
+
 describe("OnlineTable play", () => {
   const inHand = (game: GameState, visible: readonly Seat[], overrides: Partial<TableView> = {}) =>
     tableView({ handInProgress: true, handNumber: 1, revision: 12, yourSeat: "north", seats: seatedNorth, game: publicGame(game, visible), ...overrides });
@@ -388,7 +395,7 @@ describe("OnlineTable play", () => {
     const service = setup();
     const view = inHand(newGame(), ["north"]);
     service.push(view);
-    await user.click(screen.getByRole("button", { name: "1 spades" }));
+    await makeCall(user, "1 spades");
     expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 12, action: { type: "bid", seat: "north", bid: "1spades" } }]);
     expect((screen.getByRole("button", { name: "1 spades" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Pass" }) as HTMLButtonElement).disabled).toBe(true);
@@ -399,12 +406,34 @@ describe("OnlineTable play", () => {
     expect((screen.getByRole("button", { name: "1 spades" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
+  it("shows what a picked call means and sends it only once confirmed", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    service.push(inHand(newGame(), ["north"]));
+    await user.click(screen.getByRole("button", { name: "1 notrump" }));
+    expect(service.sent).toEqual([]);
+    expect(document.querySelector(".call-preview [role=status]")?.textContent).toContain(explainBid([{ seat: "north", bid: "1notrump" }], 0, "SAYC", "expert"));
+    await user.click(screen.getByRole("button", { name: "Confirm 1NT" }));
+    expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 12, action: { type: "bid", seat: "north", bid: "1notrump" } }]);
+  });
+
+  it("switches to one-tap bidding from the game menu and remembers it", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    service.push(inHand(newGame(), ["north"]));
+    await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+    await user.click(screen.getByRole("button", { name: "Bid with one tap" }));
+    expect(service.storage.getItem("contractplay.confirmCalls")).toBe("off");
+    await user.click(screen.getByRole("button", { name: "1 spades" }));
+    expect(service.sent).toEqual([{ type: "act", handNumber: 1, revision: 12, action: { type: "bid", seat: "north", bid: "1spades" } }]);
+  });
+
   it("re-enables input after a refusal", async () => {
     const user = userEvent.setup();
     const service = setup();
     const view = inHand(newGame(), ["north"]);
     service.push(view);
-    await user.click(screen.getByRole("button", { name: "Pass" }));
+    await makeCall(user, "Pass");
     service.refuse("stale", view);
     expect((screen.getByRole("button", { name: "Pass" }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -598,7 +627,7 @@ describe("OnlineTable play", () => {
     const service = setup();
     const view = inHand(newGame(), ["north"]);
     service.push(view);
-    await user.click(screen.getByRole("button", { name: "Pass" }));
+    await makeCall(user, "Pass");
     service.status("reconnecting");
     service.status("open");
     expect((screen.getByRole("button", { name: "Pass" }) as HTMLButtonElement).disabled).toBe(true);
