@@ -660,11 +660,11 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
    stepped to fill that box (a hand of four suits is 4 card widths, 3 gaps, and 9 steps: 42u plus 9 steps):
    - the hints corner (bottom right, or bottom left when dummy is on the right) takes --hint-room beside the bottom hand;
    - a dummy at a side seat is a column of 8.2u cards stepped 2.7u, as wide as its longest suit (--dummy-span);
-   - the tools corner (top left) stacks its buttons in one column, --tools-room wide;
+   - the tools corner (top left) has the menu above full screen and Reload side by side: two buttons, --tools-room wide;
    - the status corner (top right) is capped at 25u wide (longer status text wraps), so a hand along the top ends 28u in. */
 .online-table .table-surface {
   --hint-room: max(120px, calc(17 * var(--u)));
-  --tools-room: calc(max(34px, calc(5.4 * var(--u))) + 4 * var(--u));
+  --tools-room: calc(2 * max(34px, calc(5.4 * var(--u))) + 5 * var(--u));
   --side-dummy: calc((2 + 8.2 * .7 + 1.5) * var(--u) + (var(--dummy-span, 1) - 1) * 2.7 * var(--u));
   --bottom-left: var(--hint-room); --bottom-right: var(--hint-room);
 }
