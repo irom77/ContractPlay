@@ -365,9 +365,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(session.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(board).getByRole("button", { name: "Bot leaderboard", expanded: true })).toBeTruthy();
     expect(within(board).getAllByRole("listitem").map((item) => item.querySelector(".lobby-leaderboard-name")?.textContent))
-      .toEqual(["Sharp Kim · v1", "Bold Bea · v1", "Weekly Will · v1", "Steady Sam · v1"]);
+      .toEqual(["Sharp Kim · v1", "Bold Bea · v1", "Weekly Will · v1", "Steady Sam · v1-2over1"]);
     expect([...board.querySelectorAll(".lobby-leaderboard-stats")].map((stats) => stats.textContent))
-      .toEqual(["32 boards · 64 hands", "32 boards · 64 hands", "32 boards · 64 hands", "16 boards · 32 hands · provisional"]);
+      .toEqual(["SAYC · 32 boards · 64 hands", "SAYC · 32 boards · 64 hands", "SAYC · 32 boards · 64 hands", "2/1 · 16 boards · 32 hands · provisional"]);
     await user.click(within(board).getByRole("button", { name: "Full leaderboard" }));
     expect(window.location.hash).toBe("#/leaderboard");
     window.location.hash = "";

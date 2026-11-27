@@ -129,8 +129,11 @@ export async function listTables(baseUrl: string): Promise<TableSummary[]> {
   return (await response.json()) as TableSummary[];
 }
 
-/** One bot profile's current rating, as the public leaderboard lists it; `competitorId` is `[profileId, version]` as JSON. */
-export type LeaderboardRating = { competitorId: string; rating: number; deviation: number; sampleBoards: number; handsPlayed: number; eligible: boolean };
+/**
+ * One bot profile's current rating, as the public leaderboard lists it; `competitorId` is `[profileId, version]` as JSON.
+ * `biddingStyle` is the profile's system (missing from servers that predate it); ratings only compare within a style.
+ */
+export type LeaderboardRating = { competitorId: string; rating: number; deviation: number; sampleBoards: number; handsPlayed: number; eligible: boolean; biddingStyle?: TableStyle };
 
 export async function listLeaderboard(baseUrl: string): Promise<LeaderboardRating[]> {
   const response = await fetch(`${baseUrl}/api/benchmarks/leaderboard`);

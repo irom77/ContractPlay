@@ -188,7 +188,7 @@ function BotLeaderboardPanel({ baseUrl, api }: { baseUrl: string; api: LobbyApi 
               <span className="lobby-leaderboard-rank" aria-hidden="true">{index + 1}</span>
               <span className="lobby-leaderboard-name" title={nameOf(rating.competitorId)}>{nameOf(rating.competitorId)}</span>
               <span className="lobby-leaderboard-rating">{Math.round(rating.rating)}</span>
-              <span className="quiet-copy lobby-leaderboard-stats">{[`${rating.sampleBoards} boards`, `${rating.handsPlayed} hands`, ...(rating.eligible ? [] : ["provisional"])]
+              <span className="quiet-copy lobby-leaderboard-stats">{[...(rating.biddingStyle ? [rating.biddingStyle] : []), `${rating.sampleBoards} boards`, `${rating.handsPlayed} hands`, ...(rating.eligible ? [] : ["provisional"])]
                 .map((fact, index) => <span key={fact}>{index ? " · " : ""}<span className="lobby-leaderboard-fact">{fact}</span></span>)}</span>
             </li>)}</ol>}
       <button className="secondary-button" type="button" onClick={() => { window.location.hash = "#/leaderboard"; }}>Full leaderboard</button>

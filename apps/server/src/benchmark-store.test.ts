@@ -200,7 +200,7 @@ describe("BenchmarkStore", () => {
     await finish("next", 13);
     await store.commitRatingPeriod("next", amended, 20);
     expect(await store.listRatingHistory(competitorId)).toMatchObject([{ jobId: "next", rating: 1600 }, { jobId: "job", rating: 1550 }]);
-    expect(await store.listLeaderboard()).toMatchObject([{ jobId: "next", rating: 1600, eligible: true }]);
+    expect(await store.listLeaderboard()).toMatchObject([{ jobId: "next", rating: 1600, eligible: true, biddingStyle: profiles[0]!.biddingStyle }]);
   });
 
   it("takes boards for an imported job from its immutable source snapshot", async () => {
