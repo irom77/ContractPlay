@@ -491,7 +491,7 @@ const laterScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "benchmark-watch", title: "Watching a bot benchmark table", detail: "A read-only observer at a bot benchmark table mid-play: the auction and the tricks so far, every hand face-down until the duplicate board is complete, and no seating, claim, or menu controls.",
+    id: "benchmark-watch", title: "Watching a bot benchmark table", detail: "A read-only observer at a bot benchmark table mid-play: the auction and the tricks so far, every hand face-down until the duplicate board is complete, and no seating, claim, or menu controls. Seen as a benchmark admin, so Stop (which ends the whole run) is in the table tools.",
     build: () => ({ kind: "table", viewerName: "Alex", view: observerViewFor(playUntil(bid(dealt(benchmarkTable()), 8), moment(["east", "west"], 3))), observer: true })
   },
   {

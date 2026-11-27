@@ -7,6 +7,8 @@ import migration from "../migrations/0006_bot_benchmarks.sql?raw";
 import { hash } from "./auth.js";
 import { AuthStore } from "./auth-store.js";
 import worker from "./index.js";
+import { lobbyOf } from "./lobby-object.js";
+import { BENCHMARK_ENGINE_VERSION } from "./table-object.js";
 import { BenchmarkStore } from "./benchmark-store.js";
 
 const origin = "https://bridge.example";
@@ -125,6 +127,36 @@ describe("benchmark HTTP routes", () => {
     expect(await (await call(`${publicPath}/leaderboard`)).json()).toEqual({ ratings: [] });
     expect((await call(`${publicPath}/profiles?limit=100000`)).status).toBe(400);
     expect((await call(`${publicPath}/profiles?limit=1`)).status).toBe(200);
+  });
+
+  it("stops the benchmark job behind a watched table for admins only", async () => {
+    const profiles = BOT_CHARACTERS.slice(0, 4).map(({ skill, aggression }) => createBenchmarkProfile({
+      skill, aggression, biddingStyle: "SAYC", version: "v1", engineVersion: BENCHMARK_ENGINE_VERSION }));
+    for (const entry of profiles) expect((await write("/profiles", { skill: entry.skill, aggression: entry.aggression, biddingStyle: "SAYC", version: "v1", engineVersion: BENCHMARK_ENGINE_VERSION })).status).toBe(201);
+    const created = await write("/cohorts", { name: "Watched", profiles: profiles.map(({ profileId, version }) => ({ profileId, version })),
+      boardCount: 2, maxTables: 2, biddingStyle: "SAYC", scoring: "imps", rotationSeed: 3 });
+    expect(created.status).toBe(201);
+    const { id: cohortId } = await created.json<{ id: string }>();
+    expect((await write("/jobs", { id: "watched-job", cohortId })).status).toBe(201);
+    const [assignment] = createRotation(profiles, 3, 0, 2);
+    const lobby = lobbyOf(env);
+    const tableId = (await lobby.createBenchmarkTable({ jobId: "watched-job", tableIndex: 0, sessionId: "benchmark:watched-job",
+      name: "Watched 1", style: "SAYC", boardSource: "generated", assignment: assignment! }))!;
+    try {
+      expect((await call(`${admin}/tables/${tableId}`)).status).toBe(401);
+      expect((await call(`${admin}/tables/${tableId}/stop`, { method: "POST", headers: { Cookie: cookie(tokens.member) } })).status).toBe(403);
+      expect(await (await read(`/tables/${tableId}`)).json()).toEqual({ jobId: "watched-job", status: "queued" });
+      expect((await read(`/tables/${tableId}/stop`)).status).toBe(405);
+      expect((await read("/tables/not-a-table")).status).toBe(404);
+      const stopped = await write(`/tables/${tableId}/stop`, {});
+      expect(stopped.status).toBe(200);
+      expect(await stopped.json()).toEqual({ jobId: "watched-job", status: "cancelled" });
+      // A second Stop (a double click, or two admins at once) is harmless.
+      expect(await (await write(`/tables/${tableId}/stop`, {})).json()).toEqual({ jobId: "watched-job", status: "cancelled" });
+    } finally {
+      await lobby.releaseBenchmarkTable("watched-job", 0);
+    }
+    expect((await read(`/tables/${tableId}`)).status).toBe(404);
   });
 
   it("serves rolling public IMP and matchpoint profile diagnostics", async () => {

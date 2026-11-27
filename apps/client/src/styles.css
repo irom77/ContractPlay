@@ -82,6 +82,7 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .lobby-leaderboard-rating { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
 #lobby-leaderboard > .secondary-button { justify-self: start; }
 .observer-note { margin: 0; white-space: nowrap; border-radius: 6px; padding: calc(.6 * var(--u)) calc(1 * var(--u)); background: rgba(8, 28, 24, .88); color: var(--ink); font-size: var(--text-s); line-height: 1.25; }
+.stop-run-error { align-self: center; border-radius: 6px; padding: calc(.4 * var(--u)) calc(.8 * var(--u)); background: rgba(60, 16, 14, .94); color: #ffd9d0; font-size: var(--text-s); }
 .session-result-progress { margin: 0 0 calc(1.5 * var(--u)); color: var(--gold); font-size: var(--text-s); text-align: center; }
 .hint-controls p { margin: 0; max-width: max(200px, calc(34 * var(--u))); border-radius: 8px; padding: calc(.8 * var(--u)) calc(1.2 * var(--u)); background: rgba(8, 28, 24, .82); color: var(--ink); font-size: var(--text-m); line-height: 1.35; text-align: right; }
 .hint-controls p strong { display: block; color: var(--gold); font-family: var(--suit-font); font-size: var(--text-m); }

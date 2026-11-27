@@ -165,6 +165,11 @@ export class TableObject extends DurableObject<Env> {
     }
   }
 
+  /** The benchmark job this table plays for, so an admin watching it can stop that job; undefined for other tables. */
+  async benchmarkJobId(): Promise<string | undefined> {
+    return (await this.load())?.benchmark?.jobId;
+  }
+
   async deleteBenchmark(jobId: string): Promise<TableSummary | undefined> {
     const state = await this.load();
     if (!state) return;

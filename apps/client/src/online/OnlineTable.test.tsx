@@ -996,6 +996,54 @@ describe("OnlineTable connection", () => {
     expect(service.sent).toEqual([]);
   });
 
+  it("offers a benchmark admin Stop, which cancels the run and leaves the table", async () => {
+    const requests: Array<[string, RequestInit | undefined]> = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      requests.push([url, init]);
+      return Response.json({ jobId: "job-1", status: url.endsWith("/stop") ? "cancelled" : "running" });
+    }));
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    try {
+      const service = fakeService();
+      const onLeave = vi.fn();
+      render(<OnlineTable observer account={null} baseUrl="https://x.test" tableId="BOT123" storage={memoryStorage()}
+        onLeave={onLeave} onRecentHands={vi.fn()} connect={service.connect} />);
+      service.status("open");
+      service.push(tableView({ observer: true, benchmark: true, handNumber: 1, handInProgress: true, seats: seatedNorth,
+        game: publicGame(newGame(), []), canDeal: false }));
+      const stop = await screen.findByRole("button", { name: "Stop" });
+      expect(requests[0]![0]).toBe("/api/admin/benchmarks/tables/BOT123");
+      fireEvent.click(stop);
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(requests).toHaveLength(1);
+      fireEvent.click(stop);
+      await vi.waitFor(() => expect(onLeave).toHaveBeenCalledTimes(1));
+      expect(requests[1]).toEqual(["/api/admin/benchmarks/tables/BOT123/stop", expect.objectContaining({ method: "POST" })]);
+      expect(service.sent).toEqual([]);
+    } finally {
+      confirm.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("shows no Stop to a viewer who is not a benchmark admin, or once the run has ended", async () => {
+    for (const response of [new Response(null, { status: 403 }), Response.json({ jobId: "job-1", status: "cancelled" })]) {
+      const fetchMock = vi.fn(async () => response);
+      vi.stubGlobal("fetch", fetchMock);
+      const service = fakeService();
+      render(<OnlineTable observer account={null} baseUrl="https://x.test" tableId="BOT123" storage={memoryStorage()}
+        onLeave={vi.fn()} onRecentHands={vi.fn()} connect={service.connect} />);
+      service.status("open");
+      service.push(tableView({ observer: true, benchmark: true, handNumber: 1, handInProgress: true, seats: seatedNorth,
+        game: publicGame(newGame(), []), canDeal: false }));
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      await Promise.resolve();
+      expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("asks for a name first, then connects", async () => {
     const user = userEvent.setup();
     const service = setup({ named: false });

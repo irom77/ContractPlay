@@ -8,6 +8,7 @@ import { saveIdentity } from "../online/identity.js";
 import { EmailGate, Lobby } from "../online/Lobby.js";
 import type { AccountSession } from "../online/auth.js";
 import { OnlineTable } from "../online/OnlineTable.js";
+import type { BenchmarkAdminApi } from "../online/benchmarkStop.js";
 import { previewCategories, previewScreens, type PreviewData } from "./scenarios.js";
 
 const previewAccount: AccountSession = { playerId: "preview-player", displayName: "Alex" };
@@ -70,8 +71,14 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
       ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}) };
   }, [data]);
   if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={previewAuth} onOpenTable={() => {}} onPlaySolo={() => {}} onRecentHands={() => {}} />;
-  return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} {...(data.selectedCall ? { initialSelectedCall: data.selectedCall } : {})} {...(data.observer ? { observer: true as const } : {})} />;
+  return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} {...(data.selectedCall ? { initialSelectedCall: data.selectedCall } : {})} {...(data.observer ? { observer: true as const, benchmarkAdmin: previewBenchmarkAdmin } : {})} />;
 }
+
+/** The benchmark watch preview is seen as a benchmark admin, so it shows Stop; stopping does nothing here. */
+const previewBenchmarkAdmin: BenchmarkAdminApi = {
+  job: (tableId) => Promise.resolve({ jobId: tableId, status: "running" }),
+  stop: (tableId) => Promise.resolve({ jobId: tableId, status: "cancelled" })
+};
 
 export type PreviewsProps = { index: number; onIndex(next: number): void };
 

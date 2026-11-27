@@ -8,9 +8,11 @@ import { benchmarkAdminAccess, hash } from "./auth.js";
 import { BenchmarkStore, MAX_BENCHMARK_BOARDS, MAX_BENCHMARK_PAGE, MAX_BENCHMARK_PROFILES, MAX_BENCHMARK_TABLES } from "./benchmark-store.js";
 import type { BenchmarkCohortInput, BenchmarkJobAction, BenchmarkProfileKey } from "./benchmark-store.js";
 import { isRecord, readLimited } from "./deal-input.js";
+import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH } from "./lobby-object.js";
 
 const MAX_CONFIG_BYTES = 16_384;
 const MAX_PBN_BYTES = 128_000;
+const TABLE_ID = new RegExp(`^([${ID_ALPHABET}]{${LISTED_ID_LENGTH}}|[${ID_ALPHABET}]{${UNLISTED_ID_LENGTH}})$`);
 const ID = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}$/;
 const IMPORT_ID = /^[a-f0-9]{64}$/;
 export const ADMIN_BENCHMARK_PATH = "/api/admin/benchmarks";
@@ -169,6 +171,23 @@ async function jobsRoute(request: Request, env: Env, store: BenchmarkStore, tail
   return changed ? json(changed) : conflict();
 }
 
+/**
+ * A watched benchmark table, by its table id: GET names its job and the job's status (an admin's watch screen uses it
+ * to offer Stop), and POST .../stop cancels that job, which closes every table of the run and removes its session.
+ */
+async function tablesRoute(request: Request, env: Env, store: BenchmarkStore, tail: string[]): Promise<Response> {
+  const [tableId, action] = tail;
+  if (!tableId || !TABLE_ID.test(tableId) || tail.length > 2 || (tail.length === 2 && action !== "stop")) return notFound();
+  const expected = action ? "POST" : "GET";
+  if (request.method !== expected) return methodNotAllowed(expected);
+  const jobId = await env.TABLES.get(env.TABLES.idFromName(tableId)).benchmarkJobId();
+  const job = jobId && await store.getJob(jobId);
+  if (!job) return notFound();
+  if (!action) return json({ jobId: job.id, status: job.status });
+  const stopped = await benchmarkOf(env).cancel(job.id);
+  return stopped ? json({ jobId: stopped.id, status: stopped.status }) : conflict();
+}
+
 async function publicRoute(request: Request, db: D1Database, store: BenchmarkStore, path: string[], limit: number | undefined): Promise<Response> {
   if (request.method !== "GET") return methodNotAllowed("GET");
   const [resource, ...tail] = path;
@@ -239,6 +258,7 @@ export async function benchmarkRoute(request: Request, env: Env, admin: boolean)
       const result = await store.getReleasedResult(id, Number(tableIndex), Number(boardIndex));
       return result ? json(result) : notFound();
     }
+    if (resource === "tables") return await tablesRoute(request, env, store, tail);
     if (resource === "jobs") return await jobsRoute(request, env, store, tail, limit);
     if (resource === "imports" && tail.length === 0) return await importsRoute(request, store, limit);
     return notFound();

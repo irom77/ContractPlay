@@ -376,8 +376,10 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(window.location.hash).toBe("#/leaderboard");
     window.location.hash = "";
   },
-  "benchmark-watch": () => {
+  "benchmark-watch": async () => {
     const table = screen.getByRole("region", { name: "Benchmark match Benchmark · round 12, read-only observer" });
+    // Seen as a benchmark admin, the table tools offer Stop for the whole run.
+    expect((await within(table).findByRole("button", { name: "Stop" })).closest(".table-tools")).toBeTruthy();
     // The observer note sits under the top-left controls, clear of the status card in the top-right corner.
     expect(screen.getByText("Watching bot benchmark · read-only").closest(".table-tools")).toBeTruthy();
     expect(document.querySelector(".session-progress")).toBeNull();
