@@ -363,6 +363,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByText("Bot benchmark")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Watch Benchmark · round 12" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Watch Friday club" })).toBeNull();
+    // Seen as a benchmark admin, the benchmark row also offers Stop for its run; the human table doesn't.
+    expect(await screen.findByRole("button", { name: "Stop Benchmark · round 12" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Stop Friday club" })).toBeNull();
     // The bot leaderboard sits open below New duplicate session: ranked bots first by rating, then provisional ones.
     const board = screen.getByRole("region", { name: "Bot leaderboard" });
     const session = screen.getByRole("form", { name: "New duplicate session" });

@@ -7,6 +7,8 @@ import { boardSetFromPbn } from "../boardSet.js";
 import { castHasCustom, loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { BotCastFields } from "../table/BotCastFields.js";
 import { loadPartnerResults, opponentStats, partnerStats } from "../partnerResults.js";
+import { benchmarkAdminApi, type BenchmarkAdminApi } from "./benchmarkStop.js";
+import { StopRunButton } from "./StopRunButton.js";
 import { createSession as defaultCreateSession, createTable as defaultCreateTable, listLeaderboard as defaultListLeaderboard, listTables as defaultListTables, renameTable as defaultRenameTable } from "./connection.js";
 import type { LeaderboardRating, SessionBoardInput } from "./connection.js";
 import { botCharacter } from "@contractplay/bots";
@@ -42,6 +44,8 @@ export type LobbyApi = {
   createSession: typeof defaultCreateSession;
   /** The bot leaderboard panel's ratings; without it the panel shows that no bots are rated yet. */
   listLeaderboard?(baseUrl: string): Promise<LeaderboardRating[]>;
+  /** Lets a benchmark admin stop a bot benchmark run from its table's row; without it no Stop is offered. */
+  benchmarkAdmin?: BenchmarkAdminApi;
 };
 
 export type LobbyProps = {
@@ -58,7 +62,7 @@ export type LobbyProps = {
   expandedPanels?: boolean;
 };
 
-const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession, listLeaderboard: defaultListLeaderboard, renameTable: defaultRenameTable };
+const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession, listLeaderboard: defaultListLeaderboard, renameTable: defaultRenameTable, benchmarkAdmin: benchmarkAdminApi };
 
 function createErrorText(error: string): string {
   if (error === "too-many-tables") return "There are too many open tables right now. Try again later.";
@@ -339,6 +343,17 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
     return () => { mounted.current = false; clearInterval(timer); };
   }, [refresh]);
 
+  // Stop on benchmark rows is for benchmark admins: ask once, when the list first shows a benchmark table.
+  const [canStopRuns, setCanStopRuns] = useState(false);
+  const listsBenchmark = !!tables?.some((table) => table.benchmark);
+  useEffect(() => {
+    const admin = apiRef.current.benchmarkAdmin;
+    if (!listsBenchmark || !admin) return;
+    let current = true;
+    void admin.isAdmin().then((yes) => { if (current) setCanStopRuns(yes); });
+    return () => { current = false; };
+  }, [listsBenchmark]);
+
   const effectiveName = tableName ?? `${identity.name}'s table`;
 
   async function create() {
@@ -458,6 +473,9 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
                   {table.benchmark
                     ? <button className="secondary-button" type="button" aria-label={`Watch ${table.name}`} onClick={() => onOpenTable(table.id, true)}>Watch</button>
                     : <button className="secondary-button" type="button" aria-label={`Join ${table.name}`} onClick={() => onOpenTable(table.id)}>Join</button>}
+                  {table.benchmark && canStopRuns && api.benchmarkAdmin
+                    ? <StopRunButton ariaLabel={`Stop ${table.name}`} stop={() => api.benchmarkAdmin!.stop(table.id)} onStopped={() => { void refresh(); }} />
+                    : null}
                   {table.youHost && !table.benchmark && api.renameTable
                     ? <TableRename table={table} rename={(name) => api.renameTable!(baseUrl, table.id, name)} onRenamed={() => { void refresh(); }} />
                     : null}

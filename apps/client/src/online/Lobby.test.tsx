@@ -30,7 +30,7 @@ const summaries: TableSummary[] = [
 const signedIn = { currentAccount: async () => ({ playerId: "account-1", displayName: "Bob" }), requestMagicLink: async () => {}, signOut: async () => {} };
 
 /** Renders the lobby; its Open tables and Play panels start open unless `collapsed` keeps the real default. */
-function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"]; storage?: StorageLike; collapsed?: boolean } = {}) {
+function setup(options: { benchmarkAdmin?: LobbyApi["benchmarkAdmin"]; list?: () => Promise<TableSummary[]>; create?: () => Promise<{ id: string } | { error: string }>; named?: boolean; auth?: LobbyProps["auth"]; storage?: StorageLike; collapsed?: boolean } = {}) {
   const storage = options.storage ?? memoryStorage();
   if (options.named !== false) saveIdentity(storage, "Bob");
   const listTables = vi.fn(options.list ?? (() => Promise.resolve(summaries)));
@@ -43,7 +43,7 @@ function setup(options: { list?: () => Promise<TableSummary[]>; create?: () => P
     void input;
     return { sessionId: "SESSION1", tableIds: ["NEW123", "NEW456"] };
   });
-  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession }} auth={options.auth ?? signedIn} expandedPanels={!options.collapsed} />);
+  render(<Lobby baseUrl="https://x.test" storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands} api={{ listTables, createTable, createSession, ...(options.benchmarkAdmin ? { benchmarkAdmin: options.benchmarkAdmin } : {}) }} auth={options.auth ?? signedIn} expandedPanels={!options.collapsed} />);
   return { storage, listTables, createTable, createSession, onOpenTable, onPlaySolo, onRecentHands };
 }
 
@@ -199,6 +199,41 @@ describe("Lobby", () => {
     expect(screen.queryByRole("button", { name: "Join Benchmark match" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "Watch Benchmark match" }));
     expect(onOpenTable).toHaveBeenCalledWith("BOT123", true);
+  });
+
+  it("offers a benchmark admin Stop beside Watch, which cancels the run and refreshes the list", async () => {
+    const user = userEvent.setup();
+    const benchmark: TableSummary = { ...summaries[1]!, id: "BOT123", name: "Benchmark match", benchmark: true, handInProgress: true,
+      seats: { north: { kind: "bot", skill: "expert" }, east: { kind: "bot", skill: "advanced" },
+        south: { kind: "bot", skill: "intermediate" }, west: { kind: "bot", skill: "beginner" } } };
+    let listed: TableSummary[] = [...summaries, benchmark];
+    const admin = { isAdmin: vi.fn(async () => true), job: vi.fn(async () => undefined),
+      stop: vi.fn(async (tableId: string) => { listed = summaries; return { jobId: tableId, status: "cancelled" as const }; }) };
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      setup({ list: () => Promise.resolve(listed), benchmarkAdmin: admin });
+      await user.click(await screen.findByRole("button", { name: "Stop Benchmark match" }));
+      expect(screen.queryByRole("button", { name: "Stop Friday club" })).toBeNull();
+      expect(admin.isAdmin).toHaveBeenCalledTimes(1);
+      expect(admin.stop).toHaveBeenCalledWith("BOT123");
+      await waitFor(() => expect(screen.queryByText("Benchmark match")).toBeNull());
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it("shows no Stop to a viewer who is not a benchmark admin, and asks only when a benchmark table is listed", async () => {
+    const benchmark: TableSummary = { ...summaries[1]!, id: "BOT123", name: "Benchmark match", benchmark: true };
+    const admin = { isAdmin: vi.fn(async () => false), job: vi.fn(async () => undefined), stop: vi.fn() };
+    setup({ list: () => Promise.resolve([...summaries, benchmark]), benchmarkAdmin: admin });
+    expect(await screen.findByRole("button", { name: "Watch Benchmark match" })).toBeTruthy();
+    await waitFor(() => expect(admin.isAdmin).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("button", { name: /^Stop / })).toBeNull();
+    cleanup();
+    const unasked = { isAdmin: vi.fn(async () => true), job: vi.fn(async () => undefined), stop: vi.fn() };
+    setup({ benchmarkAdmin: unasked });
+    expect(await screen.findByRole("button", { name: "Join Friday club" })).toBeTruthy();
+    expect(unasked.isAdmin).not.toHaveBeenCalled();
   });
 
   it("explains an empty list", async () => {

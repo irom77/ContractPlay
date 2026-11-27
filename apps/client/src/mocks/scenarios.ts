@@ -481,7 +481,7 @@ const laterScreens: readonly PreviewScreen[] = [
     build: () => newDealWithGina({ editingCharacter: GINA.id })
   },
   {
-    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats. Below New duplicate session, the Bot leaderboard panel lists the top-rated bots with their bidding style (Steady Sam is a 2/1 profile, the rest SAYC) and boards (deals) and hands played, provisional ratings marked, and links to the full leaderboard.",
+    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats, and Stop beside it, as a benchmark admin sees it. Below New duplicate session, the Bot leaderboard panel lists the top-rated bots with their bidding style (Steady Sam is a 2/1 profile, the rest SAYC) and boards (deals) and hands played, provisional ratings marked, and links to the full leaderboard.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
       const rated = (id: string, rating: number, sampleBoards: number, eligible: boolean, biddingStyle: "SAYC" | "2/1" = "SAYC"): LeaderboardRating =>

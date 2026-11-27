@@ -68,7 +68,8 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
         tables = tables.map((table) => table.id === id ? { ...table, name } : table);
         return Promise.resolve({ name });
       },
-      ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}) };
+      ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}),
+      benchmarkAdmin: previewBenchmarkAdmin };
   }, [data]);
   if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={previewAuth} onOpenTable={() => {}} onPlaySolo={() => {}} onRecentHands={() => {}} />;
   return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} {...(data.selectedCall ? { initialSelectedCall: data.selectedCall } : {})} {...(data.observer ? { observer: true as const, benchmarkAdmin: previewBenchmarkAdmin } : {})} />;
@@ -76,6 +77,7 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
 
 /** The benchmark watch preview is seen as a benchmark admin, so it shows Stop; stopping does nothing here. */
 const previewBenchmarkAdmin: BenchmarkAdminApi = {
+  isAdmin: () => Promise.resolve(true),
   job: (tableId) => Promise.resolve({ jobId: tableId, status: "running" }),
   stop: (tableId) => Promise.resolve({ jobId: tableId, status: "cancelled" })
 };

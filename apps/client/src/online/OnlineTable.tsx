@@ -33,6 +33,7 @@ import { DealButton, HandResultSummary, SeatingPanel, type Outgoing } from "./Se
 import { FieldResult } from "../table/FieldResult.js";
 import { replayNotice } from "../replays.js";
 import { benchmarkAdminApi, type BenchmarkAdminApi } from "./benchmarkStop.js";
+import { StopRunButton } from "./StopRunButton.js";
 
 /** How long the host waits on a present player's turn before "Hand to a bot" is offered (the service's limit). */
 const IDLE_MS = 120_000;
@@ -767,35 +768,15 @@ function SeatTag({ seat, info, isHost, onHandToBot }: { seat: Seat; info: SeatIn
   </span>;
 }
 
-/**
- * Stop, for a benchmark admin watching a bot-only benchmark table: it cancels the whole run (every table of it closes and
- * its session is removed) and goes back to Open tables. Other viewers never see it, and the server refuses them anyway.
- */
-function StopRunButton({ tableId, api, onStopped }: { tableId: string; api: BenchmarkAdminApi; onStopped(): void }) {
+/** Stop on the watch screen, shown only once the admin API confirms the viewer may stop this table's live run. */
+function WatchedRunStop({ tableId, api, onStopped }: { tableId: string; api: BenchmarkAdminApi; onStopped(): void }) {
   const [active, setActive] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
   useEffect(() => {
     let current = true;
     void api.job(tableId).then((job) => { if (current) setActive(!!job && ["queued", "running", "paused"].includes(job.status)); });
     return () => { current = false; };
   }, [tableId, api]);
-  if (!active) return null;
-  const stop = async () => {
-    if (!window.confirm("Stop this benchmark run? Every table in it closes, and the run won't count toward ratings.")) return;
-    setBusy(true); setError(undefined);
-    try {
-      await api.stop(tableId);
-      onStopped();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not stop the run");
-      setBusy(false);
-    }
-  };
-  return <>
-    <button className="secondary-button stop-run-button" type="button" disabled={busy} title="Stop this benchmark run and close its tables" onClick={() => void stop()}>{busy ? "Stopping…" : "Stop"}</button>
-    {error ? <span className="stop-run-error" role="alert">{error}</span> : null}
-  </>;
+  return active ? <StopRunButton stop={() => api.stop(tableId)} onStopped={onStopped} /> : null;
 }
 
 function ObserverTable({ tableId, benchmarkAdmin, view, onLeave, status }: { tableId: string; benchmarkAdmin: BenchmarkAdminApi; view: TableViewData; onLeave(): void; status: ConnectionStatus }) {
@@ -808,7 +789,7 @@ function ObserverTable({ tableId, benchmarkAdmin, view, onLeave, status }: { tab
   const game = view.game;
   if (!game) return <main className="app-shell"><section className="empty-table lobby" aria-label={`Watching ${view.name}`}>
     <div className="lobby-panel"><h1>{view.name}</h1><p className="quiet-copy">Waiting for the benchmark bots to begin.</p>
-      <button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button> <StopRunButton tableId={tableId} api={benchmarkAdmin} onStopped={onLeave} /></div>{statusLine}
+      <button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button> <WatchedRunStop tableId={tableId} api={benchmarkAdmin} onStopped={onLeave} /></div>{statusLine}
   </section></main>;
 
   const live = isLive(game);
@@ -824,7 +805,7 @@ function ObserverTable({ tableId, benchmarkAdmin, view, onLeave, status }: { tab
         seatLabel={(seat) => <SeatTag info={view.seats[seat]} isHost={false} onHandToBot={undefined} seat={seat} />}
         matchScore={view.totals} revealedHands={view.revealed}
         tools={<><button className="secondary-button" type="button" onClick={onLeave}>Back to open tables</button>
-          <span className="table-tools-icons"><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /><ReloadButton /><StopRunButton tableId={tableId} api={benchmarkAdmin} onStopped={onLeave} /></span></>}
+          <span className="table-tools-icons"><FullscreenButton fullscreen={fullscreen} onToggle={toggleFullscreen} /><ReloadButton /><WatchedRunStop tableId={tableId} api={benchmarkAdmin} onStopped={onLeave} /></span></>}
         toolsNote={<p className="observer-note" role="status">Watching bot benchmark · read-only</p>}
         overlay={statusLine} />
     </div>

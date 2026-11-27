@@ -20,6 +20,22 @@ export async function stopBenchmarkTable(tableId: string, request: typeof fetch 
   return await response.json() as BenchmarkTableJob;
 }
 
-/** The admin calls behind Stop, injectable so the UI previews can show it without a server. */
-export type BenchmarkAdminApi = { job(tableId: string): Promise<BenchmarkTableJob | undefined>; stop(tableId: string): Promise<BenchmarkTableJob> };
-export const benchmarkAdminApi: BenchmarkAdminApi = { job: (tableId) => benchmarkTableJob(tableId), stop: (tableId) => stopBenchmarkTable(tableId) };
+/**
+ * Whether this session is a benchmark admin's, so Open tables can offer Stop on benchmark tables. It asks for one job
+ * from the admin-only job list, which answers 401/403 to everyone else.
+ */
+export async function isBenchmarkAdmin(request: typeof fetch = fetch): Promise<boolean> {
+  try {
+    return (await request("/api/admin/benchmarks/jobs?limit=1", { credentials: "same-origin" })).ok;
+  } catch {
+    return false;
+  }
+}
+
+/** The admin calls behind Stop, injectable so tests and the UI previews can show it without a server. */
+export type BenchmarkAdminApi = {
+  isAdmin(): Promise<boolean>;
+  job(tableId: string): Promise<BenchmarkTableJob | undefined>;
+  stop(tableId: string): Promise<BenchmarkTableJob>;
+};
+export const benchmarkAdminApi: BenchmarkAdminApi = { isAdmin: () => isBenchmarkAdmin(), job: (tableId) => benchmarkTableJob(tableId), stop: (tableId) => stopBenchmarkTable(tableId) };
