@@ -88,6 +88,35 @@ describe("sign-up approval", () => {
   });
 });
 
+describe("sign-up requests in a stranger's name", () => {
+  it("keep the first name, and an approval link never links a guest seat", async () => {
+    await requestLink("new@example.com");
+    await env.DB.prepare("DELETE FROM auth_rate_limits").run();
+    await call("/api/auth/magic-link", { method: "POST", headers: { "Content-Type": "application/json", "CF-Connecting-IP": "192.0.2.5" },
+      body: JSON.stringify({ email: "new@example.com", displayName: "Impostor", guestSecret: "g".repeat(43) }) });
+    expect(await store.listPendingSignups()).toEqual([expect.objectContaining({ displayName: "Newcomer" })]);
+    await post(tokens.boot, "/api/admin/signups/approve", { email: "new@example.com" });
+    const links = await env.DB.prepare("SELECT guest_player_id FROM magic_links WHERE email = ?").bind("new@example.com").all();
+    expect(links.results).toEqual([{ guest_player_id: null }]);
+  });
+
+  it("answer before any per-address work runs, so timing reveals nothing", async () => {
+    const pending: Promise<unknown>[] = [];
+    const ctx = { waitUntil: (work: Promise<unknown>) => { pending.push(work); }, passThroughOnException() {} } as unknown as ExecutionContext;
+    const ask = (email: string, ip: string) => worker.fetch(new Request(`${origin}/api/auth/magic-link`, { method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json", "CF-Connecting-IP": ip }, body: JSON.stringify({ email }) }), settings() as unknown as Env, ctx);
+    for (const [email, ip] of [["member@example.com", "192.0.2.6"], ["stranger@example.com", "192.0.2.7"]] as const) {
+      const response = await ask(email, ip);
+      expect(response.status).toBe(202);
+      expect(await response.json()).toEqual({ message: SIGN_IN_REQUESTED });
+    }
+    expect(pending).toHaveLength(2);
+    await Promise.all(pending);
+    expect(sent.map((mail) => mail.to)).toEqual(["member@example.com"]);
+    expect((await store.listPendingSignups()).map((signup) => signup.email)).toEqual(["stranger@example.com"]);
+  });
+});
+
 describe("blocked addresses", () => {
   it("get no mail, lose their links and sessions, and can be unblocked", async () => {
     await call("/api/auth/magic-link", { method: "POST", headers: { "Content-Type": "application/json", "CF-Connecting-IP": "192.0.2.1" },

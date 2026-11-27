@@ -145,7 +145,10 @@ async function boundedBody(request: Request): Promise<unknown> {
   try { return JSON.parse(new TextDecoder().decode(bytes.subarray(0, size))); } catch { return undefined; }
 }
 
-async function requestMagicLink(request: Request, env: Env): Promise<Response> {
+/** Background work the response must not wait for; without a context (tests) it is awaited instead. */
+type Deferrer = { waitUntil(promise: Promise<unknown>): void };
+
+async function requestMagicLink(request: Request, env: Env, ctx?: Deferrer): Promise<Response> {
   const store = new AuthStore(env.DB);
   const now = Date.now();
   if (!await store.admitAuthAttempt(await hash(`request:ip:${request.headers.get("CF-Connecting-IP") ?? "unknown"}`), now, HOUR, 10)) return genericRequest();
@@ -162,15 +165,19 @@ async function requestMagicLink(request: Request, env: Env): Promise<Response> {
   if (displayName === undefined || (input.guestSecret !== undefined
     && (typeof input.guestSecret !== "string" || !GUEST_SECRET.test(input.guestSecret)))) return genericRequest();
   if (!await store.admitAuthAttempt(await hash(`request:email:${email}`), now, HOUR, 3, 60_000)) return genericRequest();
-  await store.cleanupAuth(now);
   const guestPlayerId = typeof input.guestSecret === "string" ? await hash(input.guestSecret) : undefined;
-  if (await store.isBlocked(email)) return genericRequest();
-  if (approvalRequired(env) && !await store.signupApproved(email)) {
-    await store.requestSignup({ email, displayName, ...(guestPlayerId ? { guestPlayerId } : {}) }, now);
-    return genericRequest();
-  }
-  // A failed delivery is never exposed to the requester.
-  await sendSignInLink(env, { email, displayName, ...(guestPlayerId ? { guestPlayerId } : {}) }, now);
+  // Everything that differs by address (blocked, waiting, or mailed) runs after the response, so its timing
+  // can't tell anyone which addresses have accounts. Failures are never exposed to the requester.
+  const work = (async () => {
+    await store.cleanupAuth(now);
+    if (await store.isBlocked(email)) return;
+    if (approvalRequired(env) && !await store.signupApproved(email)) {
+      await store.requestSignup({ email, displayName }, now);
+      return;
+    }
+    await sendSignInLink(env, { email, displayName, ...(guestPlayerId ? { guestPlayerId } : {}) }, now);
+  })().catch(() => { /* Database errors can embed addresses; never log them. */ });
+  if (ctx) ctx.waitUntil(work); else await work;
   return genericRequest();
 }
 
@@ -206,7 +213,7 @@ async function rename(request: Request, env: Env): Promise<Response> {
   return Response.json({ playerId: account.primaryPlayerId, displayName }, { headers: authHeaders });
 }
 
-export async function authRoute(request: Request, env: Env): Promise<Response> {
+export async function authRoute(request: Request, env: Env, ctx?: Deferrer): Promise<Response> {
   const path = new URL(request.url).pathname;
   if (!authRequestAllowed(request, env, path === "/api/auth/callback")) {
     return Response.json({ error: "forbidden" }, { status: 403, headers: authHeaders });
@@ -215,7 +222,7 @@ export async function authRoute(request: Request, env: Env): Promise<Response> {
   if (!routes[path]) return Response.json({ error: "not-found" }, { status: 404, headers: authHeaders });
   if (request.method !== routes[path]) return new Response(null, { status: 405, headers: { ...authHeaders, Allow: routes[path] } });
   try {
-    if (path === "/api/auth/magic-link") return await requestMagicLink(request, env);
+    if (path === "/api/auth/magic-link") return await requestMagicLink(request, env, ctx);
     if (path === "/api/auth/callback") return await redeem(request, env);
     if (path === "/api/auth/me") {
       const account = await authenticatedAccount(request, env);

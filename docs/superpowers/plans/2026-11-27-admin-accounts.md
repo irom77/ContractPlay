@@ -17,6 +17,11 @@ admin, block email addresses, and approve or deny new players before any sign-in
   is on its way. New players get theirs once an admin approves them."
 - **Approve** marks the request approved and emails a fresh magic link (usual 15-minute lifetime). Later requests from
   an approved address get links straight away, so an expired link is fixed by asking again.
+- **No guest seat on approval.** A queued request keeps its first name and stores no guest identity, since anyone can
+  ask in a stranger's name; the approval link signs in without linking a guest seat. A newcomer's guest seat links the
+  next time they ask for a link from their own device.
+- **Same timing for every address.** After the address and rate-limit checks, the block, approval and mail work runs in
+  `ctx.waitUntil`, so the answer returns before anything that differs by address.
 - **Deny** removes the request and emails a short "your request was declined" note. Asking again puts the address back
   in the queue (per-address rate limits still apply); **Block** is the permanent answer.
 - **Block** adds the address to `blocked_emails`, drops its pending request, and revokes the sessions of its account if

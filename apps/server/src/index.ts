@@ -151,14 +151,14 @@ export default {
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     await benchmarkOf(env).enqueueDue(controller.scheduledTime);
   },
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === "/api/account/online-hands" || path.startsWith("/api/account/online-hands/")) return handHistoryRoute(request, env);
     if (path === "/api/account/bot-results" || path.startsWith("/api/account/bot-results/")) return botResultsRoute(request, env);
     if (path === "/api/account/characters" || path.startsWith("/api/account/characters/")) return charactersRoute(request, env);
     if (path.startsWith("/api/deals/")) return dealRoute(request, env);
-    if (path.startsWith("/api/auth/")) return authRoute(request, env);
+    if (path.startsWith("/api/auth/")) return authRoute(request, env, ctx);
     if (path === ADMIN_BENCHMARK_PATH || path.startsWith(`${ADMIN_BENCHMARK_PATH}/`)) return benchmarkRoute(request, env, true);
     if (path === PUBLIC_BENCHMARK_PATH || path.startsWith(`${PUBLIC_BENCHMARK_PATH}/`)) return benchmarkRoute(request, env, false);
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });

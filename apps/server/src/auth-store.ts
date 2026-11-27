@@ -245,10 +245,13 @@ export class AuthStore {
       .bind(normalized).first() !== null;
   }
 
-  /** Queues (or refreshes) a pending request; an approved one keeps its approval. */
-  async requestSignup(request: { email: string; displayName: string; guestPlayerId?: string }, now: number): Promise<void> {
-    await this.db.prepare("INSERT INTO signup_requests (email, display_name, guest_player_id, requested_at) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET display_name = excluded.display_name, guest_player_id = excluded.guest_player_id, requested_at = excluded.requested_at WHERE signup_requests.approved_at IS NULL")
-      .bind(normalizeEmail(request.email), request.displayName, request.guestPlayerId ?? null, now).run();
+  /**
+   * Queues a request, or marks a pending one as asked again. The first request's name stays: a later one may come from
+   * anyone who knows the address.
+   */
+  async requestSignup(request: { email: string; displayName: string }, now: number): Promise<void> {
+    await this.db.prepare("INSERT INTO signup_requests (email, display_name, requested_at) VALUES (?, ?, ?) ON CONFLICT(email) DO UPDATE SET requested_at = excluded.requested_at WHERE signup_requests.approved_at IS NULL")
+      .bind(normalizeEmail(request.email), request.displayName, now).run();
   }
 
   async listPendingSignups(): Promise<{ email: string; displayName: string; requestedAt: number }[]> {
@@ -258,11 +261,9 @@ export class AuthStore {
   }
 
   /** Approves a pending request and returns what its sign-in link needs, or null when nothing was pending. */
-  async approveSignup(email: string, now: number): Promise<{ email: string; displayName: string; guestPlayerId?: string } | null> {
-    const row = await this.db.prepare("UPDATE signup_requests SET approved_at = ? WHERE email = ? AND approved_at IS NULL RETURNING email, display_name AS displayName, guest_player_id AS guestPlayerId")
-      .bind(now, normalizeEmail(email)).first<{ email: string; displayName: string; guestPlayerId: string | null }>();
-    if (!row) return null;
-    return { email: row.email, displayName: row.displayName, ...(row.guestPlayerId ? { guestPlayerId: row.guestPlayerId } : {}) };
+  async approveSignup(email: string, now: number): Promise<{ email: string; displayName: string } | null> {
+    return await this.db.prepare("UPDATE signup_requests SET approved_at = ? WHERE email = ? AND approved_at IS NULL RETURNING email, display_name AS displayName")
+      .bind(now, normalizeEmail(email)).first<{ email: string; displayName: string }>();
   }
 
   /** Removes a pending request; true when there was one. */
