@@ -50,6 +50,7 @@ import { queuedPlay, queueStillValid, type QueuedCard } from "./table/queuedCard
 import { ClaimPanel } from "./table/ClaimPanel.js";
 import { DraggableBanner } from "./table/DraggableBanner.js";
 import { GameMenu, type GameMenuItem } from "./table/GameMenu.js";
+import { confirmCallsMenuItem, loadConfirmCalls, saveConfirmCalls } from "./table/confirmCalls.js";
 import { loadHandLayout, saveHandLayout, type HandLayout } from "./table/handLayout.js";
 import { ContractOutcome } from "./table/ResultSummary.js";
 import { FieldResult } from "./table/FieldResult.js";
@@ -186,6 +187,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
   });
   const [forcedPlayOn, setForcedPlayOn] = useState(() => forcedPlayEnabled(persistence.storage));
   const [handLayout, setHandLayout] = useState(() => loadHandLayout(persistence.storage));
+  const [confirmCallsOn, setConfirmCallsOn] = useState(() => loadConfirmCalls(persistence.storage));
   // The position a take-back returned to: a forced card there waits for the player instead of replaying at once.
   const [takenBackTo, setTakenBackTo] = useState<GameState>();
   const [scoring, setScoring] = useState<ScoringFormat>(initialSetup.scoring);
@@ -547,6 +549,12 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
     setHintsOn(next);
     setExplainedCall(undefined);
     try { persistence.storage.setItem(hintsStorageKey, next ? "on" : "off"); } catch { /* the choice just won't be remembered */ }
+  }
+
+  function toggleConfirmCalls() {
+    const next = !confirmCallsOn;
+    setConfirmCallsOn(next);
+    saveConfirmCalls(persistence.storage, next);
   }
 
   function toggleForcedPlay() {
@@ -1030,6 +1038,7 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
     ...(handLive && !botsFinishing ? [{ id: "auto-play", label: "Auto play this hand",
       title: "A bot makes your calls and plays your cards until this hand ends, then you play again", onSelect: () => setBotsFinishHandId(currentHandId) }] : []),
     ...(benchmarkPractice ? [] : [{ id: "settings", label: "Settings", title: "Scoring, dealer, opponents, cards, hints, and forced cards", onSelect: () => setDialog("settings") }]),
+    confirmCallsMenuItem(confirmCallsOn, toggleConfirmCalls),
     ...(scoring === "rubber" || inRubber ? [{ id: "rubber", label: "Scores", title: "The rubber scorecard: above and below the line, games, totals, and the last hand's points", onSelect: () => setDialog("rubber") }] : []),
     ...(benchmarkPractice ? [] : [{ id: "hands", label: "Recent hands", title: "Review, export, or import hands", onSelect: () => setDialog("hands") }]),
     { id: "about", label: "About ContractPlay", onSelect: () => setDialog("about") },
@@ -1161,6 +1170,9 @@ export default function App({ solver, preview, initialDialog, autoStart, benchma
           onPlay={(seat, card) => submitAction({ type: "play", seat, card })}
           hintedBid={visibleBidHint?.bid}
           hintedCards={visibleHint?.cardIds}
+          confirmCalls={confirmCallsOn ? {
+            meaning: (bid) => explainBid([...shownGame.auction, { seat: shownGame.currentActor, bid }], shownGame.auction.length, biddingStyle, "expert")
+          } : undefined}
           explainCall={{
             shown: shownExplanation,
             onToggle: (index) => setExplainedCall(shownExplanation === index ? undefined : { key: callsKey, index }),

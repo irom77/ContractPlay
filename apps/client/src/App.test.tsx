@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { userEvent } from "@testing-library/user-event";
 import { applyAction, cardId, createGameState, deal, RANKS, TRAIT_PRESETS, trickWinner, undoAction, validatePlay } from "@contractplay/core";
 import type { GameState, Solver } from "@contractplay/core";
+import { explainBid } from "@contractplay/bots";
 import { exportPbn, parsePbn } from "@contractplay/pbn";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadSoloData, saveSoloData, type SavedHand, type SoloData } from "@contractplay/persistence";
@@ -79,6 +80,17 @@ function setSetting(label: string, value: string) {
   chooseMenu("Settings");
   fireEvent.change(within(screen.getByRole("dialog", { name: "Settings" })).getByLabelText(label), { target: { value } });
   fireEvent.click(within(screen.getByRole("dialog", { name: "Settings" })).getByRole("button", { name: "Close" }));
+}
+
+/** Makes a call in the bidding box: with Confirm each call on (the default), a tap picks it and Confirm makes it. */
+async function makeCall(user: { click(element: Element): Promise<void> }, call: string) {
+  await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+  await user.click(screen.getByRole("button", { name: /^Confirm / }));
+}
+
+function clickCall(call: string) {
+  fireEvent.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+  fireEvent.click(screen.getByRole("button", { name: /^Confirm / }));
 }
 
 function bidButtonLabel(call: string) {
@@ -350,7 +362,7 @@ describe("bridge table", () => {
     expect(screen.getByRole("region", { name: "Auction" })).toBeTruthy();
     expect(screen.getByText("North to bid")).toBeTruthy();
 
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    await makeCall(user, "1clubs");
     expect(screen.getAllByRole("listitem")[0]?.textContent).toBe("North1 clubs");
     expect(screen.getByText("East to bid")).toBeTruthy();
   });
@@ -365,7 +377,7 @@ describe("bridge table", () => {
     expect(menu.closest("details")!.classList.contains("game-menu")).toBe(true);
     // The hand's actions first, then this device's settings and hands, and dealing again apart at the end.
     expect(within(menu).getAllByRole("button", { hidden: true }).map((button) => button.textContent))
-      .toEqual(["Online tables", "Take back", "Auto play this hand", "Settings", "Scores", "Recent hands", "About ContractPlay", "Deal a new hand"]);
+      .toEqual(["Online tables", "Take back", "Auto play this hand", "Settings", "Bid with one tap", "Scores", "Recent hands", "About ContractPlay", "Deal a new hand"]);
     expect(menuItem("Take back")!.disabled).toBe(true);
     expect(menuItem("Deal a new hand")!.classList.contains("menu-danger")).toBe(true);
 
@@ -386,15 +398,40 @@ describe("bridge table", () => {
     expect(sampleSet.getAttribute("download")).toBe("bridge-training-ruffing-short-hand-level-1.pbn");
   });
 
+  it("shows what a call means when it is picked, and makes it only once confirmed", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+
+    await user.click(screen.getByRole("button", { name: bidButtonLabel("1notrump") }));
+    expect(screen.getByText("North to bid")).toBeTruthy();
+    expect(document.querySelector(".call-preview [role=status]")?.textContent).toContain(explainBid([{ seat: "north", bid: "1notrump" }], 0, "SAYC", "expert"));
+    await user.click(screen.getByRole("button", { name: "Confirm 1NT" }));
+    expect(screen.getAllByRole("listitem")[0]?.textContent).toBe("North1 notrump");
+    expect(screen.getByText("East to bid")).toBeTruthy();
+  });
+
+  it("switches to one-tap bidding from the game menu and remembers it", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Start a new hand" }));
+
+    chooseMenu("Bid with one tap");
+    expect(window.localStorage.getItem("contractplay.confirmCalls")).toBe("off");
+    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    expect(screen.getByText("East to bid")).toBeTruthy();
+    expect(menuItem("Confirm each call")).toBeTruthy();
+  });
+
   it("keeps the latest call visible in a long centered auction", async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    await makeCall(user, "1clubs");
     const auctionList = screen.getByRole("region", { name: "Auction" }).querySelector("ol")!;
     Object.defineProperty(auctionList, "scrollHeight", { configurable: true, value: 300 });
     for (const bid of ["pass", "1diamonds", "pass", "1hearts", "pass", "1spades", "pass", "1notrump", "pass"]) {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(bid) }));
+      await makeCall(user, bid);
     }
 
     expect(auctionList.scrollTop).toBe(300);
@@ -586,7 +623,7 @@ describe("bridge table", () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1hearts") }));
+    await makeCall(user, "1hearts");
     expect(screen.getByRole("button", { name: bidButtonLabel("1clubs") }).hasAttribute("disabled")).toBe(true);
 
     expect(screen.getByText("East to bid")).toBeTruthy();
@@ -599,13 +636,13 @@ describe("bridge table", () => {
 
     expect(screen.getByRole("button", { name: "X" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("button", { name: "XX" }).hasAttribute("disabled")).toBe(true);
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    await makeCall(user, "1clubs");
     expect(screen.getByRole("button", { name: "X" }).hasAttribute("disabled")).toBe(false);
     expect(screen.getByRole("button", { name: "XX" }).hasAttribute("disabled")).toBe(true);
-    await user.click(screen.getByRole("button", { name: "X" }));
+    await makeCall(user, "double");
     expect(screen.getByRole("button", { name: "X" }).hasAttribute("disabled")).toBe(true);
     expect(screen.getByRole("button", { name: "XX" }).hasAttribute("disabled")).toBe(false);
-    await user.click(screen.getByRole("button", { name: "XX" }));
+    await makeCall(user, "redouble");
 
     const seatCalls = ["north", "east", "south", "west"].map((seat) => container.querySelector(`.seat-${seat} .seat-auction-calls`)?.textContent ?? "");
     expect(seatCalls).toEqual(["1♣", "X", "XX", ""]);
@@ -617,7 +654,7 @@ describe("bridge table", () => {
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     const selectCall = async (call: string) => {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      await makeCall(user, call);
     };
     await selectCall("1clubs");
     await selectCall("pass");
@@ -636,7 +673,7 @@ describe("bridge table", () => {
     const { container } = render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     for (const bid of ["1clubs", "pass", "pass", "pass"]) {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(bid) }));
+      await makeCall(user, bid);
     }
 
     const toggle = screen.getByRole("button", { name: /show auction/i });
@@ -664,7 +701,7 @@ describe("bridge table", () => {
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     for (let pass = 0; pass < 4; pass++) {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+      await makeCall(user, "pass");
     }
 
     expect(screen.getByRole("region", { name: "Auction" })).toBeTruthy();
@@ -677,7 +714,7 @@ describe("bridge table", () => {
     const { container } = render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     for (const bid of ["1clubs", "pass", "pass", "pass"]) {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(bid) }));
+      await makeCall(user, bid);
     }
 
     const card = screen.getAllByRole("button", { name: /^Play / })[0]!;
@@ -702,7 +739,7 @@ describe("bridge table", () => {
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     const selectCall = async (call: string) => {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      await makeCall(user, call);
     };
     await selectCall("1clubs");
     await selectCall("pass");
@@ -725,7 +762,7 @@ describe("bridge table", () => {
     render(<App solver={solver} />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     const selectCall = async (call: string) => {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      await makeCall(user, call);
     };
     await selectCall("1clubs");
     await selectCall("pass");
@@ -746,7 +783,7 @@ describe("bridge table", () => {
     render(<App solver={solver} />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     for (const call of ["1clubs", "pass", "pass", "pass"]) {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      await makeCall(user, call);
     }
 
     await user.click(screen.getByRole("switch", { name: "Hints" }));
@@ -760,7 +797,7 @@ describe("bridge table", () => {
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     const selectCall = async (call: string) => {
-      await user.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      await makeCall(user, call);
     };
     await selectCall("1clubs");
     await selectCall("pass");
@@ -827,7 +864,7 @@ describe("bridge table", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
     for (const call of ["1clubs", "pass", "pass", "pass"]) {
-      fireEvent.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      clickCall(call);
     }
 
     await act(async () => {
@@ -844,7 +881,7 @@ describe("bridge table", () => {
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "Start a new hand" }));
     const selectCall = (call: string) => {
-      fireEvent.click(screen.getByRole("button", { name: bidButtonLabel(call) }));
+      clickCall(call);
     };
     selectCall("1clubs");
     selectCall("pass");
@@ -948,12 +985,12 @@ describe("bridge table", () => {
     setSetting("Dealer", "north");
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     await waitFor(() => expect(screen.getByText("Your call")).toBeTruthy());
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    await makeCall(user, "1clubs");
 
     for (let call = 0; call < 8; call += 1) {
       if (screen.getByRole("region", { name: "Current trick" }).querySelectorAll(".trick-card").length > 0) break;
       if (screen.queryByText("Your call")) {
-        await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+        await makeCall(user, "pass");
         } else {
         await waitFor(() => {
           const hasHumanTurn = !!screen.queryByText("Your call");
@@ -1551,7 +1588,7 @@ describe("bridge table", () => {
     const user = await importTwoBoards();
     expect(screen.getByText("East to bid")).toBeTruthy();
     expect(fieldPanel()).toBeNull();
-    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+    for (let index = 0; index < 4; index += 1) await makeCall(user, "pass");
 
     const result = within(screen.getByRole("region", { name: "Hand result" }));
     expect(within(fieldPanel()!).getByText("30.0% · 3 of 10 matchpoints")).toBeTruthy();
@@ -1581,7 +1618,7 @@ describe("bridge table", () => {
   it("offers Finish board set from the result of the last board", async () => {
     const user = await importTwoBoards();
     fireEvent.click(menuItem("Next board")!);
-    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+    for (let index = 0; index < 4; index += 1) await makeCall(user, "pass");
     const result = within(screen.getByRole("region", { name: "Hand result" }));
     expect(result.queryByRole("button", { name: "Next board" })).toBeNull();
     await user.click(result.getByRole("button", { name: "Finish board set" }));
@@ -1592,7 +1629,7 @@ describe("bridge table", () => {
   it("shows the original play only once the hand is over, and returns to the result", async () => {
     const user = await importTwoBoards(true);
     expect(screen.queryByRole("button", { name: "View original play" })).toBeNull();
-    for (let index = 0; index < 4; index += 1) await user.click(screen.getByRole("button", { name: bidButtonLabel("pass") }));
+    for (let index = 0; index < 4; index += 1) await makeCall(user, "pass");
 
     await user.click(within(fieldPanel()!).getByRole("button", { name: "View original play" }));
     expect(screen.getByText("Original play: action 0 of 4")).toBeTruthy();
@@ -1716,7 +1753,7 @@ describe("bridge table", () => {
     const user = userEvent.setup();
     const firstRender = render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    await makeCall(user, "1clubs");
 
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem("contractplay.solo")!).currentGame.auction).toHaveLength(1));
     firstRender.unmount();
@@ -1731,7 +1768,7 @@ describe("bridge table", () => {
     render(<App />);
     await user.click(screen.getByRole("button", { name: "Start a new hand" }));
     expect(menuItem("Take back")!.disabled).toBe(true);
-    await user.click(screen.getByRole("button", { name: bidButtonLabel("1clubs") }));
+    await makeCall(user, "1clubs");
     chooseMenu("Take back");
     expect(screen.getByText("North to bid")).toBeTruthy();
     expect(screen.queryByText("North1 clubs")).toBeNull();
