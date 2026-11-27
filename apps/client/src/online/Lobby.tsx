@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { loadSoloData, type OwnCharacter, type StorageLike } from "@contractplay/persistence";
 import type { Aggression } from "@contractplay/core";
-import { MAX_PLAYER_NAME, type SeatInfo, type TableScoring, type TableStyle, type TableSummary } from "@contractplay/protocol";
+import { MAX_PLAYER_NAME, MAX_TABLE_NAME, type LobbyTable, type SeatInfo, type TableScoring, type TableStyle } from "@contractplay/protocol";
 import { aggressionNames, aggressionOptions, botName, seatNames, seats } from "../table/labels.js";
 import { boardSetFromPbn } from "../boardSet.js";
 import { castHasCustom, loadSoloSetup, saveSoloSetup, type SoloSetup } from "../soloSetup.js";
 import { BotCastFields } from "../table/BotCastFields.js";
 import { loadPartnerResults, opponentStats, partnerStats } from "../partnerResults.js";
-import { createSession as defaultCreateSession, createTable as defaultCreateTable, listLeaderboard as defaultListLeaderboard, listTables as defaultListTables } from "./connection.js";
+import { createSession as defaultCreateSession, createTable as defaultCreateTable, listLeaderboard as defaultListLeaderboard, listTables as defaultListTables, renameTable as defaultRenameTable } from "./connection.js";
 import type { LeaderboardRating, SessionBoardInput } from "./connection.js";
 import { botCharacter } from "@contractplay/bots";
 import { loadIdentity, saveIdentity, type Identity } from "./identity.js";
@@ -35,7 +35,9 @@ function fileText(file: File): Promise<string> {
 }
 
 export type LobbyApi = {
-  listTables(baseUrl: string): Promise<TableSummary[]>;
+  listTables(baseUrl: string): Promise<LobbyTable[]>;
+  /** The host renames a table they host; without it the lobby offers no Rename. */
+  renameTable?(baseUrl: string, id: string, name: string): Promise<{ name: string } | { error: string }>;
   createTable: typeof defaultCreateTable;
   createSession: typeof defaultCreateSession;
   /** The bot leaderboard panel's ratings; without it the panel shows that no bots are rated yet. */
@@ -56,7 +58,7 @@ export type LobbyProps = {
   expandedPanels?: boolean;
 };
 
-const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession, listLeaderboard: defaultListLeaderboard };
+const defaultApi: LobbyApi = { listTables: defaultListTables, createTable: defaultCreateTable, createSession: defaultCreateSession, listLeaderboard: defaultListLeaderboard, renameTable: defaultRenameTable };
 
 function createErrorText(error: string): string {
   if (error === "too-many-tables") return "There are too many open tables right now. Try again later.";
@@ -245,11 +247,44 @@ function AccountName({ name, onRename }: { name: string; onRename(name: string):
   </form>;
 }
 
+function renameErrorText(error: string): string {
+  if (error === "not-allowed") return "Only the table's host can rename it.";
+  if (error === "not-found") return "This table has closed.";
+  if (error === "unauthenticated") return "Sign in again to rename this table.";
+  return "Couldn't rename the table. Try again.";
+}
+
+/** The host's Rename beside Join: opens an inline form, and the list is refreshed once the table has its new name. */
+function TableRename({ table, rename, onRenamed }: { table: LobbyTable; rename(name: string): Promise<{ name: string } | { error: string }>; onRenamed(): void }) {
+  const [draft, setDraft] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const close = () => { setDraft(undefined); setError(undefined); };
+  async function save() {
+    const next = draft?.trim() ?? "";
+    if (next === "" || saving) return;
+    setSaving(true); setError(undefined);
+    const result = await rename(next).catch(() => ({ error: "network" }));
+    setSaving(false);
+    if ("name" in result) { close(); onRenamed(); }
+    else setError(renameErrorText(result.error));
+  }
+  if (draft === undefined) {
+    return <button className="secondary-button" type="button" aria-label={`Rename ${table.name}`} title="Change this table's name for everyone, here and at the table" onClick={() => setDraft(table.name)}>Rename</button>;
+  }
+  return <form className="table-tools-row table-rename" aria-label={`Rename ${table.name}`} onSubmit={(event) => { event.preventDefault(); void save(); }}>
+    <input aria-label="New table name" value={draft} maxLength={MAX_TABLE_NAME} autoFocus onChange={(event) => setDraft(event.target.value)} />
+    <button className="primary-button" type="submit" disabled={saving || draft.trim() === ""}>Save</button>
+    <button className="secondary-button" type="button" onClick={close}>Cancel</button>
+    {error ? <span className="error-message" role="alert">{error}</span> : null}
+  </form>;
+}
+
 function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage, api, onOpenTable, onPlaySolo, onRecentHands, account, onRename, onSignOut }: {
   resultsSynced: number; expandedPanels: boolean; identity: { name: string }; baseUrl: string; storage: StorageLike; api: LobbyApi; onOpenTable(id: string, observer?: true): void; onPlaySolo(): void; onRecentHands(): void;
   account: AccountSession; onRename(name: string): Promise<void>; onSignOut(): void;
 }) {
-  const [tables, setTables] = useState<TableSummary[] | undefined>();
+  const [tables, setTables] = useState<LobbyTable[] | undefined>();
   const [listError, setListError] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
   const [tableName, setTableName] = useState<string | undefined>();
@@ -419,9 +454,14 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
                     <li key={seat}><span className="quiet-copy">{seatNames[seat]}</span> <span>{seatLabel(table.seats[seat])}</span></li>
                   ))}
                 </ul>
-                {table.benchmark
-                  ? <button className="secondary-button" type="button" aria-label={`Watch ${table.name}`} onClick={() => onOpenTable(table.id, true)}>Watch</button>
-                  : <button className="secondary-button" type="button" aria-label={`Join ${table.name}`} onClick={() => onOpenTable(table.id)}>Join</button>}
+                <div className="lobby-table-actions">
+                  {table.benchmark
+                    ? <button className="secondary-button" type="button" aria-label={`Watch ${table.name}`} onClick={() => onOpenTable(table.id, true)}>Watch</button>
+                    : <button className="secondary-button" type="button" aria-label={`Join ${table.name}`} onClick={() => onOpenTable(table.id)}>Join</button>}
+                  {table.youHost && !table.benchmark && api.renameTable
+                    ? <TableRename table={table} rename={(name) => api.renameTable!(baseUrl, table.id, name)} onRenamed={() => { void refresh(); }} />
+                    : null}
+                </div>
               </li>
             ))}
           </ul>

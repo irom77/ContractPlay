@@ -2,7 +2,7 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import type { StorageLike } from "@contractplay/persistence";
-import type { TableSummary } from "@contractplay/protocol";
+import type { LobbyTable, TableSummary } from "@contractplay/protocol";
 import { createDeck, deal } from "@contractplay/core";
 import { exportPbn } from "@contractplay/pbn";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -145,6 +145,46 @@ describe("Lobby", () => {
     const { onOpenTable } = setup();
     await user.click(await screen.findByRole("button", { name: "Join Friday club" }));
     expect(onOpenTable).toHaveBeenCalledWith("ABC123");
+  });
+
+  it("offers Rename beside Join only on tables you host, and renames inline", async () => {
+    const user = userEvent.setup();
+    const hosted = [{ ...summaries[0]!, youHost: true as const }, summaries[1]!];
+    let current: LobbyTable[] = hosted;
+    const listTables = vi.fn(() => Promise.resolve(current));
+    const renameTable = vi.fn(async (_baseUrl: string, _id: string, name: string) => {
+      current = [{ ...hosted[0]!, name }, hosted[1]!];
+      return { name };
+    });
+    render(<Lobby baseUrl="https://x.test" storage={memoryStorage()} onOpenTable={vi.fn()} onPlaySolo={vi.fn()} onRecentHands={vi.fn()}
+      api={{ listTables, createTable: vi.fn(), createSession: vi.fn(), renameTable }} auth={signedIn} expandedPanels />);
+    const join = await screen.findByRole("button", { name: "Join Friday club" });
+    const renameButton = screen.getByRole("button", { name: "Rename Friday club" });
+    expect(join.parentElement).toBe(renameButton.parentElement);
+    expect(screen.queryByRole("button", { name: "Rename Learners" })).toBeNull();
+    await user.click(renameButton);
+    const input = screen.getByRole("textbox", { name: "New table name" });
+    expect((input as HTMLInputElement).value).toBe("Friday club");
+    expect((input as HTMLInputElement).maxLength).toBe(40);
+    await user.clear(input);
+    await user.type(input, "Thursday club");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(renameTable).toHaveBeenCalledWith("https://x.test", "ABC123", "Thursday club");
+    expect(await screen.findByRole("button", { name: "Join Thursday club" })).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: "New table name" })).toBeNull();
+  });
+
+  it("explains a refused rename and keeps the form open", async () => {
+    const user = userEvent.setup();
+    const renameTable = vi.fn(async () => ({ error: "not-allowed" as const }));
+    render(<Lobby baseUrl="https://x.test" storage={memoryStorage()} onOpenTable={vi.fn()} onPlaySolo={vi.fn()} onRecentHands={vi.fn()}
+      api={{ listTables: () => Promise.resolve([{ ...summaries[0]!, youHost: true as const }]), createTable: vi.fn(), createSession: vi.fn(), renameTable }} auth={signedIn} expandedPanels />);
+    await user.click(await screen.findByRole("button", { name: "Rename Friday club" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Only the table's host can rename it.");
+    expect(screen.getByRole("textbox", { name: "New table name" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Rename Friday club" })).toBeTruthy();
   });
 
   it("labels benchmark tables for watching while keeping ordinary tables joinable", async () => {

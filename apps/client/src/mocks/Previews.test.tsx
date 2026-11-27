@@ -30,6 +30,9 @@ const expectations: Record<string, () => Promise<void> | void> = {
     await user.click(tables);
     expect(screen.getByText("SAYC · Rubber bridge · Conservative bots")).toBeTruthy();
     expect(screen.getByText("Careful Cora")).toBeTruthy();
+    // Alex hosts Beginners welcome, so Rename sits beside its Join; Friday club is someone else's.
+    expect(screen.getByRole("button", { name: "Rename Beginners welcome" }).parentElement).toBe(screen.getByRole("button", { name: "Join Beginners welcome" }).parentElement);
+    expect(screen.queryByRole("button", { name: "Rename Friday club" })).toBeNull();
     await user.click(playToggle);
     const play = screen.getByRole("form", { name: "Play" });
     expect(within(play).getByLabelText("Bot aggressiveness")).toBeTruthy();

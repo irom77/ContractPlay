@@ -58,10 +58,17 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
     return store;
   }, [data]);
   const connect = useMemo(() => data.kind === "table" ? fixedConnection(data.view) : undefined, [data]);
-  const lobbyApi = useMemo(() => data.kind === "lobby"
-    ? { listTables: () => Promise.resolve(data.tables), createTable: () => Promise.resolve({ error: "preview" }), createSession: () => Promise.resolve({ error: "preview" }),
-        ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}) }
-    : undefined, [data]);
+  const lobbyApi = useMemo(() => {
+    if (data.kind !== "lobby") return undefined;
+    // A rename changes only this preview's list.
+    let tables = data.tables;
+    return { listTables: () => Promise.resolve(tables), createTable: () => Promise.resolve({ error: "preview" }), createSession: () => Promise.resolve({ error: "preview" }),
+      renameTable: (_baseUrl: string, id: string, name: string) => {
+        tables = tables.map((table) => table.id === id ? { ...table, name } : table);
+        return Promise.resolve({ name });
+      },
+      ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}) };
+  }, [data]);
   if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={previewAuth} onOpenTable={() => {}} onPlaySolo={() => {}} onRecentHands={() => {}} />;
   return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} {...(data.observer ? { observer: true as const } : {})} />;
 }

@@ -22,6 +22,9 @@ export type SeatInfo =
 /** `aggression`: how every bot and stand-in at the table bids and plays; missing from servers that predate it, and then Normal. */
 export type TableSummary = { id: string; benchmark?: true; name: string; style: TableStyle; scoring: TableScoring; aggression?: Aggression; seats: Record<Seat, SeatInfo>; handInProgress: boolean };
 
+/** A lobby entry; `youHost` is set only on the tables the signed-in caller hosts, so they can rename them from the lobby. */
+export type LobbyTable = TableSummary & { youHost?: true };
+
 /** GameState without history or the original deal; hands the viewer may not see are empty arrays. */
 export type PublicGame = Pick<GameState, "phase" | "dealer" | "vulnerability" | "currentActor" | "auction" | "contract" | "hands" | "currentTrick" | "completedTricks" | "score" | "trickLeader" | "claim">;
 

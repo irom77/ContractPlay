@@ -6,6 +6,7 @@ import type { Aggression, Seat, Vulnerability } from "@contractplay/core";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 import { authenticatedAccount, authRequestAllowed, authRoute } from "./auth.js";
+import { AuthStore } from "./auth-store.js";
 import { ADMIN_BENCHMARK_PATH, PUBLIC_BENCHMARK_PATH, benchmarkRoute } from "./benchmark-routes.js";
 import { dealRoute } from "./deal-routes.js";
 import { parseDeal, readLimited } from "./deal-input.js";
@@ -83,6 +84,39 @@ async function createSession(request: Request, env: Env): Promise<Response> {
   return Response.json(result, { status: 201 });
 }
 
+/** The signed-in caller's player ids (the account's own and every linked guest's), or none when signed out. */
+async function callerPlayers(request: Request, env: Env): Promise<string[]> {
+  const account = await authenticatedAccount(request, env);
+  if (!account) return [];
+  return [account.primaryPlayerId, ...await new AuthStore(env.DB).playerIdsForAccount(account.id)];
+}
+
+/** The lobby's list; a signed-in caller's own tables are marked so the lobby offers Rename. A failed sign-in check lists plainly. */
+async function listTables(request: Request, env: Env): Promise<Response> {
+  const players = await callerPlayers(request, env).catch(() => []);
+  return Response.json(await lobbyOf(env).list(players));
+}
+
+/** The host renames their table from the lobby: `POST /api/tables/:id/name` with `{ name }`. */
+async function renameTable(request: Request, env: Env, rawId: string): Promise<Response> {
+  if (request.method !== "POST") return Response.json({ error: "method not allowed" }, { status: 405 });
+  let players: string[];
+  try { players = await callerPlayers(request, env); }
+  catch { return Response.json({ error: "unavailable" }, { status: 503 }); }
+  if (!players.length) return Response.json({ error: "unauthenticated" }, { status: 401 });
+  const id = rawId.toUpperCase();
+  if (!TABLE_ID.test(id)) return Response.json({ error: "not-found" }, { status: 404 });
+  const text = await readLimited(request, MAX_MESSAGE_BYTES);
+  let body: unknown;
+  try { body = text === undefined ? undefined : JSON.parse(text); } catch { body = undefined; }
+  const name = record(body) ? cleanName(body.name, MAX_TABLE_NAME) : undefined;
+  if (name === undefined) return Response.json({ error: "bad-request" }, { status: 400 });
+  const result = await env.TABLES.get(env.TABLES.idFromName(id)).renameBy(players, name);
+  if (result === "gone") return Response.json({ error: "not-found" }, { status: 404 });
+  if (result === "not-allowed") return Response.json({ error: "not-allowed" }, { status: 403 });
+  return Response.json({ name });
+}
+
 /** A socket for an id that cannot exist: answers `gone` and closes. */
 function goneSocket(): Response {
   const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
@@ -144,7 +178,7 @@ export default {
       return response.status === 204 ? response : Response.json({ error: "not-found" }, { status: 404 });
     }
     if (path === "/api/tables") {
-      if (request.method === "GET") return Response.json(await lobbyOf(env).list());
+      if (request.method === "GET") return listTables(request, env);
       if (request.method === "POST") return createTable(request, env);
       return Response.json({ error: "method not allowed" }, { status: 405 });
     }
@@ -152,6 +186,8 @@ export default {
       if (request.method === "POST") return createSession(request, env);
       return Response.json({ error: "method not allowed" }, { status: 405 });
     }
+    const tableName = /^\/api\/tables\/([^/]+)\/name$/.exec(path);
+    if (tableName) return renameTable(request, env, tableName[1]!);
     const socket = /^\/api\/tables\/([^/]+)\/ws$/.exec(path);
     if (socket) return connectTable(request, env, socket[1]!);
     if (path.startsWith("/api/")) return Response.json({ error: "not found" }, { status: 404 });

@@ -2,7 +2,7 @@ import { applyAction, createGameState, legalCards, RANKS, scoreRubberHand, SEATS
 import type { OwnCharacter, SavedHand, SoloData } from "@contractplay/persistence";
 import type { SoloPreview } from "../App.js";
 import type { PartnerResult } from "../partnerResults.js";
-import type { TableSummary, TableView } from "@contractplay/protocol";
+import type { LobbyTable, TableView } from "@contractplay/protocol";
 import type { QueuedCard } from "../table/queuedCard.js";
 import type { LeaderboardRating } from "../online/connection.js";
 import { handName } from "../handNames.js";
@@ -132,7 +132,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
   game.completedTricks.length >= tricks && game.currentTrick.length > 0 && seats.includes(game.currentActor);
 
 export type PreviewData =
-  | { kind: "lobby"; viewerName: string; tables: TableSummary[]; leaderboard?: LeaderboardRating[] }
+  | { kind: "lobby"; viewerName: string; tables: LobbyTable[]; leaderboard?: LeaderboardRating[] }
   | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; ownCharacters?: readonly OwnCharacter[]; observer?: true }
   | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
@@ -147,11 +147,11 @@ const others = (seat: Seat) => SEATS.filter((s) => s !== seat);
 
 const onlineScreens: readonly PreviewScreen[] = [
   {
-    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, one with open seats, conservative bots, and Careful Cora named at East) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked; below them the Bot leaderboard panel starts open and says no bots are rated yet. Renaming here changes only the preview.",
+    id: "lobby", title: "Lobby", detail: "Signed in as Alex with Change name; Open tables (one mid-hand, and Beginners welcome, which you host from West, with open seats, conservative bots, and Careful Cora named at East, so it offers Rename beside Join) above the Play panel (Me and bots, or With other people, each with bot skill, bidding style and bot aggressiveness) and the duplicate session form (marked Experimental), all collapsed to their headers until clicked; below them the Bot leaderboard panel starts open and says no bots are rated yet. Renaming yourself or the table here changes only the preview.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
-      const open = { ...table("Beginners welcome", { west: "Chris" }, [], { east: "cora" }), aggression: "conservative" as const };
-      return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(playing), summaryOf(open)] };
+      const open = { ...table("Beginners welcome", { west: "Alex" }, [], { east: "cora" }), aggression: "conservative" as const };
+      return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(playing), { ...summaryOf(open), youHost: true }] };
     }
   },
   {

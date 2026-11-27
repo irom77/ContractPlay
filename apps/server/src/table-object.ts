@@ -181,6 +181,18 @@ export class TableObject extends DurableObject<Env> {
     return summaryOf(bound);
   }
 
+  /**
+   * Renames the table for its host, who is one of `players` (the signed-in caller's player ids), as the lobby's Rename
+   * does without a table connection. The rename then reaches the table and the lobby like one sent from a seat.
+   */
+  async renameBy(players: readonly PlayerId[], name: string): Promise<"renamed" | "not-allowed" | "gone"> {
+    const state = await this.load();
+    if (!state) return "gone";
+    if (state.host === undefined || !players.includes(state.host)) return "not-allowed";
+    const out = await this.dispatch({ type: "message", player: state.host, message: { type: "rename", name }, at: Date.now() });
+    return out.expired ? "gone" : out.refused ? "not-allowed" : "renamed";
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (new URL(request.url).pathname === "/_admin/delete") {
       if (request.method !== "DELETE") return new Response("method not allowed", { status: 405 });
@@ -437,10 +449,10 @@ export class TableObject extends DurableObject<Env> {
     await this.reportFinishedSessionHand(out.state);
     await this.broadcast(out.state);
     const summary = summaryOf(out.state);
-    if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state))) {
+    if (JSON.stringify(summary) !== JSON.stringify(summaryOf(state)) || out.state.host !== state.host) {
       // the change is already stored and sent; a missed lobby update is repaired by the next change to the lobby row
       try {
-        await this.lobby().update(summary);
+        await this.lobby().update(summary, out.state.host);
       } catch {
         console.warn("table: lobby update failed; a later seat or score change will repair it");
       }

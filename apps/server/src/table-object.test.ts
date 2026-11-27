@@ -529,3 +529,69 @@ describe("deal replays at online tables", () => {
     expect(settled.connections[west.player]).not.toEqual(before.connections[west.player]);
   });
 });
+
+describe("renaming a table from the lobby", () => {
+  const listFor = async (cookie?: string) => {
+    const response = await worker.fetch(new Request(`${origin}/api/tables`, { headers: cookie ? { Cookie: cookie } : {} }), config);
+    expect(response.status).toBe(200);
+    return response.json<(Record<string, unknown> & { id: string; name: string })[]>();
+  };
+  const rename = (id: string, body: unknown, cookie?: string) => worker.fetch(new Request(`${origin}/api/tables/${id}/name`, {
+    method: "POST", headers: { Origin: origin, "content-type": "application/json", ...(cookie ? { Cookie: cookie } : {}) }, body: JSON.stringify(body)
+  }), config);
+  async function hostedTable() {
+    const id = await table(true);
+    const host = await account();
+    const client = await socket(id, { Cookie: host.cookie });
+    client.send({ ...accountHello, expectedPlayerId: host.account.primaryPlayerId });
+    await client.view();
+    client.send({ type: "sit", seat: "north" });
+    await client.view();
+    return { id, host, client };
+  }
+
+  it("marks only the tables the signed-in caller hosts, without publishing the host", async () => {
+    const { id, host } = await hostedTable();
+    expect((await listFor(host.cookie)).find((entry) => entry.id === id)?.youHost).toBe(true);
+    // The helper's accounts share one session credential: this cookie now signs in the other account.
+    const other = await account();
+    expect((await listFor(other.cookie)).find((entry) => entry.id === id)?.youHost).toBeUndefined();
+    const anonymous = (await listFor()).find((entry) => entry.id === id)!;
+    expect(anonymous.youHost).toBeUndefined();
+    expect(JSON.stringify(anonymous)).not.toContain(host.account.primaryPlayerId);
+  });
+
+  it("marks a table hosted through a linked guest identity", async () => {
+    const id = await table(true);
+    await seatGuest(id, secretA, "north");
+    const linked = await account([await hash(secretA)]);
+    expect((await listFor(linked.cookie)).find((entry) => entry.id === id)?.youHost).toBe(true);
+    const response = await rename(id, { name: "Guest's table" }, linked.cookie);
+    expect(response.status).toBe(200);
+    expect((await stored(id))?.name).toBe("Guest's table");
+  });
+
+  it("lets the host rename it, updating the table and the lobby", async () => {
+    const { id, host, client } = await hostedTable();
+    const response = await rename(id.toLowerCase(), { name: "  Thursday   club " }, host.cookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ name: "Thursday club" });
+    expect((await client.view()).name).toBe("Thursday club");
+    expect((await stored(id))?.name).toBe("Thursday club");
+    expect((await listFor()).find((entry) => entry.id === id)?.name).toBe("Thursday club");
+  });
+
+  it("refuses anyone but the host, a signed-out caller, a bad name, and an unknown table", async () => {
+    const { id, host } = await hostedTable();
+    expect((await rename(id, { name: "   " }, host.cookie)).status).toBe(400);
+    expect((await rename(id, { name: "x".repeat(41) }, host.cookie)).status).toBe(400);
+    expect((await rename("ZZZZZZ", { name: "Nowhere" }, host.cookie)).status).toBe(404);
+    const get = await worker.fetch(new Request(`${origin}/api/tables/${id}/name`, { headers: { Cookie: host.cookie } }), config);
+    expect(get.status).toBe(405);
+    expect((await rename(id, { name: "Hijacked" })).status).toBe(401);
+    // The helper's accounts share one session credential: this cookie now signs in the other account.
+    const other = await account();
+    expect((await rename(id, { name: "Hijacked" }, other.cookie)).status).toBe(403);
+    expect((await stored(id))?.name).toBe("Account seats");
+  });
+});

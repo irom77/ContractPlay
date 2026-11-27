@@ -1,5 +1,5 @@
 import { PROTOCOL_VERSION } from "@contractplay/protocol";
-import type { ClientMessage, RefusalReason, ServerMessage, TableScoring, TableStyle, TableSummary, TableView } from "@contractplay/protocol";
+import type { ClientMessage, RefusalReason, ServerMessage, TableScoring, TableStyle, TableView, LobbyTable } from "@contractplay/protocol";
 import type { Aggression, Deal, Seat, Vulnerability } from "@contractplay/core";
 import { isNativeClient } from "../nativeFiles.js";
 import type { Identity } from "./identity.js";
@@ -123,10 +123,25 @@ export function connectTable(input: ConnectTableInput): TableConnection {
   };
 }
 
-export async function listTables(baseUrl: string): Promise<TableSummary[]> {
+export async function listTables(baseUrl: string): Promise<LobbyTable[]> {
   const response = await fetch(`${baseUrl}/api/tables`);
   if (!response.ok) throw new Error(`Listing tables failed (${response.status})`);
-  return (await response.json()) as TableSummary[];
+  return (await response.json()) as LobbyTable[];
+}
+
+/** The host renames a table from the lobby; the error is `not-allowed`, `not-found`, `unauthenticated`, `bad-request`, `failed` or `network`. */
+export async function renameTable(baseUrl: string, id: string, name: string): Promise<{ name: string } | { error: string }> {
+  try {
+    const response = await fetch(`${baseUrl}/api/tables/${encodeURIComponent(id)}/name`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name })
+    });
+    const body: unknown = await response.json().catch(() => undefined);
+    if (response.ok && isRecord(body) && typeof body.name === "string") return { name: body.name };
+    const errors: Record<number, string> = { 400: "bad-request", 401: "unauthenticated", 403: "not-allowed", 404: "not-found" };
+    return { error: errors[response.status] ?? "failed" };
+  } catch {
+    return { error: "network" };
+  }
 }
 
 /**

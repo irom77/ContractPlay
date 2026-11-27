@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { createDeck, deal, shuffle } from "@contractplay/core";
 import type { Aggression, Vulnerability } from "@contractplay/core";
 import { MAX_TABLE_NAME } from "@contractplay/protocol";
-import type { TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
+import type { LobbyTable, TableScoring, TableStyle, TableSummary } from "@contractplay/protocol";
 import type { BenchmarkTableAssignment } from "@contractplay/benchmark";
 import type { DuplicateSessionBoard } from "@contractplay/table";
 
@@ -35,8 +35,11 @@ export function generatedSessionBoards(boardCount: number): DuplicateSessionBoar
   }));
 }
 
-/** A lobby entry; `summary` is missing while the table is being created (the id is reserved). */
-type Entry = { listed: boolean; summary?: TableSummary };
+/**
+ * A lobby entry; `summary` is missing while the table is being created (the id is reserved). `host` is the hosting
+ * player's id: private to the lobby, used only to mark a caller's own tables, and never listed.
+ */
+type Entry = { listed: boolean; summary?: TableSummary; host?: string };
 
 /** `scoring` is missing only from callers that predate rubber tables; the table then scores rubbers. A missing `aggression` is Normal. */
 export type NewTable = { name: string; style: TableStyle; scoring?: TableScoring; aggression?: Aggression; listed: boolean };
@@ -52,9 +55,12 @@ export class LobbyObject extends DurableObject<Env> {
   /** The caps; a field so tests can lower them instead of creating hundreds of tables. */
   limits = { listed: MAX_LISTED_TABLES, unlisted: MAX_UNLISTED_TABLES };
 
-  async list(): Promise<TableSummary[]> {
+  /** The listed tables; those hosted by one of `players` (the caller's player ids) are marked `youHost`. */
+  async list(players: readonly string[] = []): Promise<LobbyTable[]> {
     const entries = await this.ctx.storage.list<Entry>({ prefix: LISTED });
-    return [...entries.values()].flatMap((entry) => (entry.summary ? [entry.summary] : []));
+    return [...entries.values()].flatMap((entry) => (entry.summary
+      ? [entry.host !== undefined && players.includes(entry.host) ? { ...entry.summary, youHost: true as const } : entry.summary]
+      : []));
   }
 
   /** All live tables for administration, including unlisted tables. */
@@ -215,10 +221,10 @@ export class LobbyObject extends DurableObject<Env> {
     return (records.get(RATE + client) ?? []).filter((t) => t > now - HOUR_MS);
   }
 
-  /** Records a table's new summary; ignored for a table the lobby no longer holds. */
-  async update(summary: TableSummary): Promise<void> {
+  /** Records a table's new summary and host; ignored for a table the lobby no longer holds. */
+  async update(summary: TableSummary, host?: string): Promise<void> {
     const found = await this.entry(summary.id);
-    if (found) await this.ctx.storage.put<Entry>(found.key, { listed: found.entry.listed, summary });
+    if (found) await this.ctx.storage.put<Entry>(found.key, { listed: found.entry.listed, summary, ...(host !== undefined ? { host } : {}) });
   }
 
   async remove(id: string): Promise<void> {

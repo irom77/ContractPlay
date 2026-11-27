@@ -596,6 +596,7 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .lobby-playing { color: var(--gold); font-size: 11px; font-weight: 700; }
 .lobby-seats { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); font-size: 13px; }
 .lobby-table .secondary-button { justify-self: start; }
+.lobby-table-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .lobby > .error-message { position: static; }
 /* The lobby header wraps on narrow screens: in normal flow above the panels, account controls on their own rows. */
 .lobby .start-bar .table-tools-row { flex-wrap: wrap; justify-content: flex-end; }
