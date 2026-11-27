@@ -432,6 +432,12 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .call-preview strong { margin-right: .35em; color: var(--gold); font-family: var(--suit-font); }
 .call-preview strong.auction-call-red { color: #ff6b6b; }
 .call-preview .primary-button { flex: none; min-height: calc(4.7 * var(--u)); padding: 0 calc(1.6 * var(--u)); font-size: var(--text-m); white-space: nowrap; }
+/* A short screen (a phone on its side) has no height to spare: the meaning sits in a panel beside the box instead of under it. */
+@media (max-height: 500px) {
+  .bid-picker { position: relative; }
+  .call-preview { position: absolute; bottom: 0; left: calc(100% + var(--u)); width: max(150px, calc(36 * var(--u))); min-height: 0; flex-direction: column; align-items: stretch; margin: 0; border: 1px solid rgba(255, 255, 255, .13); border-radius: calc(1.4 * var(--u)); padding: calc(1.3 * var(--u)); background: rgba(12, 40, 34, .95); box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) #0007; }
+  .call-preview:not(:has([role="status"])) { display: none; }
+}
 .bid-special:disabled { opacity: .28; cursor: not-allowed; }
 
 .score-panel { position: absolute; z-index: 5; top: 50%; left: 50%; display: grid; justify-items: center; gap: calc(1.4 * var(--u)); min-width: calc(40 * var(--u)); border: 1px solid rgba(255, 255, 255, .13); border-radius: calc(1.4 * var(--u)); padding: calc(3 * var(--u)) calc(4 * var(--u)); background: rgba(12, 40, 34, .94); box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) #0007; text-align: center; transform: translate(-50%, -50%); }
