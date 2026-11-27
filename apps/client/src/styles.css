@@ -709,11 +709,11 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .banner-grip { align-self: stretch; border: 0; border-radius: 6px; padding: 0 4px; background: none; color: var(--muted); font-size: var(--text-l); cursor: grab; touch-action: none; }
 .banner-grip:hover, .banner-grip:focus-visible { color: var(--gold); }
 .online-seats { display: grid; grid-template-areas: ". north north north ." "west west . east east" ". south south south ."; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.online-seat { display: grid; align-content: center; justify-items: center; gap: 6px; text-align: center; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+.online-seat { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; justify-items: center; gap: 6px; text-align: center; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
 .online-seat-north { grid-area: north; } .online-seat-east { grid-area: east; } .online-seat-south { grid-area: south; } .online-seat-west { grid-area: west; }
-.online-seat-head { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 6px; min-width: 0; }
+.online-seat-head { display: flex; max-width: 100%; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 6px; min-width: 0; }
 .online-seat-head strong { overflow-wrap: anywhere; }
-.online-seat-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.online-seat-controls { display: flex; max-width: 100%; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
 .online-seat-controls .primary-button, .online-seat-controls .secondary-button { min-height: 34px; padding: 0 12px; font-size: 13px; }
 .online-seat-controls select { min-width: 0; max-width: 100%; height: 34px; border: 1px solid rgba(230, 235, 225, .22); border-radius: 6px; padding: 0 6px; background: #21483e; color: var(--ink); font-size: 13px; }
 .online-deal { justify-self: center; min-width: 180px; }
@@ -725,6 +725,9 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .lobby > .online-status { position: static; transform: none; }
 @media (max-width: 520px) {
   .online-seating .start-bar .secondary-button { padding: 0 8px; font-size: 12px; }
+  /* Too narrow for the five-column diamond: West and East take half the width each. */
+  .online-seats { grid-template-areas: "north north" "west east" "south south"; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .online-seat { padding: 8px 6px; }
 }
 
 /* ---------- UI preview mode (#/mocks) ---------- */
