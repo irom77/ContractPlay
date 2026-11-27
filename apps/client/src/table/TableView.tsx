@@ -101,10 +101,12 @@ export function TableView({
   const bidPickerRef = useRef<HTMLDivElement>(null);
   const phase = game.phase;
   const auctionLength = game.auction.length;
-  // The call picked in the bidding box but not yet made, and the auction length it was picked at: once the auction
-  // moves on, the pick no longer applies.
-  const [picked, setPicked] = useState<{ bid: Bid; at: number } | undefined>(() => confirmCalls?.initial ? { bid: confirmCalls.initial, at: auctionLength } : undefined);
-  const pickedNow = picked && picked.at === auctionLength ? picked.bid : undefined;
+  // The call picked in the bidding box but not yet made, and the auction it was picked in: once the auction changes,
+  // even back to the same length after a take-back, the pick is dropped.
+  const auctionKey = game.auction.map(({ bid }) => bid).join(" ");
+  const [picked, setPicked] = useState<{ bid: Bid; auction: string } | undefined>(() => confirmCalls?.initial ? { bid: confirmCalls.initial, auction: auctionKey } : undefined);
+  const pickedNow = picked && picked.auction === auctionKey ? picked.bid : undefined;
+  useEffect(() => { if (picked && picked.auction !== auctionKey) setPicked(undefined); }, [picked, auctionKey]);
 
   useEffect(() => {
     if (!pickedNow) return;
@@ -168,7 +170,7 @@ export function TableView({
   const chooseCall = (bid: Bid) => {
     if (!onBid) return;
     if (!confirmCalls || selectedCall === bid) { setPicked(undefined); onBid(bid); return; }
-    setPicked({ bid, at: auctionLength });
+    setPicked({ bid, auction: auctionKey });
   };
   // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.
   const playFromDummy = canAct && phase === "play" && dummyVisible && actingSeat === dummySeat && positionOf(actingSeat) !== "bottom";

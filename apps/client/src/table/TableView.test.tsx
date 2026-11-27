@@ -224,6 +224,22 @@ describe("confirming calls", () => {
     expect(container.querySelector(".selected-bid")).toBeNull();
   });
 
+  it("does not bring a pick back when the auction returns to the same length with other calls", async () => {
+    const props = { bottomSeat: "south" as const, showBottomHand: true, onBid: vi.fn(), confirmCalls: { meaning } };
+    const show = (game: GameState, actingSeat?: Seat) => {
+      const shown = publicGame(game, ["south"]);
+      return <TableView game={shown} displayedTrick={shown.currentTrick} showCalls={false} onToggleCalls={() => {}} lastTrickOpen={false} onToggleLastTrick={() => {}}
+        fixedSeatHands statusText="" ariaLabel="Table" actingSeat={actingSeat} {...props} />;
+    };
+    const { getByRole, queryByRole, rerender, container } = render(show(southToCall(), "south"));
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    // East takes back the pass, then overcalls 1NT: the auction is as long as before, but it is a different auction.
+    rerender(show(apply(newGame(), { type: "bid", seat: "north", bid: "1spades" })));
+    rerender(show(apply(newGame(), { type: "bid", seat: "north", bid: "1spades" }, { type: "bid", seat: "east", bid: "1notrump" }), "south"));
+    expect(queryByRole("button", { name: /^Confirm/ })).toBeNull();
+    expect(container.querySelector(".selected-bid")).toBeNull();
+  });
+
   it("without confirmCalls one tap bids", async () => {
     const { onBid, getByRole, queryByRole } = renderAuction(southToCall(), { confirmCalls: undefined });
     await userEvent.click(getByRole("button", { name: "2 spades" }));
