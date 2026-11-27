@@ -671,7 +671,10 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .online-table .dummy-on-left { --bottom-left: var(--side-dummy); }
 .online-table .dummy-on-right { --bottom-left: var(--hint-room); --bottom-right: var(--side-dummy); }
 .online-table .pos-bottom.has-fixed-hand { right: var(--bottom-right); left: var(--bottom-left); transform: none; }
-.online-table .pos-bottom .dummy-table-hand { --step: max(calc(2.6 * var(--u)), calc((100vw - var(--bottom-left) - var(--bottom-right) - 42 * var(--u) - var(--fan-room, 0px)) / 9)); }
+.online-table .pos-bottom .dummy-table-hand { --step: min(var(--step-cap, 100vw), max(calc(2.6 * var(--u)), calc((100vw - var(--bottom-left) - var(--bottom-right) - 42 * var(--u) - var(--fan-room, 0px)) / 9))); }
+/* At the hand result your hand is dealt small along the bottom edge: on a wide screen, filling the width would pull
+   its cards apart, so each step stops at a little under half a card's height (the overlap an iPad landscape shows). */
+.hands-revealed .pos-bottom .dummy-table-hand { --step-cap: calc(.45 * var(--h)); }
 .online-table.play-layout .hint-controls p { max-width: calc(var(--hint-room) - 2 * var(--u)); }
 .online-table .table-status { max-width: calc(25 * var(--u)); }
 .online-table .table-tools-row { flex-direction: column; align-items: flex-start; }
@@ -683,7 +686,7 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
    Hints corner moves up above it instead of taking room beside it. */
 @media (max-aspect-ratio: 4/5) {
   .online-table .table-surface, .online-table .dummy-on-left, .online-table .dummy-on-right { --bottom-left: calc(2 * var(--u)); --bottom-right: calc(2 * var(--u)); --own-h: calc(22 * var(--u)); }
-  .online-table .pos-bottom .dummy-table-hand { --h: var(--own-h); --step: max(calc(2.6 * var(--u)), calc((100vw - 4 * var(--u) - 4 * .7 * var(--own-h) - 2.4 * var(--u) - var(--fan-room, 0px)) / 9)); }
+  .online-table .pos-bottom .dummy-table-hand { --h: var(--own-h); --step: min(var(--step-cap, 100vw), max(calc(2.6 * var(--u)), calc((100vw - 4 * var(--u) - 4 * .7 * var(--own-h) - 2.4 * var(--u) - var(--fan-room, 0px)) / 9))); }
   .online-table .hint-controls { bottom: calc(var(--own-h) + 9 * var(--u)); }
 }
 .online-seat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
