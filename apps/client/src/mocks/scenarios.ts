@@ -202,7 +202,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, take back your last card, lay the cards in a line instead of a fan, cancel the hand, or leave.",
+    id: "game-menu", title: "Game menu", detail: "Mid-hand with the menu open: back to the lobby, recent hands, seating (read-only until the hand ends, with Back to the table), take back your last card, lay the cards in a line instead of a fan, cancel the hand, or leave.",
     build: () => ({ ...playUntilView({ east: "Alex" }, "east", moment(["east"], 2)), menuOpen: true })
   },
   {
@@ -238,7 +238,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "rubber-won", title: "Rubber won", detail: "North–South already have game 1 from 3NT; 4♠ makes game 2 and the rubber: the winner pulses on a gold banner, and the scorecard ends with the 700 rubber bonus, the final score, and Deal a new rubber, Seating, Back to lobby, or Leave the table. The panel keeps clear of West (Annabelle Fitzgerald, a name as long as names go, away) and their points: a long name at a side seat wraps onto two lines.",
+    id: "rubber-won", title: "Rubber won", detail: "North–South already have game 1 from 3NT; 4♠ makes game 2 and the rubber: the winner pulses on a gold banner, and the scorecard ends with the 700 rubber bonus, the final score, and Deal a new rubber, Back to lobby, or Leave the table (Seating is in the game menu). The panel keeps clear of West (Annabelle Fitzgerald, a name as long as names go, away) and their points: a long name at a side seat wraps onto two lines.",
     build: () => {
       // West is a person who has stepped away: their name, tag and points make the widest seat label, which the
       // result panel must not cover.

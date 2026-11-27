@@ -922,12 +922,15 @@ describe("OnlineTable play", () => {
     await user.click(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Deal" }));
     expect(service.sent.at(-1)).toEqual({ type: "deal" });
 
-    // Seating swaps the table for the seat controls; Show the hands brings the result back.
-    await user.click(within(screen.getByRole("region", { name: "Hand result" })).getByRole("button", { name: "Seating" }));
+    // Seating lives in the game menu, not on the result card; it swaps the table for the seat controls, and Back to the
+    // table brings the result back.
+    expect(within(screen.getByRole("region", { name: "Hand result" })).queryByRole("button", { name: "Seating" })).toBeNull();
+    await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+    await user.click(within(screen.getByRole("group", { name: "Game menu", hidden: true })).getByRole("button", { name: "Seating", hidden: true }));
     expect(screen.getByRole("group", { name: "West seat" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Last hand" }).textContent).toContain("by North");
     expect(screen.queryByRole("region", { name: "North's hand" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Show the hands" }));
+    await user.click(screen.getByRole("button", { name: "Back to the table" }));
     expect(screen.getByRole("region", { name: "Hand result" })).toBeTruthy();
   });
 });
@@ -1088,6 +1091,22 @@ describe("OnlineTable connection", () => {
       expect(await screen.findByRole("button", { name: "Exit full screen" })).toBeTruthy();
       expect(document.documentElement.requestFullscreen).toHaveBeenCalledTimes(1);
       delete (document as { fullscreenElement?: unknown }).fullscreenElement;
+    });
+
+    it("opens seating mid-hand, read-only until the hand ends, and goes back to the table", async () => {
+      const user = userEvent.setup();
+      const service = setup();
+      service.push(live(newGame()));
+      await user.click(screen.getByLabelText("Game menu", { selector: "summary" }));
+      await user.click(item("Seating"));
+      expect(screen.getByRole("group", { name: "West seat" })).toBeTruthy();
+      expect(screen.getByText("A hand is in progress. Seats can change when it ends.")).toBeTruthy();
+      expect(within(screen.getByRole("group", { name: "West seat" })).queryByRole("button")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Deal" })).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Back to the table" }));
+      expect(screen.queryByRole("group", { name: "West seat" })).toBeNull();
+      expect(document.querySelector(".table-panel")).toBeTruthy();
+      expect(service.sent).toEqual([]);
     });
 
     it("opens recent hands from the menu", async () => {

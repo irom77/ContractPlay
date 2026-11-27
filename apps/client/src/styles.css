@@ -167,6 +167,8 @@ h2, h3 { font-family: Georgia, serif; font-weight: 500; }
 .online-seating { justify-content: flex-start; gap: 12px; padding: 56px 16px 14px; }
 .online-seating .lobby-panel { width: min(920px, 100%); }
 .start-bar { position: absolute; top: 14px; right: 16px; left: 16px; display: flex; align-items: center; justify-content: space-between; }
+/* Back to the table on the seating screen: gold, but the size of the top bar's other buttons. */
+.start-bar .primary-button { min-height: max(32px, calc(5.4 * var(--u))); padding: 0 max(10px, calc(1.6 * var(--u))); font-size: var(--text-m); white-space: nowrap; }
 .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 700; letter-spacing: -.03em; }
 .brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px 9px 9px 3px; background: var(--gold); color: var(--deep); font-family: Georgia, serif; font-size: 17px; }
 .empty-table .setup-controls { justify-content: center; width: min(560px, 100%); }
@@ -728,7 +730,7 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .online-copy-note { overflow-wrap: anywhere; }
 .lobby > .online-status { position: static; transform: none; }
 @media (max-width: 520px) {
-  .online-seating .start-bar .secondary-button { padding: 0 8px; font-size: 12px; }
+  .online-seating .start-bar :is(.primary-button, .secondary-button) { padding: 0 8px; font-size: 12px; }
   /* Too narrow for the five-column diamond: West and East take half the width each. */
   .online-seats { grid-template-areas: "north north" "west east" "south south"; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .online-seat { padding: 8px 6px; }

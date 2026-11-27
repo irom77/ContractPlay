@@ -32,16 +32,16 @@ export function DealButton({ view, newRubber, className = "primary-button", send
   return <button className={className} type="button" aria-live="polite" disabled={!view.canDeal || (youReady && others.length > 0)} title={title} onClick={() => send({ type: "deal" })}>{text}</button>;
 }
 
-/** Between hands, or for anyone unseated: the four seats with their controls, the totals, the last result, and Deal. */
-export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, scorecard, statusLine, backButton, copyNote, onCopy, onShowResult, send }: {
+/** Between hands, for anyone unseated, or opened from the game menu mid-hand (then read-only): the four seats with their controls, the totals, the last result, and Deal. */
+export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, scorecard, statusLine, backButton, copyNote, onCopy, onBackToTable, send }: {
   view: TableViewData; totals: string;
   own: readonly OwnCharacter[];
   /** A rubber table's rubber, shown as its scoresheet, and the last hand's line on it. */
   rubberSummary?: RubberSummary | undefined; rubberHand?: RubberHand | undefined;
   /** A rubber table's scorecard. */
   scorecard?: React.ReactNode; statusLine: React.ReactNode; backButton: React.ReactNode; copyNote: string | undefined; onCopy(): void;
-  /** Back to the finished hand laid out on the table, when there is one. */
-  onShowResult?: (() => void) | undefined;
+  /** Back to the table the viewer opened seating from: the hand in play, or the finished hand laid out face-up. */
+  onBackToTable?: (() => void) | undefined;
   send(message: Outgoing): void;
 }) {
   // Each open seat's bot choice: a skill level for a table bot, or a named bot's id.
@@ -81,6 +81,7 @@ export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, sco
         <div className="start-bar">
           <span className="brand"><span className="brand-mark">C</span>ContractPlay</span>
           <span className="table-tools-row">
+            {onBackToTable ? <button className="primary-button" type="button" onClick={onBackToTable}>Back to the table</button> : null}
             <button className="secondary-button" type="button" onClick={onCopy}>Copy table link</button>
             {backButton}
             <ReloadButton />
@@ -93,10 +94,9 @@ export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, sco
           </div>
           {rubberSummary ? scorecard : <p className="online-totals">{totals}</p>}
           {copyNote ? <p className="quiet-copy online-copy-note" role="status">{copyNote}</p> : null}
-          {view.handInProgress && !yourSeat ? <p>A hand is in progress. You can take a seat when it ends.</p> : null}
+          {view.handInProgress ? <p>{yourSeat ? "A hand is in progress. Seats can change when it ends." : "A hand is in progress. You can take a seat when it ends."}</p> : null}
           {view.revealed && view.game ? <section className="online-result" aria-label="Last hand">
             <HandResultSummary game={view.game} rubberHand={rubberSummary ? rubberHand ?? null : undefined} />
-            {onShowResult ? <button className="secondary-button" type="button" onClick={onShowResult}>Show the hands</button> : null}
           </section> : null}
           <div className="online-seats">
             {seats.map((seat) => {
@@ -115,7 +115,7 @@ export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, sco
               </div>;
             })}
           </div>
-          <DealButton view={view} newRubber={!!rubberSummary?.winner} className="primary-button online-deal" send={send} />
+          {view.handInProgress ? null : <DealButton view={view} newRubber={!!rubberSummary?.winner} className="primary-button online-deal" send={send} />}
         </div>
         {statusLine}
       </section>

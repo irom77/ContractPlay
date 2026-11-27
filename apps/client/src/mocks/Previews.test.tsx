@@ -151,7 +151,8 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(within(card).getByRole("list", { name: "N–S above the line: 700" })).toBeTruthy();
     expect(within(card).getAllByRole("img", { name: /to N–S$/ })).toHaveLength(2);
     expect(within(card).getByRole("region", { name: "Last hand's points" }).textContent).toMatch(/N–S win game 2[\s\S]*\+700 rubber bonus/);
-    for (const name of ["Deal a new rubber", "Seating", "Back to lobby", "Leave the table", "Close"]) expect(within(card).getByRole("button", { name })).toBeTruthy();
+    for (const name of ["Deal a new rubber", "Back to lobby", "Leave the table", "Close"]) expect(within(card).getByRole("button", { name })).toBeTruthy();
+    expect(within(card).queryByRole("button", { name: "Seating" })).toBeNull();
     // The winner sits on its own banner (it pulses in the stylesheet), with the games score kept on one line.
     expect(within(card).getByRole("heading", { name: "N–S win the rubber 2–0" }).querySelector(".pad-result-games")?.textContent).toBe("2–0");
     // West, a person who has stepped away, keeps the widest seat label; the table measures every seat so the panel

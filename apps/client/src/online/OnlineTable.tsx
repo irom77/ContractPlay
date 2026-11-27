@@ -266,8 +266,8 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   const lastActions = useRef<{ handNumber: number; count: number } | undefined>(undefined);
   // The revision the claim picker was opened at; it closes when the table moves on.
   const [claimPickedAt, setClaimPickedAt] = useState<number>();
-  // The finished hand whose result table the viewer left for the seating screen.
-  const [seatingAfter, setSeatingAfter] = useState<number>();
+  // The hand during or after which the viewer opened the seating screen from the game menu; a new deal brings the table back.
+  const [seatingAt, setSeatingAt] = useState<number>();
   const [rubberShown, setRubberShown] = useState(rubberOpen);
   // The finished hand whose result card the player closed to look at the cards.
   const [closedResult, setClosedResult] = useState<number | undefined>(undefined);
@@ -532,7 +532,12 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
     };
   };
 
-  if (yourSeat && game && (isLive(game) || holding)) {
+  const openSeating = () => setSeatingAt(view.handNumber);
+  const seatingItem: GameMenuItem = { id: "seating", label: yourSeat ? "Seating" : "Take a seat", onSelect: openSeating,
+    title: yourSeat ? "See the seats; change seats, bots, and skill levels between hands" : "Choose a seat for the next deal" };
+  const seatingOpen = seatingAt === view.handNumber;
+
+  if (yourSeat && game && (isLive(game) || holding) && !seatingOpen) {
     const live = isLive(game);
     const mine = view.seats[yourSeat];
     const standIn = mine.kind === "human" && mine.standIn !== undefined;
@@ -582,6 +587,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
         title: "Claim some or all of the remaining tricks", onSelect: () => setClaimPickedAt(view.revision) }] : []),
       ...rubberItem,
       { id: "hands", label: "Recent hands", onSelect: onRecentHands, title: "Review recent finished hands; you keep your seat" },
+      seatingItem,
       handLayoutItem,
       {
         id: "take-back", label: "Take back", disabled: inputDisabled || !canTakeBack(game, view.seats, yourSeat),
@@ -663,20 +669,19 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   }
 
   // A finished hand: all 52 cards face-up at their seats, with the result, score, and Deal in the middle of the table.
-  if (game && view.revealed && !view.handInProgress && seatingAfter !== view.handNumber) {
-    const openSeating = () => setSeatingAfter(view.handNumber);
+  if (game && view.revealed && !view.handInProgress && !seatingOpen) {
     const resultClosed = closedResult === view.handNumber;
-    // Once a rubber is won: deal a new one, or go back to seating or the lobby. Close puts the card away to see the hands.
+    // Once a rubber is won: deal a new one, or go back to the lobby. Close puts the card away to see the hands.
+    // Seating is in the game menu.
     const resultActions = <>
       <DealButton view={view} newRubber={!!rubberSummary?.winner} send={send} />
-      <button className="secondary-button" type="button" onClick={openSeating}>{yourSeat ? "Seating" : "Take a seat"}</button>
       {rubberSummary?.winner ? <button className="secondary-button" type="button" onClick={onLeave}>Back to lobby</button> : null}
       {rubberSummary?.winner && yourSeat ? <button className="secondary-button" type="button" disabled={status !== "open" || leaving} onClick={() => { setLeaving(true); send({ type: "leave" }); }}>Leave the table</button> : null}
       {rubberSummary ? <button className="secondary-button" type="button" onClick={() => setClosedResult(view.handNumber)}>Close</button> : null}
     </>;
     const resultMenu: GameMenuItem[] = [
       { id: "lobby", label: "Back to lobby", onSelect: onLeave, title: yourSeat ? "Keep your seat and return to the lobby" : "Return to the lobby" },
-      { id: "seating", label: "Seating", onSelect: openSeating, title: "Change seats, bots, and skill levels before the next deal" },
+      seatingItem,
       ...rubberItem,
       handLayoutItem,
       ...(yourSeat ? [{ id: "leave", label: "Leave the table", tone: "danger" as const, disabled: status !== "open" || leaving,
@@ -723,7 +728,7 @@ function ConnectedTable({ baseUrl, tableId, storage, onLeave, onRecentHands, ide
   }
 
   return <SeatingPanel view={view} own={ownCharacters} totals={totals} rubberSummary={rubberSummary} rubberHand={rubberHand} scorecard={scorecard()} statusLine={statusLine} backButton={backButton} copyNote={copyNote}
-    onShowResult={game && view.revealed && !view.handInProgress ? () => setSeatingAfter(undefined) : undefined}
+    onBackToTable={seatingOpen && game && (view.revealed ? !view.handInProgress : !!yourSeat && (isLive(game) || holding)) ? () => setSeatingAt(undefined) : undefined}
     onCopy={() => {
       const link = `${location.origin}${location.pathname}#/table/${view.id}`;
       const shown = () => setCopyNote(`Copy this link: ${link}`);
