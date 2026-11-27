@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BenchmarkAdmin } from "./BenchmarkAdmin.js";
@@ -60,7 +60,14 @@ describe("BenchmarkAdmin", () => {
     await user.click(screen.getByRole("button", { name: "Save cohort" }));
     await user.click(screen.getByRole("button", { name: "Start job for Updated Main" }));
     await user.click(screen.getByRole("button", { name: "Analyze completed job job2" }));
-    await user.click(screen.getByRole("button", { name: "Pause job job1" }));
+    // Jobs is a box of its own after Benchmark operations, and a job action's message shows there.
+    const operations = screen.getByRole("region", { name: "Benchmark operations" });
+    const jobsBox = screen.getByRole("region", { name: "Benchmark jobs" });
+    expect(operations.contains(jobsBox)).toBe(false);
+    expect(operations.compareDocumentPosition(jobsBox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await user.click(within(jobsBox).getByRole("button", { name: "Pause job job1" }));
+    expect((await within(jobsBox).findByRole("status")).textContent).toBe("Job paused.");
+    expect(within(operations).queryByRole("status")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Resume job job1" }));
     await user.click(screen.getByRole("button", { name: "Cancel job job1" }));
     await user.click(screen.getByRole("button", { name: "Retry job job3" }));

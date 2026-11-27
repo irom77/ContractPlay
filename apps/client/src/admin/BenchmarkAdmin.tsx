@@ -14,6 +14,7 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [messageBox, setMessageBox] = useState<"operations" | "jobs">("operations");
   const [imports, setImports] = useState<{ id: string; boardCount: number }[]>([]);
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState("");
@@ -121,10 +122,16 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
     }, (value) => { const result = value as { analyzed: number; existing: number; unavailable: number }; return `DD analysis: ${result.analyzed} analyzed, ${result.existing} already present, ${result.unavailable} unavailable.`; });
   }
 
-  return <section className="lobby-panel admin-panel" aria-label="Benchmark operations">
-    <div className="section-heading"><div><h1>Benchmark operations</h1><p className="quiet-copy">Profile versions, duplicate cohorts, scheduled jobs, and private PBN uploads.</p></div><button className="secondary-button" type="button" onClick={() => { void refresh(); }} disabled={busy}>Refresh</button></div>
+  // Job history grows quickly, so Jobs is a box of its own; a message shows in the box whose button was used.
+  const messages = (box: "operations" | "jobs") => messageBox !== box ? null : <>
     {error ? <p className="error-message" role="alert">{error}</p> : null}
     {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
+  </>;
+
+  return <>
+  <section className="lobby-panel admin-panel" aria-label="Benchmark operations" onClickCapture={() => setMessageBox("operations")} onChangeCapture={() => setMessageBox("operations")}>
+    <div className="section-heading"><div><h1>Benchmark operations</h1><p className="quiet-copy">Profile versions, duplicate cohorts, and private PBN uploads. Jobs are in their own box below.</p></div><button className="secondary-button" type="button" onClick={() => { void refresh(); }} disabled={busy}>Refresh</button></div>
+    {messages("operations")}
     {authorized ? <>
       <section aria-label="Benchmark profiles"><div className="section-heading"><h2>Profiles</h2><button className="secondary-button" type="button" onClick={() => setProfileForm((open) => !open)} disabled={busy}>Add profile</button></div>
         {profileForm ? <form onSubmit={(event) => { event.preventDefault(); void addProfile(); }} className="benchmark-form">
@@ -154,9 +161,13 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
         {cohorts.map((cohort) => <div className="admin-table" key={cohort.id}><strong>{cohort.name}</strong><span>{cohort.boardCount} boards · {cohort.maxTables} tables · {cohort.scoring} · {cohort.biddingStyle} · {cohort.intervalMinutes ? `every ${cohort.intervalMinutes} min` : "manual"}</span><button className="secondary-button" type="button" onClick={() => void editCohort(cohort)}>Edit cohort</button><button className="secondary-button" type="button" aria-label={`Start job for ${cohort.name}`} disabled={busy} onClick={() => void startJob(`cohort:${cohort.id}`, cohort.id, "Job queued.")}>Start job</button></div>)}
       </section>
       <section aria-label="Benchmark PBN uploads"><h2>Private PBN board sets</h2><label>Upload PBN<input aria-label="Upload PBN board set" type="file" accept=".pbn,text/plain" onChange={(event) => void uploadPbn(event.target.files?.[0])} /></label>{imports.map((item) => <p key={item.id}>{item.boardCount} boards · {item.id.slice(0, 12)}…</p>)}</section>
-      <section aria-label="Benchmark jobs"><div className="section-heading"><h2>Jobs</h2></div>
-        {jobs.map((job) => <div className="admin-table" key={job.id}><strong>{job.id} · {job.status}</strong><span>{job.cohort.name} · round {job.roundIndex} · {job.cohort.boardCount} boards</span>{job.status === "queued" || job.status === "running" ? <button className="secondary-button" aria-label={`Pause job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/pause`), "Job paused.")}>Pause</button> : null}{job.status === "paused" ? <button className="secondary-button" aria-label={`Resume job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/resume`), "Job resumed.")}>Resume</button> : null}{["queued", "running", "paused"].includes(job.status) ? <button className="secondary-button" aria-label={`Cancel job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/cancel`), "Job cancelled.")}>Cancel</button> : null}{job.status === "failed" ? <button className="secondary-button" aria-label={`Retry job ${job.id}`} disabled={busy} onClick={() => void startJob(`retry:${job.id}`, job.cohortId, "Retry queued as a new round.")}>Retry as new round</button> : null}{job.status === "completed" ? <button className="secondary-button" aria-label={`Analyze completed job ${job.id}`} disabled={busy} onClick={() => void analyze(job)}>Analyze DD par and tricks</button> : null}</div>)}
-      </section>
     </> : null}
-  </section>;
+  </section>
+  {authorized ? <section className="lobby-panel admin-panel" aria-label="Benchmark jobs" onClickCapture={() => setMessageBox("jobs")}>
+    <div className="section-heading"><div><h1>Jobs</h1><p className="quiet-copy">Queued, running and finished benchmark rounds, newest first.</p></div></div>
+    {messages("jobs")}
+        {jobs.map((job) => <div className="admin-table" key={job.id}><strong>{job.id} · {job.status}</strong><span>{job.cohort.name} · round {job.roundIndex} · {job.cohort.boardCount} boards</span>{job.status === "queued" || job.status === "running" ? <button className="secondary-button" aria-label={`Pause job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/pause`), "Job paused.")}>Pause</button> : null}{job.status === "paused" ? <button className="secondary-button" aria-label={`Resume job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/resume`), "Job resumed.")}>Resume</button> : null}{["queued", "running", "paused"].includes(job.status) ? <button className="secondary-button" aria-label={`Cancel job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/cancel`), "Job cancelled.")}>Cancel</button> : null}{job.status === "failed" ? <button className="secondary-button" aria-label={`Retry job ${job.id}`} disabled={busy} onClick={() => void startJob(`retry:${job.id}`, job.cohortId, "Retry queued as a new round.")}>Retry as new round</button> : null}{job.status === "completed" ? <button className="secondary-button" aria-label={`Analyze completed job ${job.id}`} disabled={busy} onClick={() => void analyze(job)}>Analyze DD par and tricks</button> : null}</div>)}
+    {jobs.length === 0 ? <p className="quiet-copy">No jobs yet.</p> : null}
+  </section> : null}
+  </>;
 }
