@@ -52,7 +52,7 @@ function reason(error: unknown): string {
 }
 
 /** /admin's Players section: new players waiting for approval, every account with its admin role, and blocked addresses. */
-export function PlayersAdmin({ api, onDenied }: { api: PlayersAdminApi; onDenied?(status: 401 | 403): void }) {
+export function PlayersAdmin({ api, onDenied, onWaiting }: { api: PlayersAdminApi; onDenied?(status: 401 | 403): void; onWaiting?(count: number): void }) {
   const [data, setData] = useState<AdminAccounts>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -61,12 +61,14 @@ export function PlayersAdmin({ api, onDenied }: { api: PlayersAdminApi; onDenied
 
   const refresh = useCallback(async () => {
     try {
-      setData(await api.load());
+      const loaded = await api.load();
+      setData(loaded);
+      onWaiting?.(loaded.signups.length);
     } catch (failure) {
       if (failure instanceof AdminRequestError && (failure.status === 401 || failure.status === 403)) { onDenied?.(failure.status); return; }
       setError("Couldn't load the players. Check the service and try again.");
     }
-  }, [api, onDenied]);
+  }, [api, onDenied, onWaiting]);
   useEffect(() => { void refresh(); }, [refresh]);
 
   async function act(action: () => Promise<string | undefined>, failed: string, confirmText?: string) {

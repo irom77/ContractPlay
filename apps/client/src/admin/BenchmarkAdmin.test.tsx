@@ -37,7 +37,8 @@ describe("BenchmarkAdmin", () => {
     });
     vi.stubGlobal("fetch", fetcher);
     render(<BenchmarkAdmin baseUrl="https://x.test" />);
-    expect(await screen.findByRole("heading", { name: "Benchmark operations" })).toBeTruthy();
+    // Profiles, Cohorts and Jobs are boxes of their own, in that order.
+    expect(screen.getAllByRole("heading", { level: 1 }).map((heading) => heading.textContent)).toEqual(["Profiles", "Cohorts", "Jobs"]);
     expect(await screen.findByText("timid · v1")).toBeTruthy();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add profile" }));
@@ -60,14 +61,11 @@ describe("BenchmarkAdmin", () => {
     await user.click(screen.getByRole("button", { name: "Save cohort" }));
     await user.click(screen.getByRole("button", { name: "Start job for Updated Main" }));
     await user.click(screen.getByRole("button", { name: "Analyze completed job job2" }));
-    // Jobs is a box of its own after Benchmark operations, and a job action's message shows there.
-    const operations = screen.getByRole("region", { name: "Benchmark operations" });
+    // A job action's message shows in the Jobs box, not the others.
     const jobsBox = screen.getByRole("region", { name: "Benchmark jobs" });
-    expect(operations.contains(jobsBox)).toBe(false);
-    expect(operations.compareDocumentPosition(jobsBox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await user.click(within(jobsBox).getByRole("button", { name: "Pause job job1" }));
     expect((await within(jobsBox).findByRole("status")).textContent).toBe("Job paused.");
-    expect(within(operations).queryByRole("status")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Benchmark cohorts" })).queryByRole("status")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Resume job job1" }));
     await user.click(screen.getByRole("button", { name: "Cancel job job1" }));
     await user.click(screen.getByRole("button", { name: "Retry job job3" }));
@@ -120,7 +118,7 @@ describe("BenchmarkAdmin", () => {
       return Response.json(path.endsWith("/profiles") ? { profiles: [] } : path.endsWith("/cohorts") ? { cohorts: [] } : path.endsWith("/jobs") ? { jobs: [] } : { imports: [] });
     }));
     render(<BenchmarkAdmin baseUrl="https://x.test" />);
-    await screen.findByRole("heading", { name: "Benchmark operations" });
+    await screen.findByRole("heading", { name: "Profiles" });
     const user = userEvent.setup();
     const save = async () => {
       await user.click(screen.getByRole("button", { name: "Add profile" }));

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Seat } from "@contractplay/core";
 import type { SeatInfo, TableSummary } from "@contractplay/protocol";
 import { botName, seatNames, seats } from "../table/labels.js";
-import { BenchmarkAdmin } from "./BenchmarkAdmin.js";
+import { BenchmarkAdmin, type BenchmarkTab } from "./BenchmarkAdmin.js";
 import { PlayersAdmin, playersAdminApi, type PlayersAdminApi } from "./PlayersAdmin.js";
 import { ReloadButton } from "../table/ReloadButton.js";
 
@@ -14,7 +14,15 @@ function seatDescription(seat: SeatInfo): string {
   return `${seat.name}${seat.away ? " · away" : ""}`;
 }
 
-/** /admin, for signed-in admins only: players, online tables, and bot benchmarks. */
+type AdminTab = "players" | "tables" | BenchmarkTab;
+const TABS: readonly { id: AdminTab; label: string }[] = [
+  { id: "players", label: "Players" }, { id: "tables", label: "Online tables" },
+  { id: "profiles", label: "Profiles" }, { id: "cohorts", label: "Cohorts" }, { id: "jobs", label: "Jobs" }
+];
+/** The tab named in the address (`/admin#jobs`), so a reload or bookmark keeps it; Players otherwise. */
+const tabFromHash = (): AdminTab => TABS.find((tab) => `#${tab.id}` === location.hash)?.id ?? "players";
+
+/** /admin, for signed-in admins only: one box at a time (players, online tables, and bot benchmarks), chosen with tabs. */
 export function Admin({ baseUrl, players }: { baseUrl: string; players?: PlayersAdminApi }) {
   const [tables, setTables] = useState<AdminTable[]>();
   const [loading, setLoading] = useState(true);
@@ -22,6 +30,9 @@ export function Admin({ baseUrl, players }: { baseUrl: string; players?: Players
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [denied, setDenied] = useState<401 | 403>();
+  const [tab, setTab] = useState<AdminTab>(tabFromHash);
+  const [waiting, setWaiting] = useState(0);
+  const choose = (next: AdminTab) => { setTab(next); history.replaceState(null, "", `#${next}`); };
   const apiUrl = baseUrl.replace(/\/+$/, "");
   const playersApi = useMemo(() => players ?? playersAdminApi(baseUrl), [players, baseUrl]);
 
@@ -78,10 +89,14 @@ export function Admin({ baseUrl, players }: { baseUrl: string; players?: Players
           <span className="brand"><span className="brand-mark">C</span>ContractPlay admin</span>
           <span className="table-tools-row"><a className="secondary-button admin-back" href="/#/online">Back to lobby</a><ReloadButton /></span>
         </div>
-        <section className="lobby-panel admin-panel">
-          <PlayersAdmin api={playersApi} onDenied={setDenied} />
+        <nav className="admin-tabs" role="tablist" aria-label="Admin sections">
+          {TABS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "active" : undefined}
+            onClick={() => choose(item.id)}>{item.label}{item.id === "players" && waiting > 0 ? <span className="admin-tab-count" aria-label={`${waiting} waiting`}>{waiting}</span> : null}</button>)}
+        </nav>
+        <section className="lobby-panel admin-panel" hidden={tab !== "players"}>
+          <PlayersAdmin api={playersApi} onDenied={setDenied} onWaiting={setWaiting} />
         </section>
-        <section className="lobby-panel admin-panel">
+        <section className="lobby-panel admin-panel" aria-label="Online tables" hidden={tab !== "tables"}>
           <div className="section-heading">
             <div><h1>Online tables</h1><p className="quiet-copy">Removing a table disconnects everyone at it.</p></div>
             <button className="secondary-button" type="button" onClick={() => { void refresh(); }} disabled={loading}>Refresh</button>
@@ -114,10 +129,10 @@ export function Admin({ baseUrl, players }: { baseUrl: string; players?: Players
               ))}
             </ul>
           ) : null}
+          {error ? <p className="error-message admin-message" role="alert">{error}</p> : null}
+          {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
         </section>
-        <BenchmarkAdmin baseUrl={baseUrl} />
-        {error ? <p className="error-message admin-message" role="alert">{error}</p> : null}
-        {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
+        <BenchmarkAdmin baseUrl={baseUrl} tab={tab} />
       </section>
     </main>
   );

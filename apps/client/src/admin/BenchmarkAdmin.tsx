@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { calculateDoubleDummyBaseline } from "../doubleDummy.js";
 import { analyzeBenchmarkJob } from "../online/benchmarkAnalysis.js";
 
@@ -9,16 +9,22 @@ const prefix = "/api/admin/benchmarks";
 const jsonHeaders = { "Content-Type": "application/json" };
 
 /** Protected benchmark controls are separate from the legacy open table-removal page. */
-export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
+export type BenchmarkTab = "profiles" | "cohorts" | "jobs";
+
+/**
+ * Benchmark operations as three /admin boxes: profiles, cohorts (with PBN board sets), and jobs. With `tab`, only that
+ * box shows (none for another admin tab); without it, all three do.
+ */
+export function BenchmarkAdmin({ baseUrl, tab }: { baseUrl: string; tab?: string }) {
   const api = baseUrl.replace(/\/+$/, "");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [cohorts, setCohorts] = useState<Cohort[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [messageBox, setMessageBox] = useState<"operations" | "jobs">("operations");
   const [imports, setImports] = useState<{ id: string; boardCount: number }[]>([]);
   const [authorized, setAuthorized] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [messageBox, setMessageBox] = useState<BenchmarkTab>("profiles");
   const [busy, setBusy] = useState(false);
   const [profileForm, setProfileForm] = useState(false);
   const [profileDraft, setProfileDraft] = useState({ skill: "beginner", aggression: "normal", biddingStyle: "SAYC", version: "v1", engineVersion: "contractplay-bots-v1" });
@@ -48,6 +54,8 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
     } catch { setError("Couldn't load benchmark operations. Check the service and try again."); }
   }, [api]);
   useEffect(() => { void refresh(); }, [refresh]);
+  // A message belongs to the box it came from; switching tabs clears it.
+  useEffect(() => { setNotice(""); }, [tab]);
 
   async function request(path: string, method = "POST", body?: unknown) {
     const response = await send(path, method, body);
@@ -122,18 +130,23 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
     }, (value) => { const result = value as { analyzed: number; existing: number; unavailable: number }; return `DD analysis: ${result.analyzed} analyzed, ${result.existing} already present, ${result.unavailable} unavailable.`; });
   }
 
-  // Job history grows quickly, so Jobs is a box of its own; a message shows in the box whose button was used.
-  const messages = (box: "operations" | "jobs") => messageBox !== box ? null : <>
+  // A message shows in the box whose control was last used (with tabs, the one on screen).
+  const messages = (id: BenchmarkTab) => (tab ?? messageBox) !== id ? null : <>
     {error ? <p className="error-message" role="alert">{error}</p> : null}
     {notice ? <p className="admin-notice" role="status">{notice}</p> : null}
   </>;
+  const refreshButton = <button className="secondary-button" type="button" onClick={() => { void refresh(); }} disabled={busy}>Refresh</button>;
+  /** One admin box; `tab` set means only that tab's box shows, otherwise (as in tests) all three do. */
+  const box = (id: BenchmarkTab, label: string, title: string, copy: string, actions: ReactNode, body: ReactNode) =>
+    <section className="lobby-panel admin-panel" aria-label={label} hidden={tab !== undefined && tab !== id}
+      onClickCapture={() => setMessageBox(id)} onChangeCapture={() => setMessageBox(id)}>
+      <div className="section-heading"><div><h1>{title}</h1><p className="quiet-copy">{copy}</p></div><span className="admin-actions">{authorized ? actions : null}{refreshButton}</span></div>
+      {messages(id)}
+      {authorized ? body : null}
+    </section>;
 
   return <>
-  <section className="lobby-panel admin-panel" aria-label="Benchmark operations" onClickCapture={() => setMessageBox("operations")} onChangeCapture={() => setMessageBox("operations")}>
-    <div className="section-heading"><div><h1>Benchmark operations</h1><p className="quiet-copy">Profile versions, duplicate cohorts, and private PBN uploads. Jobs are in their own box below.</p></div><button className="secondary-button" type="button" onClick={() => { void refresh(); }} disabled={busy}>Refresh</button></div>
-    {messages("operations")}
-    {authorized ? <>
-      <section aria-label="Benchmark profiles"><div className="section-heading"><h2>Profiles</h2><button className="secondary-button" type="button" onClick={() => setProfileForm((open) => !open)} disabled={busy}>Add profile</button></div>
+    {box("profiles", "Benchmark profiles", "Profiles", "Bot profile versions that benchmark cohorts are built from.", <button className="secondary-button" type="button" onClick={() => setProfileForm((open) => !open)} disabled={busy}>Add profile</button>, <>
         {profileForm ? <form onSubmit={(event) => { event.preventDefault(); void addProfile(); }} className="benchmark-form">
           <label>Skill<select value={profileDraft.skill} onChange={(event) => setProfileDraft({ ...profileDraft, skill: event.target.value })}>{["beginner", "intermediate", "advanced", "expert"].map((value) => <option key={value}>{value}</option>)}</select></label>
           <label>Aggressiveness<select value={profileDraft.aggression} onChange={(event) => setProfileDraft({ ...profileDraft, aggression: event.target.value })}>{["conservative", "normal", "aggressive"].map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -143,8 +156,8 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
           <button className="primary-button" type="submit" disabled={busy}>Save profile</button>
         </form> : null}
         {profiles.map(({ profile, status }) => <div className="admin-table" key={`${profile.profileId}:${profile.version}`}><strong>{profile.profileId} · {profile.version}</strong><span>{profile.skill} · {profile.aggression} · {profile.biddingStyle} · engine {profile.engineVersion} · {status}</span>{status === "active" ? <button className="secondary-button" type="button" disabled={busy} onClick={() => void mutate(() => request(`/profiles/${profile.profileId}/${profile.version}`, "DELETE"), "Profile retired; its history is retained.")}>Retire profile</button> : null}</div>)}
-      </section>
-      <section aria-label="Benchmark cohorts"><div className="section-heading"><h2>Cohorts</h2><button className="secondary-button" type="button" onClick={() => { setEditingCohort(undefined); setUnavailableCohortMembers(0); setCohortDraft({ name: "Main", profileKeys: profiles.filter((item) => item.status === "active").slice(0, 4).map(({ profile }) => `${profile.profileId}\u0000${profile.version}`), boardCount: 8, maxTables: 2, biddingStyle: "SAYC", scoring: "imps", rotationSeed: Date.now() >>> 0, importId: "", intervalMinutes: "" }); setCohortForm(true); }} disabled={busy}>Create cohort</button></div>
+    </>)}
+    {box("cohorts", "Benchmark cohorts", "Cohorts", "Duplicate cohorts: which profiles meet, on how many boards, and how often.", <button className="secondary-button" type="button" onClick={() => { setEditingCohort(undefined); setUnavailableCohortMembers(0); setCohortDraft({ name: "Main", profileKeys: profiles.filter((item) => item.status === "active").slice(0, 4).map(({ profile }) => `${profile.profileId}\u0000${profile.version}`), boardCount: 8, maxTables: 2, biddingStyle: "SAYC", scoring: "imps", rotationSeed: Date.now() >>> 0, importId: "", intervalMinutes: "" }); setCohortForm(true); }} disabled={busy}>Create cohort</button>, <>
         {cohortForm ? <form className="benchmark-form" onSubmit={(event) => { event.preventDefault(); void addCohort(); }}>
           {unavailableCohortMembers > 0 ? <p className="admin-notice">{unavailableCohortMembers} retired profile {unavailableCohortMembers === 1 ? "version is" : "versions are"} excluded. Select active replacement profiles before saving.</p> : null}
           <label>Cohort name<input value={cohortDraft.name} onChange={(event) => setCohortDraft({ ...cohortDraft, name: event.target.value })} /></label>
@@ -159,15 +172,11 @@ export function BenchmarkAdmin({ baseUrl }: { baseUrl: string }) {
           <button className="primary-button" type="submit" disabled={busy}>{editingCohort ? "Save cohort" : "Create cohort"}</button><button className="secondary-button" type="button" onClick={() => setCohortForm(false)}>Cancel</button>
         </form> : null}
         {cohorts.map((cohort) => <div className="admin-table" key={cohort.id}><strong>{cohort.name}</strong><span>{cohort.boardCount} boards · {cohort.maxTables} tables · {cohort.scoring} · {cohort.biddingStyle} · {cohort.intervalMinutes ? `every ${cohort.intervalMinutes} min` : "manual"}</span><button className="secondary-button" type="button" onClick={() => void editCohort(cohort)}>Edit cohort</button><button className="secondary-button" type="button" aria-label={`Start job for ${cohort.name}`} disabled={busy} onClick={() => void startJob(`cohort:${cohort.id}`, cohort.id, "Job queued.")}>Start job</button></div>)}
-      </section>
       <section aria-label="Benchmark PBN uploads"><h2>Private PBN board sets</h2><label>Upload PBN<input aria-label="Upload PBN board set" type="file" accept=".pbn,text/plain" onChange={(event) => void uploadPbn(event.target.files?.[0])} /></label>{imports.map((item) => <p key={item.id}>{item.boardCount} boards · {item.id.slice(0, 12)}…</p>)}</section>
-    </> : null}
-  </section>
-  {authorized ? <section className="lobby-panel admin-panel" aria-label="Benchmark jobs" onClickCapture={() => setMessageBox("jobs")}>
-    <div className="section-heading"><div><h1>Jobs</h1><p className="quiet-copy">Queued, running and finished benchmark rounds, newest first.</p></div></div>
-    {messages("jobs")}
+    </>)}
+    {box("jobs", "Benchmark jobs", "Jobs", "Queued, running and finished benchmark rounds, newest first.", null, <>
         {jobs.map((job) => <div className="admin-table" key={job.id}><strong>{job.id} · {job.status}</strong><span>{job.cohort.name} · round {job.roundIndex} · {job.cohort.boardCount} boards</span>{job.status === "queued" || job.status === "running" ? <button className="secondary-button" aria-label={`Pause job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/pause`), "Job paused.")}>Pause</button> : null}{job.status === "paused" ? <button className="secondary-button" aria-label={`Resume job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/resume`), "Job resumed.")}>Resume</button> : null}{["queued", "running", "paused"].includes(job.status) ? <button className="secondary-button" aria-label={`Cancel job ${job.id}`} onClick={() => void mutate(() => request(`/jobs/${job.id}/cancel`), "Job cancelled.")}>Cancel</button> : null}{job.status === "failed" ? <button className="secondary-button" aria-label={`Retry job ${job.id}`} disabled={busy} onClick={() => void startJob(`retry:${job.id}`, job.cohortId, "Retry queued as a new round.")}>Retry as new round</button> : null}{job.status === "completed" ? <button className="secondary-button" aria-label={`Analyze completed job ${job.id}`} disabled={busy} onClick={() => void analyze(job)}>Analyze DD par and tricks</button> : null}</div>)}
-    {jobs.length === 0 ? <p className="quiet-copy">No jobs yet.</p> : null}
-  </section> : null}
+      {jobs.length === 0 ? <p className="quiet-copy">No jobs yet.</p> : null}
+    </>)}
   </>;
 }
