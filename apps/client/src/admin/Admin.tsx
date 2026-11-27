@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Seat } from "@contractplay/core";
 import type { SeatInfo, TableSummary } from "@contractplay/protocol";
 import { botName, seatNames, seats } from "../table/labels.js";
 import { BenchmarkAdmin } from "./BenchmarkAdmin.js";
+import { PlayersAdmin, playersAdminApi, type PlayersAdminApi } from "./PlayersAdmin.js";
 import { ReloadButton } from "../table/ReloadButton.js";
 
 type AdminTable = TableSummary & { listed: boolean };
@@ -13,19 +14,23 @@ function seatDescription(seat: SeatInfo): string {
   return `${seat.name}${seat.away ? " · away" : ""}`;
 }
 
-export function Admin({ baseUrl }: { baseUrl: string }) {
+/** /admin, for signed-in admins only: players, online tables, and bot benchmarks. */
+export function Admin({ baseUrl, players }: { baseUrl: string; players?: PlayersAdminApi }) {
   const [tables, setTables] = useState<AdminTable[]>();
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string>();
   const [error, setError] = useState<string>();
   const [notice, setNotice] = useState<string>();
+  const [denied, setDenied] = useState<401 | 403>();
   const apiUrl = baseUrl.replace(/\/+$/, "");
+  const playersApi = useMemo(() => players ?? playersAdminApi(baseUrl), [players, baseUrl]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(undefined);
     try {
-      const response = await fetch(`${apiUrl}/api/admin/tables`);
+      const response = await fetch(`${apiUrl}/api/admin/tables`, { credentials: "same-origin" });
+      if (response.status === 401 || response.status === 403) { setDenied(response.status); return; }
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       const result = await response.json() as { tables: AdminTable[] };
       setTables(result.tables);
@@ -44,7 +49,7 @@ export function Admin({ baseUrl }: { baseUrl: string }) {
     setError(undefined);
     setNotice(undefined);
     try {
-      const response = await fetch(`${apiUrl}/api/admin/tables/${encodeURIComponent(table.id)}`, { method: "DELETE" });
+      const response = await fetch(`${apiUrl}/api/admin/tables/${encodeURIComponent(table.id)}`, { method: "DELETE", credentials: "same-origin" });
       if (!response.ok) throw new Error(`Request failed (${response.status})`);
       setTables((current) => current?.filter((item) => item.id !== table.id));
       setNotice(`Removed ${table.name}.`);
@@ -55,6 +60,17 @@ export function Admin({ baseUrl }: { baseUrl: string }) {
     }
   }
 
+  if (denied) return <main className="app-shell">
+    <section className="empty-table lobby admin-page" aria-label="Administration">
+      <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay admin</span></div>
+      <section className="lobby-panel admin-panel">
+        <h1>Admins only</h1>
+        <p className="quiet-copy">{denied === 401 ? "Sign in with an admin account to use this page." : "Your account isn't an admin. Ask an admin to give you admin rights."}</p>
+        <a className="secondary-button admin-back" href="/#/online">Back to lobby</a>
+      </section>
+    </section>
+  </main>;
+
   return (
     <main className="app-shell">
       <section className="empty-table lobby admin-page" aria-label="Online table administration">
@@ -63,8 +79,11 @@ export function Admin({ baseUrl }: { baseUrl: string }) {
           <span className="table-tools-row"><a className="secondary-button admin-back" href="/#/online">Back to lobby</a><ReloadButton /></span>
         </div>
         <section className="lobby-panel admin-panel">
+          <PlayersAdmin api={playersApi} onDenied={setDenied} />
+        </section>
+        <section className="lobby-panel admin-panel">
           <div className="section-heading">
-            <div><h1>Online tables</h1><p className="quiet-copy">Development admin · anyone with this page can remove tables.</p></div>
+            <div><h1>Online tables</h1><p className="quiet-copy">Removing a table disconnects everyone at it.</p></div>
             <button className="secondary-button" type="button" onClick={() => { void refresh(); }} disabled={loading}>Refresh</button>
           </div>
           {loading ? <p className="quiet-copy" role="status">Loading tables…</p> : null}

@@ -4,6 +4,7 @@ import { BOT_CHARACTERS } from "@contractplay/core";
 import { createBenchmarkProfile, createRotation } from "@contractplay/benchmark";
 import authMigration from "../migrations/0001_auth.sql?raw";
 import migration from "../migrations/0006_bot_benchmarks.sql?raw";
+import adminMigration from "../migrations/0007_admin_accounts.sql?raw";
 import { hash } from "./auth.js";
 import { AuthStore } from "./auth-store.js";
 import worker from "./index.js";
@@ -48,7 +49,7 @@ function read(path: string) {
 }
 
 beforeAll(async () => {
-  for (const sql of [authMigration, migration]) {
+  for (const sql of [authMigration, migration, adminMigration]) {
     await env.DB.exec(sql.replace(/--[^\n]*/g, "").replace(/\n/g, " "));
   }
 });

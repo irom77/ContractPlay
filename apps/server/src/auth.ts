@@ -9,7 +9,9 @@ const HOUR = 60 * 60_000;
 const TOKEN = /^[A-Za-z0-9_-]{43}$/;
 const GUEST_SECRET = /^[A-Za-z0-9_-]{32,128}$/;
 const authHeaders = { "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" };
-const genericRequest = () => Response.json({ message: "If the address can receive mail, a sign-in link is on its way." }, { status: 202, headers: authHeaders });
+/** The same answer for every address, so nobody can tell which have accounts, are waiting, or are blocked. */
+export const SIGN_IN_REQUESTED = "If the address can receive mail, a sign-in link is on its way. New players get theirs once an admin approves them.";
+const genericRequest = () => Response.json({ message: SIGN_IN_REQUESTED }, { status: 202, headers: authHeaders });
 const invalidLink = () => Response.json({ error: "invalid-link" }, { status: 400, headers: authHeaders });
 
 function publicOrigin(env: Env): URL | undefined {
@@ -73,12 +75,55 @@ export async function authenticatedAccount(request: Request, env: Env): Promise<
   return value ? new AuthStore(env.DB).findSession(await hash(value), Date.now()) : null;
 }
 
-/** Benchmark administration uses deployed account IDs and the same-origin account session. */
-export async function benchmarkAdminAccess(request: Request, env: Env): Promise<"authorized" | "unauthenticated" | "forbidden"> {
+function bootstrapAdmins(env: Env): string[] {
+  return env.BENCHMARK_ADMIN_ACCOUNT_IDS?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
+}
+
+/** Bootstrap admins come from the BENCHMARK_ADMIN_ACCOUNT_IDS secret and cannot be removed from /admin. */
+export function isBootstrapAdmin(accountId: string, env: Env): boolean {
+  return bootstrapAdmins(env).includes(accountId);
+}
+
+export async function isAdmin(account: Account, env: Env): Promise<boolean> {
+  return isBootstrapAdmin(account.id, env) || new AuthStore(env.DB).isGrantedAdmin(account.id);
+}
+
+/** Every /api/admin route uses the same-origin account session and the account's admin role. */
+export async function adminAccess(request: Request, env: Env): Promise<{ status: "authorized"; account: Account } | { status: "unauthenticated" | "forbidden" }> {
   const account = await authenticatedAccount(request, env);
-  if (!account) return "unauthenticated";
-  const allowlist = env.BENCHMARK_ADMIN_ACCOUNT_IDS?.split(",").map((id) => id.trim()) ?? [];
-  return allowlist.includes(account.id) ? "authorized" : "forbidden";
+  if (!account) return { status: "unauthenticated" };
+  return await isAdmin(account, env) ? { status: "authorized", account } : { status: "forbidden" };
+}
+
+/** New addresses wait for an admin unless the AUTH_SIGNUP_APPROVAL var is "off". */
+function approvalRequired(env: Env): boolean {
+  return env.AUTH_SIGNUP_APPROVAL !== "off";
+}
+
+/** Stores a fresh link and emails it; false when delivery failed (the link then stays unusable until it expires). */
+export async function sendSignInLink(env: Env, link: { email: string; displayName: string; guestPlayerId?: string }, now: number): Promise<boolean> {
+  const store = new AuthStore(env.DB);
+  const token = credential();
+  const tokenHash = await hash(token);
+  await store.insertPendingMagicLink({ tokenHash, email: link.email, displayName: link.displayName, expiresAt: now + LINK_LIFETIME,
+    ...(link.guestPlayerId ? { guestPlayerId: link.guestPlayerId } : {}) }, now);
+  const url = new URL("/api/auth/callback", publicOrigin(env)!.origin);
+  url.searchParams.set("token", token);
+  try {
+    await configuredMailer(env).sendMagicLink({ to: link.email, url: url.toString() });
+    await store.activateMagicLink(tokenHash);
+    return true;
+  } catch (error) {
+    logMailFailure("Magic-link email delivery failed", error);
+    return false;
+  }
+}
+
+/** Only logs safe diagnostics. Never includes recipient, link, provider body, or credentials. */
+export function logMailFailure(label: string, error: unknown): void {
+  console.error(label, error instanceof MailDeliveryError
+    ? { reason: error.reason, ...(error.status ? { status: error.status } : {}) }
+    : { reason: "transport" });
 }
 
 async function boundedBody(request: Request): Promise<unknown> {
@@ -118,22 +163,14 @@ async function requestMagicLink(request: Request, env: Env): Promise<Response> {
     && (typeof input.guestSecret !== "string" || !GUEST_SECRET.test(input.guestSecret)))) return genericRequest();
   if (!await store.admitAuthAttempt(await hash(`request:email:${email}`), now, HOUR, 3, 60_000)) return genericRequest();
   await store.cleanupAuth(now);
-  const token = credential();
-  const tokenHash = await hash(token);
-  await store.insertPendingMagicLink({ tokenHash, email, displayName, expiresAt: now + LINK_LIFETIME,
-    ...(typeof input.guestSecret === "string" ? { guestPlayerId: await hash(input.guestSecret) } : {}) }, now);
-  const url = new URL("/api/auth/callback", publicOrigin(env)!.origin);
-  url.searchParams.set("token", token);
-  try {
-    await configuredMailer(env).sendMagicLink({ to: email, url: url.toString() });
-    await store.activateMagicLink(tokenHash);
-  } catch (error) {
-    // Only log safe diagnostics. Never include recipient, link, provider body, or credentials.
-    console.error("Magic-link email delivery failed", error instanceof MailDeliveryError
-      ? { reason: error.reason, ...(error.status ? { status: error.status } : {}) }
-      : { reason: "transport" });
-    /* A pending record stays unusable until expiry. Never expose provider failures. */
+  const guestPlayerId = typeof input.guestSecret === "string" ? await hash(input.guestSecret) : undefined;
+  if (await store.isBlocked(email)) return genericRequest();
+  if (approvalRequired(env) && !await store.signupApproved(email)) {
+    await store.requestSignup({ email, displayName, ...(guestPlayerId ? { guestPlayerId } : {}) }, now);
+    return genericRequest();
   }
+  // A failed delivery is never exposed to the requester.
+  await sendSignInLink(env, { email, displayName, ...(guestPlayerId ? { guestPlayerId } : {}) }, now);
   return genericRequest();
 }
 
@@ -147,6 +184,7 @@ async function redeem(request: Request, env: Env): Promise<Response> {
   const tokenHash = await hash(token);
   const email = await store.magicLinkEmail(tokenHash);
   if (!email || !await store.admitAuthAttempt(await hash(`redeem:email:${email}`), now, LINK_LIFETIME, 10)) return invalidLink();
+  if (await store.isBlocked(email)) return invalidLink();
   const session = credential();
   const expiresAt = now + SESSION_LIFETIME;
   const account = await store.redeemMagicLink({ tokenHash, sessionHash: await hash(session), now, sessionExpiresAt: expiresAt });
@@ -181,7 +219,7 @@ export async function authRoute(request: Request, env: Env): Promise<Response> {
     if (path === "/api/auth/callback") return await redeem(request, env);
     if (path === "/api/auth/me") {
       const account = await authenticatedAccount(request, env);
-      return account ? Response.json({ playerId: account.primaryPlayerId, displayName: account.displayName }, { headers: authHeaders })
+      return account ? Response.json({ playerId: account.primaryPlayerId, displayName: account.displayName, admin: await isAdmin(account, env) }, { headers: authHeaders })
         : Response.json({ error: "unauthenticated" }, { status: 401, headers: authHeaders });
     }
     if (path === "/api/auth/name") return await rename(request, env);

@@ -1,4 +1,5 @@
-export type AccountSession = { playerId: string; displayName: string };
+/** `admin` is true for accounts that may use /admin; the server checks again on every admin request. */
+export type AccountSession = { playerId: string; displayName: string; admin?: boolean };
 
 export async function requestMagicLink(email: string, guestSecret?: string, displayName?: string): Promise<void> {
   const response = await fetch("/api/auth/magic-link", {
@@ -14,9 +15,9 @@ export async function currentAccount(): Promise<AccountSession | null> {
   if (!response.ok) throw new Error("Session lookup failed");
   const data: unknown = await response.json();
   if (!data || typeof data !== "object") throw new Error("Invalid session");
-  const { playerId, displayName } = data as Record<string, unknown>;
+  const { playerId, displayName, admin } = data as Record<string, unknown>;
   if (typeof playerId !== "string" || typeof displayName !== "string") throw new Error("Invalid session");
-  return { playerId, displayName };
+  return { playerId, displayName, ...(admin === true ? { admin: true } : {}) };
 }
 
 /** Renames the signed-in account and returns the session with the server's cleaned name. */

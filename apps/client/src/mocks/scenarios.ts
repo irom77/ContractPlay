@@ -132,7 +132,7 @@ const moment = (seats: readonly Seat[], tricks: number) => (game: GameState) =>
   game.completedTricks.length >= tricks && game.currentTrick.length > 0 && seats.includes(game.currentActor);
 
 export type PreviewData =
-  | { kind: "lobby"; viewerName: string; tables: LobbyTable[]; leaderboard?: LeaderboardRating[] }
+  | { kind: "lobby"; viewerName: string; tables: LobbyTable[]; leaderboard?: LeaderboardRating[]; asAdmin?: true }
   | { kind: "table"; viewerName: string; view: TableView; hints?: boolean; menuOpen?: boolean; rubberOpen?: boolean; initialQueued?: QueuedCard; selectedCall?: Bid; ownCharacters?: readonly OwnCharacter[]; observer?: true }
   | { kind: "auth"; sent: boolean }
   | { kind: "solo"; data: SoloData; scoring: "rubber" | "single"; table: Omit<SoloPreview, "storage">; partnerResults?: readonly PartnerResult[]; ownCharacters?: readonly OwnCharacter[] };
@@ -481,12 +481,12 @@ const laterScreens: readonly PreviewScreen[] = [
     build: () => newDealWithGina({ editingCharacter: GINA.id })
   },
   {
-    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats, and Stop beside it, as a benchmark admin sees it. Below New duplicate session, the Bot leaderboard panel lists the top-rated bots with their bidding style (Steady Sam is a 2/1 profile, the rest SAYC) and boards (deals) and hands played, provisional ratings marked, and links to the full leaderboard.",
+    id: "benchmark-lobby", title: "Open tables: a bot benchmark to watch", detail: "Open tables with a server-run bot benchmark table, marked Bot benchmark, next to a human table. All four seats are benchmark bots, so it offers Watch instead of seats, and Stop beside it, as an admin sees it; the top row also has the Admin link to /admin. Below New duplicate session, the Bot leaderboard panel lists the top-rated bots with their bidding style (Steady Sam is a 2/1 profile, the rest SAYC) and boards (deals) and hands played, provisional ratings marked, and links to the full leaderboard.",
     build: () => {
       const playing = dealt(table("Friday club", { north: "Maria", east: "Sam", south: "Jo", west: "Priya" }));
       const rated = (id: string, rating: number, sampleBoards: number, eligible: boolean, biddingStyle: "SAYC" | "2/1" = "SAYC"): LeaderboardRating =>
         ({ competitorId: JSON.stringify([id, biddingStyle === "2/1" ? "v1-2over1" : "v1"]), rating, deviation: eligible ? 80 : 160, sampleBoards, handsPlayed: 2 * sampleBoards, eligible, biddingStyle });
-      return { kind: "lobby", viewerName: "Alex", tables: [summaryOf(bid(dealt(benchmarkTable()), 3)), summaryOf(playing)],
+      return { kind: "lobby", viewerName: "Alex", asAdmin: true, tables: [summaryOf(bid(dealt(benchmarkTable()), 3)), summaryOf(playing)],
         leaderboard: [rated("will", 1462, 32, true), rated("kim", 1581, 32, true), rated("bea", 1530, 32, true), rated("sam", 1497, 16, false, "2/1")] };
     }
   },

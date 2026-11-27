@@ -331,11 +331,11 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(tour.querySelector(".tour-slide.current")?.getAttribute("href")).toBe("#/mocks/18");
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Send sign-in link" }));
-    expect(await screen.findByText("Check your email for a sign-in link.")).toBeTruthy();
+    expect(await screen.findByText(/^Check your email for a sign-in link\. New players get theirs once an admin approves them\.$/)).toBeTruthy();
   },
   "email-link-sent": () => {
     expect(screen.getByRole("region", { name: "Email sign-in" })).toBeTruthy();
-    expect(screen.getByText("Check your email for a sign-in link.")).toBeTruthy();
+    expect(screen.getByText(/^Check your email for a sign-in link\./)).toBeTruthy();
     expect(screen.queryByLabelText("Email")).toBeNull();
   },
   "result-waiting": () => {
@@ -363,7 +363,8 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(screen.getByText("Bot benchmark")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Watch Benchmark · round 12" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Watch Friday club" })).toBeNull();
-    // Seen as a benchmark admin, the benchmark row also offers Stop for its run; the human table doesn't.
+    // Seen as an admin: the top row links to /admin, and the benchmark row also offers Stop for its run; the human table doesn't.
+    expect(screen.getByRole("link", { name: "Admin" }).getAttribute("href")).toBe("/admin");
     expect(await screen.findByRole("button", { name: "Stop Benchmark · round 12" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Stop Friday club" })).toBeNull();
     // The bot leaderboard sits open below New duplicate session: ranked bots first by rating, then provisional ones.

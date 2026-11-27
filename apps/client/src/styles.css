@@ -831,3 +831,12 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .trait-dial p { margin: 4px 0 0; font-size: 0.85rem; }
 .own-character-actions, .own-character-editor .form-error { grid-column: 1 / -1; display: flex; gap: 8px; }
 .recent-panel h3 { margin: 14px 0 4px; }
+.admin-link { display: inline-flex; align-items: center; text-decoration: none; }
+.admin-section { display: grid; gap: 14px; }
+.admin-section h2 { margin: 0; font: 500 22px/1.2 Georgia, serif; }
+.admin-section h3 { margin: 0 0 6px; font-size: 15px; }
+.admin-rows { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.admin-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); padding: 9px 0; overflow-wrap: anywhere; }
+.admin-row .admin-badge { margin-left: 6px; }
+.admin-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-row input[type="email"] { flex: 1 1 220px; min-height: 34px; }

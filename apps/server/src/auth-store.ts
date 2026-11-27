@@ -192,6 +192,84 @@ export class AuthStore {
     return results.map((row) => ({ id: row.hand_id, completedAt: row.completed_at, data: JSON.parse(row.data_json) }));
   }
 
+  async isGrantedAdmin(accountId: string): Promise<boolean> {
+    return await this.db.prepare("SELECT 1 FROM account_admins WHERE account_id = ?").bind(accountId).first() !== null;
+  }
+
+  async setGrantedAdmin(accountId: string, admin: boolean, now: number): Promise<void> {
+    await (admin
+      ? this.db.prepare("INSERT INTO account_admins (account_id, granted_at) SELECT id, ? FROM accounts WHERE id = ? ON CONFLICT(account_id) DO NOTHING").bind(now, accountId)
+      : this.db.prepare("DELETE FROM account_admins WHERE account_id = ?").bind(accountId)).run();
+  }
+
+  findAccount(accountId: string): Promise<Account | null> {
+    return this.db.prepare(`SELECT ${accountColumns} FROM accounts a WHERE id = ?`).bind(accountId).first<Account>();
+  }
+
+  /** Every account, newest first, with whether it holds a granted admin role. */
+  async listAccounts(): Promise<(Account & { grantedAdmin: boolean })[]> {
+    const { results } = await this.db.prepare(`SELECT ${accountColumns}, EXISTS (SELECT 1 FROM account_admins d WHERE d.account_id = a.id) AS grantedAdmin FROM accounts a ORDER BY a.created_at DESC, a.email`)
+      .all<Account & { grantedAdmin: number }>();
+    return results.map((row) => ({ ...row, grantedAdmin: row.grantedAdmin === 1 }));
+  }
+
+  async isBlocked(email: string): Promise<boolean> {
+    return await this.db.prepare("SELECT 1 FROM blocked_emails WHERE email = ?").bind(normalizeEmail(email)).first() !== null;
+  }
+
+  /** Blocks an address: drops its sign-up request, unused links, and its account's sessions. */
+  async blockEmail(email: string, now: number): Promise<void> {
+    const normalized = normalizeEmail(email);
+    await this.db.batch([
+      this.db.prepare("INSERT INTO blocked_emails (email, blocked_at) VALUES (?, ?) ON CONFLICT(email) DO NOTHING").bind(normalized, now),
+      this.db.prepare("DELETE FROM signup_requests WHERE email = ?").bind(normalized),
+      this.db.prepare("DELETE FROM magic_links WHERE email = ? AND redemption_id IS NULL").bind(normalized),
+      this.db.prepare("UPDATE sessions SET revoked_at = ? WHERE revoked_at IS NULL AND account_id IN (SELECT id FROM accounts WHERE email = ?)").bind(now, normalized)
+    ]);
+  }
+
+  async unblockEmail(email: string): Promise<boolean> {
+    return (await this.db.prepare("DELETE FROM blocked_emails WHERE email = ?").bind(normalizeEmail(email)).run()).meta.changes === 1;
+  }
+
+  async listBlocked(): Promise<{ email: string; blockedAt: number }[]> {
+    const { results } = await this.db.prepare("SELECT email, blocked_at AS blockedAt FROM blocked_emails ORDER BY blocked_at DESC, email")
+      .all<{ email: string; blockedAt: number }>();
+    return results;
+  }
+
+  /** Whether an address may be sent a sign-in link without asking an admin: it has an account or an approved request. */
+  async signupApproved(email: string): Promise<boolean> {
+    const normalized = normalizeEmail(email);
+    return await this.db.prepare("SELECT 1 FROM accounts WHERE email = ?1 UNION ALL SELECT 1 FROM signup_requests WHERE email = ?1 AND approved_at IS NOT NULL")
+      .bind(normalized).first() !== null;
+  }
+
+  /** Queues (or refreshes) a pending request; an approved one keeps its approval. */
+  async requestSignup(request: { email: string; displayName: string; guestPlayerId?: string }, now: number): Promise<void> {
+    await this.db.prepare("INSERT INTO signup_requests (email, display_name, guest_player_id, requested_at) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET display_name = excluded.display_name, guest_player_id = excluded.guest_player_id, requested_at = excluded.requested_at WHERE signup_requests.approved_at IS NULL")
+      .bind(normalizeEmail(request.email), request.displayName, request.guestPlayerId ?? null, now).run();
+  }
+
+  async listPendingSignups(): Promise<{ email: string; displayName: string; requestedAt: number }[]> {
+    const { results } = await this.db.prepare("SELECT email, display_name AS displayName, requested_at AS requestedAt FROM signup_requests WHERE approved_at IS NULL ORDER BY requested_at, email")
+      .all<{ email: string; displayName: string; requestedAt: number }>();
+    return results;
+  }
+
+  /** Approves a pending request and returns what its sign-in link needs, or null when nothing was pending. */
+  async approveSignup(email: string, now: number): Promise<{ email: string; displayName: string; guestPlayerId?: string } | null> {
+    const row = await this.db.prepare("UPDATE signup_requests SET approved_at = ? WHERE email = ? AND approved_at IS NULL RETURNING email, display_name AS displayName, guest_player_id AS guestPlayerId")
+      .bind(now, normalizeEmail(email)).first<{ email: string; displayName: string; guestPlayerId: string | null }>();
+    if (!row) return null;
+    return { email: row.email, displayName: row.displayName, ...(row.guestPlayerId ? { guestPlayerId: row.guestPlayerId } : {}) };
+  }
+
+  /** Removes a pending request; true when there was one. */
+  async denySignup(email: string): Promise<boolean> {
+    return (await this.db.prepare("DELETE FROM signup_requests WHERE email = ? AND approved_at IS NULL").bind(normalizeEmail(email)).run()).meta.changes === 1;
+  }
+
   private linkIdentityStatement(email: string, playerId: string): D1PreparedStatement {
     return this.db.prepare("INSERT INTO account_player_identities (player_id, account_id) SELECT ?, a.id FROM accounts a WHERE a.email = ? AND NOT EXISTS (SELECT 1 FROM account_player_identities i WHERE i.player_id = ? AND i.account_id = a.id)")
       .bind(playerId, email, playerId);

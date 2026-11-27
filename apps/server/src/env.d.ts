@@ -11,8 +11,10 @@ declare global {
       /** Exact app origin; HTTPS required outside explicitly enabled localhost development. */
       AUTH_PUBLIC_ORIGIN?: string;
       AUTH_ALLOW_INSECURE_LOCALHOST?: string;
-      /** Comma-separated internal account IDs allowed to manage benchmarks. */
+      /** Comma-separated internal account IDs of bootstrap admins (more can be granted on /admin). */
       BENCHMARK_ADMIN_ACCOUNT_IDS?: string;
+      /** "off" lets new addresses sign in without an admin's approval; anything else holds them for approval. */
+      AUTH_SIGNUP_APPROVAL?: string;
       /** Approved sender on the configured provider's verified/onboarded domain. */
       AUTH_EMAIL_FROM?: string;
       /** Cloudflare Email Service binding; takes precedence over the Resend adapter. */

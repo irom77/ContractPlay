@@ -7,6 +7,7 @@ import type { DuplicateSessionBoard } from "@contractplay/table";
 import { ID_ALPHABET, LISTED_ID_LENGTH, UNLISTED_ID_LENGTH, lobbyOf } from "./lobby-object.js";
 import { authenticatedAccount, authRequestAllowed, authRoute } from "./auth.js";
 import { AuthStore } from "./auth-store.js";
+import { adminPlayerRoute, isAdminPlayerPath, requireAdmin } from "./admin-routes.js";
 import { ADMIN_BENCHMARK_PATH, PUBLIC_BENCHMARK_PATH, benchmarkRoute } from "./benchmark-routes.js";
 import { dealRoute } from "./deal-routes.js";
 import { parseDeal, readLimited } from "./deal-input.js";
@@ -163,6 +164,11 @@ export default {
     if (path === "/api/health") return Response.json({ ok: true, protocol: PROTOCOL_VERSION });
     if (path === "/admin" && (request.method === "GET" || request.method === "HEAD")) {
       return env.ASSETS.fetch(new Request(new URL("/", url), { method: request.method, headers: request.headers }));
+    }
+    if (isAdminPlayerPath(path)) return adminPlayerRoute(request, env);
+    if (path === "/api/admin/tables" || path.startsWith("/api/admin/tables/")) {
+      const gate = await requireAdmin(request, env);
+      if ("denied" in gate) return gate.denied;
     }
     if (path === "/api/admin/tables") {
       if (request.method === "GET") return Response.json({ tables: await lobbyOf(env).listAll() });

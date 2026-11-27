@@ -29,7 +29,8 @@ Solo PBN board sets against the field shipped on 2026-11-13 (see [TODO-archive.m
 - [ ] Verify cross-device seat recovery and archive sync. Live email delivery and sign-in have been confirmed. Follow [the deployment runbook](docs/platform-delivery.md#email-sign-in-prerequisites).
 - [ ] Verify a deal replay live. Migration 0003 was applied to production on 2026-11-24 (`GET /api/deals/replay` answers 204 while the archive is empty). Finish online hands, or solo hands against bots; at least a day later, check that an even-numbered hand in the same mode shows the "Replayed deal" notice and, when it ends, the comparison.
 - [ ] Add permissions (authorization) beyond the current host and seated-player rules.
-- [ ] Protect the legacy online-table removal panel at `/admin` and `/api/admin/tables` with authorization before public production use; email sign-in does not restrict that separate surface. Benchmark operations under `/admin` use the benchmark session allowlist.
+- [x] Admin roles, sign-up approval and a block list (plan: [`docs/superpowers/plans/2026-11-27-admin-accounts.md`](docs/superpowers/plans/2026-11-27-admin-accounts.md)). All of `/admin` and `/api/admin/*`, including the online-table removal panel, now needs a signed-in admin; new addresses wait for approval; admins reach `/admin` from the lobby.
+- [ ] Apply migration `0007_admin_accounts.sql` to production, then verify live: a new address is held, Approve emails a working link, Deny emails the refusal, and Block signs an account out.
 - [ ] Add invitations to a table.
 - [ ] Add basic optional voice and video chat for players at a table.
 

@@ -50,6 +50,15 @@ function setup(options: { benchmarkAdmin?: LobbyApi["benchmarkAdmin"]; list?: ()
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe("Lobby", () => {
+  it("links admins to /admin from the top row, and no one else", async () => {
+    setup({ auth: { ...signedIn, currentAccount: async () => ({ playerId: "account-1", displayName: "Bob", admin: true }) } });
+    expect((await screen.findByRole("link", { name: "Admin" })).getAttribute("href")).toBe("/admin");
+    cleanup();
+    setup();
+    await screen.findByRole("button", { name: "Recent hands" });
+    expect(screen.queryByRole("link", { name: "Admin" })).toBeNull();
+  });
+
   it("shows Open tables above Play, both collapsed to their headers until clicked", async () => {
     const { onPlaySolo } = setup({ collapsed: true });
     const user = userEvent.setup();

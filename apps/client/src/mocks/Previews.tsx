@@ -12,8 +12,11 @@ import type { BenchmarkAdminApi } from "../online/benchmarkStop.js";
 import { previewCategories, previewScreens, type PreviewData } from "./scenarios.js";
 
 const previewAccount: AccountSession = { playerId: "preview-player", displayName: "Alex" };
-const previewAuth = { currentAccount: async () => previewAccount, requestMagicLink: async () => {}, signOut: async () => {}, syncHistory: async () => {},
+const previewAuth = { currentAccount: async (): Promise<AccountSession> => previewAccount, requestMagicLink: async () => {}, signOut: async () => {}, syncHistory: async () => {},
   updateDisplayName: async (displayName: string) => ({ ...previewAccount, displayName }) };
+
+/** Lobby previews seen as an admin, with the Admin link in the top row. */
+const previewAdminAuth = { ...previewAuth, currentAccount: async (): Promise<AccountSession> => ({ ...previewAccount, admin: true }) };
 
 /** Keeps each preview's name, hints setting, and saved hands away from the real device storage. */
 function memoryStorage(entries: Record<string, string> = {}): StorageLike {
@@ -71,7 +74,7 @@ function OnlineScreen({ data }: { data: Exclude<PreviewData, { kind: "solo" } | 
       ...(data.leaderboard ? { listLeaderboard: () => Promise.resolve(data.leaderboard!) } : {}),
       benchmarkAdmin: previewBenchmarkAdmin };
   }, [data]);
-  if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={previewAuth} onOpenTable={() => {}} onPlaySolo={() => {}} onRecentHands={() => {}} />;
+  if (data.kind === "lobby") return <Lobby baseUrl="preview" storage={storage} api={lobbyApi!} auth={data.asAdmin ? previewAdminAuth : previewAuth} onOpenTable={() => {}} onPlaySolo={() => {}} onRecentHands={() => {}} />;
   return <OnlineTable account={null} baseUrl="preview" tableId={data.view.id} storage={storage} onLeave={() => {}} onRecentHands={() => {}} connect={connect!} menuOpen={data.menuOpen ?? false} rubberOpen={data.rubberOpen ?? false} {...(data.initialQueued ? { initialQueued: data.initialQueued } : {})} {...(data.selectedCall ? { initialSelectedCall: data.selectedCall } : {})} {...(data.observer ? { observer: true as const, benchmarkAdmin: previewBenchmarkAdmin } : {})} />;
 }
 

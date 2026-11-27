@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import migration from "../migrations/0001_auth.sql?raw";
 import rateMigration from "../migrations/0002_auth_rate_limits.sql?raw";
+import adminMigration from "../migrations/0007_admin_accounts.sql?raw";
 import worker from "./index.js";
 import { AuthStore } from "./auth-store.js";
 
@@ -10,7 +11,7 @@ const store = new AuthStore(env.DB);
 let sent: { to: string; text: string }[];
 let failMail: boolean;
 let duringSend: (() => Promise<void>) | undefined;
-const settings = () => ({ ...env, AUTH_PUBLIC_ORIGIN: origin, AUTH_EMAIL_FROM: "signin@example.org",
+const settings = () => ({ ...env, AUTH_PUBLIC_ORIGIN: origin, AUTH_EMAIL_FROM: "signin@example.org", AUTH_SIGNUP_APPROVAL: "off",
   EMAIL: { async send(message: { to: string; text: string }) {
     sent.push(message);
     await duringSend?.();
@@ -34,12 +35,14 @@ async function hash(value: string) {
 beforeAll(async () => {
   await env.DB.exec(migration.replace(/\n/g, " "));
   await env.DB.exec(rateMigration.replace(/\n/g, " "));
+  await env.DB.exec(adminMigration.replace(/--[^\n]*/g, "").replace(/\n/g, " "));
 });
 beforeEach(async () => {
   vi.restoreAllMocks();
   sent = []; failMail = false; duringSend = undefined;
   await env.DB.batch(["sessions", "magic_links", "account_player_identities", "accounts"].map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
   await env.DB.prepare("DELETE FROM auth_rate_limits").run();
+  await env.DB.batch(["account_admins", "blocked_emails", "signup_requests"].map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
 });
 
 describe("authentication routes", () => {
@@ -78,14 +81,14 @@ describe("authentication routes", () => {
     const session = await env.DB.prepare("SELECT * FROM sessions").first();
     expect(session?.session_hash).toBe(await hash(rawSession));
     expect(Number(session?.expires_at) - now).toBeGreaterThanOrEqual(30 * 24 * 60 * 60_000);
-    expect(await (await me(cookie(response))).json()).toEqual({ playerId: await hash(secret), displayName: "Ann" });
+    expect(await (await me(cookie(response))).json()).toEqual({ playerId: await hash(secret), displayName: "Ann", admin: false });
   });
 
   it("registers without guest proof and ignores a caller supplied player ID", async () => {
     await requestLink(undefined, { playerId: "victim" });
     const response = await callback();
     expect(response.status).toBe(303);
-    expect(await (await me(cookie(response))).json()).toEqual({ playerId: expect.stringMatching(/^[0-9a-f-]{36}$/), displayName: "Ann" });
+    expect(await (await me(cookie(response))).json()).toEqual({ playerId: expect.stringMatching(/^[0-9a-f-]{36}$/), displayName: "Ann", admin: false });
   });
 
   it("rejects malformed, unknown, expired, and replayed tokens without a cookie", async () => {

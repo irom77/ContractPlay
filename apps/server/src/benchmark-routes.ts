@@ -4,7 +4,7 @@ import { benchmarkProfileVersionId, createBenchmarkProfile } from "@contractplay
 import { BOT_CHARACTERS, cardId, cleanName, SEATS } from "@contractplay/core";
 import { parsePbn } from "@contractplay/pbn";
 import type { DuplicateSessionBoard } from "@contractplay/table";
-import { benchmarkAdminAccess, hash } from "./auth.js";
+import { adminAccess, hash } from "./auth.js";
 import { BenchmarkStore, MAX_BENCHMARK_BOARDS, MAX_BENCHMARK_PAGE, MAX_BENCHMARK_PROFILES, MAX_BENCHMARK_TABLES } from "./benchmark-store.js";
 import type { BenchmarkCohortInput, BenchmarkJobAction, BenchmarkProfileKey } from "./benchmark-store.js";
 import { isRecord, readLimited } from "./deal-input.js";
@@ -217,9 +217,8 @@ async function publicRoute(request: Request, db: D1Database, store: BenchmarkSto
 export async function benchmarkRoute(request: Request, env: Env, admin: boolean): Promise<Response> {
   try {
     if (admin) {
-      const access = await benchmarkAdminAccess(request, env);
-      if (access === "unauthenticated") return json({ error: access }, 401);
-      if (access === "forbidden") return json({ error: access }, 403);
+      const access = await adminAccess(request, env);
+      if (access.status !== "authorized") return json({ error: access.status }, access.status === "unauthenticated" ? 401 : 403);
     }
     const url = new URL(request.url);
     const prefix = admin ? ADMIN_BENCHMARK_PATH : PUBLIC_BENCHMARK_PATH;

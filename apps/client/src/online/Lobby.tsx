@@ -105,7 +105,7 @@ export function Lobby({ baseUrl, storage, onOpenTable, onPlaySolo, onRecentHands
     {historyError ? <p className="error-message" role="status">Online history could not sync. Your local hands are still available; reopen Recent hands to retry.</p> : null}
     {signOutError ? <p className="error-message" role="alert">Couldn't sign out. Try again.</p> : null}
     <LobbyTables resultsSynced={resultsSynced} expandedPanels={expandedPanels} identity={{ name: account.displayName }} baseUrl={baseUrl} api={api} storage={storage} onOpenTable={onOpenTable} onPlaySolo={onPlaySolo} onRecentHands={onRecentHands}
-      account={account} onRename={async (name) => setAccount(await (auth.updateDisplayName ?? updateDisplayName)(name))} onSignOut={() => {
+      account={account} onRename={async (name) => { const renamed = await (auth.updateDisplayName ?? updateDisplayName)(name); setAccount((current) => ({ ...renamed, ...(current?.admin ? { admin: true } : {}) })); }} onSignOut={() => {
         void auth.signOut().then(() => { setAccount(null); setSignOutError(false); }).catch(() => setSignOutError(true));
       }} />
   </>;
@@ -128,7 +128,7 @@ export function EmailGate({ identity, onBack, initialEmail = "", initialSent = f
   return <main className="app-shell"><section className="empty-table lobby" aria-label="Email sign-in">
     <div className="start-bar"><span className="brand"><span className="brand-mark">C</span>ContractPlay</span></div>
     <form className="lobby-panel" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      {sent ? <p role="status">Check your email for a sign-in link.</p> : <>
+      {sent ? <p role="status">Check your email for a sign-in link. New players get theirs once an admin approves them.</p> : <>
         <label>Email<input type="email" aria-label="Email" value={email} required autoFocus onChange={(event) => setEmail(event.target.value)} /></label>
         <button className="primary-button" type="submit" disabled={pending || !email.trim()}>Send sign-in link</button>
         {error ? <p className="error-message" role="alert">Couldn't request a link. Try again.</p> : null}
@@ -444,6 +444,7 @@ function LobbyTables({ resultsSynced, expandedPanels, identity, baseUrl, storage
           <span className="table-tools-row">
             <AccountName name={account.displayName} onRename={onRename} /><button className="secondary-button" type="button" onClick={onSignOut}>Sign out</button>
             <button className="secondary-button" type="button" onClick={onRecentHands}>Recent hands</button>
+            {account.admin ? <a className="secondary-button admin-link" href="/admin">Admin</a> : null}
             <ReloadButton />
           </span>
         </div>
