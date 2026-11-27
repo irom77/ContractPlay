@@ -252,3 +252,28 @@ describe("confirming calls", () => {
     expect(screen.getByRole("status").textContent).toContain("means 2spades");
   });
 });
+
+describe("turn edge", () => {
+  const edge = (container: HTMLElement) => container.querySelector(".turn-edge")?.className;
+
+  it("lines the screen edge on the side of the seat to act", () => {
+    // North sits at the bottom, so East (on lead) is on the left.
+    const { container, rerender } = renderTable(publicGame(playing(), ["north"]));
+    expect(edge(container)).toBe("turn-edge turn-edge-left");
+    const next = publicGame(afterOpeningLead(), ["north"]);
+    rerender(<TableView game={next} bottomSeat="north" displayedTrick={next.currentTrick} showCalls={false} onToggleCalls={() => {}} lastTrickOpen={false} onToggleLastTrick={() => {}}
+      showBottomHand={false} fixedSeatHands statusText="" ariaLabel="Table" />);
+    expect(edge(container)).toBe("turn-edge turn-edge-top");
+  });
+
+  it("follows the bidder in the auction and turns with the viewer's seat", () => {
+    expect(edge(renderTable(publicGame(newGame(), ["north"])).container)).toBe("turn-edge turn-edge-bottom");
+    cleanup();
+    expect(edge(renderTable(publicGame(newGame(), ["east"]), { bottomSeat: "east" }).container)).toBe("turn-edge turn-edge-right");
+  });
+
+  it("is gone once the hand is over", () => {
+    const passedOut = apply(newGame(), ...(["north", "east", "south", "west"] as const).map((seat) => ({ type: "bid" as const, seat, bid: "pass" as const })));
+    expect(edge(renderTable(publicGame(passedOut, ["north"])).container)).toBeUndefined();
+  });
+});

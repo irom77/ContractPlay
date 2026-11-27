@@ -216,6 +216,9 @@ export function TableView({
           {toolsNote}
         </div>
 
+        {/* A second, quieter turn cue: a thin blinking line along the screen edge on the side of the seat to act. */}
+        {liveTurn && shownActor ? <div className={`turn-edge turn-edge-${positionOf(shownActor)}`} aria-hidden="true" /> : null}
+
         {seats.map((seat) => {
           const position = positionOf(seat);
           const hasPlayed = phase === "play" && game.currentTrick.some((play) => play.seat === seat);

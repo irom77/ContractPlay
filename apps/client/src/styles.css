@@ -799,7 +799,17 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 }
 .table-panel.dealing :is(.hand-zone, .hidden-hand, .dummy-table-hand, .seat-auction-calls, .bid-picker) { animation: deal-reveal .35s ease 1.6s backwards; }
 @keyframes deal-reveal { from { opacity: 0; } to { opacity: 1; } }
+/* Turn edge: a thin gold line along the screen edge nearest the seat to act, fading in and out, under everything interactive. */
+.turn-edge { position: fixed; z-index: 15; pointer-events: none; background: var(--gold); box-shadow: 0 0 10px rgba(242, 193, 78, .7); animation: turn-edge-blink 1.6s ease-in-out infinite; }
+.turn-edge-top, .turn-edge-bottom { left: 0; right: 0; height: 3px; }
+.turn-edge-left, .turn-edge-right { top: 0; bottom: 0; width: 3px; }
+.turn-edge-top { top: 0; }
+.turn-edge-bottom { bottom: 0; }
+.turn-edge-left { left: 0; }
+.turn-edge-right { right: 0; }
+@keyframes turn-edge-blink { 0%, 100% { opacity: .15; } 50% { opacity: .7; } }
 @media (prefers-reduced-motion: reduce) {
+  .turn-edge { animation: none; opacity: .45; }
   .deal-animation { display: none; }
   .table-panel.dealing :is(.hand-zone, .hidden-hand, .dummy-table-hand, .seat-auction-calls, .bid-picker) { animation: none; }
   .tour-slide { transition: none; }
