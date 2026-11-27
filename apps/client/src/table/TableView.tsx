@@ -207,7 +207,8 @@ export function TableView({
           const isDummy = dummyVisible && seat === dummySeat;
           const isBot = botSeats?.includes(seat) ?? false;
           const points = revealed ? highCardPoints([...revealed[seat]]) : undefined;
-          const callChips = seatCalls.length ? <span className="seat-auction-calls" role="group" aria-label={`${seatNames[seat]} calls`}>{seatCalls.map(({ bid, index }) => explainCall
+          // A seat's calls read newest first: its latest call is the leftmost in the row.
+          const callChips = seatCalls.length ? <span className="seat-auction-calls" role="group" aria-label={`${seatNames[seat]} calls`}>{[...seatCalls].reverse().map(({ bid, index }) => explainCall
             ? <button type="button" className={`seat-auction-call ${callChipClass(bid)} ${shownExplanation === index ? "explained-call" : ""}`} key={index} aria-expanded={shownExplanation === index} aria-label={`Explain ${seatNames[seat]}'s ${callLabel(bid)}`} title="What does this call mean?" onClick={() => explainCall.onToggle(index)}>{compactCallLabel(bid)}</button>
             : <span className={`seat-auction-call ${callChipClass(bid)}`} key={index}>{compactCallLabel(bid)}</span>)}</span> : null;
           // Beside a face-up hand at a side seat, the calls get their own row under the name, as wide as the hand.
