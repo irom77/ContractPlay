@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { applyAction, createDeck, createGameState, deal, legalCards, type GameAction, type GameState, type Seat } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TableView, type TableViewProps } from "./TableView.js";
 import { cardsHeld } from "./labels.js";
 
@@ -156,5 +157,82 @@ describe("hand layout", () => {
     const cards = [...container.querySelectorAll(".hand-zone .playing-card")];
     expect(cards).toHaveLength(13);
     expect([fanOf(cards[0]), fanOf(cards[12])]).toEqual(["-1.0000", "1.0000"]);
+  });
+});
+
+describe("confirming calls", () => {
+  /** North opened 1♠ and East passed: South is to call. */
+  const southToCall = () => apply(newGame(), { type: "bid", seat: "north", bid: "1spades" }, { type: "bid", seat: "east", bid: "pass" });
+  const meaning = (bid: string) => `means ${bid}`;
+  const renderAuction = (game: GameState, overrides: Partial<TableViewProps> = {}) => {
+    const onBid = vi.fn();
+    const view = renderTable(publicGame(game, ["south"]), { bottomSeat: "south", actingSeat: "south", showBottomHand: true, onBid, confirmCalls: { meaning }, ...overrides });
+    return { onBid, ...view };
+  };
+
+  it("a first tap selects a call and shows its meaning without bidding", async () => {
+    const { onBid, getByRole } = renderAuction(southToCall());
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    expect(onBid).not.toHaveBeenCalled();
+    expect(getByRole("status").textContent).toContain("means 2spades");
+    expect(getByRole("button", { name: "Confirm 2♠" }).textContent).toContain("Bid 2♠");
+    expect(getByRole("button", { name: "2 spades" }).classList.contains("selected-bid")).toBe(true);
+  });
+
+  it("a second tap on the selected call, or the confirm button, makes it", async () => {
+    const first = renderAuction(southToCall());
+    await userEvent.click(first.getByRole("button", { name: "2 spades" }));
+    await userEvent.click(first.getByRole("button", { name: "2 spades" }));
+    expect(first.onBid).toHaveBeenCalledTimes(1);
+    expect(first.onBid).toHaveBeenCalledWith("2spades");
+    cleanup();
+    const second = renderAuction(southToCall());
+    await userEvent.click(second.getByRole("button", { name: "Pass" }));
+    expect(second.getByRole("button", { name: "Confirm Pass" }).textContent).toContain("Pass");
+    await userEvent.click(second.getByRole("button", { name: "Confirm Pass" }));
+    expect(second.onBid).toHaveBeenCalledWith("pass");
+  });
+
+  it("tapping another call moves the selection", async () => {
+    const { onBid, getByRole } = renderAuction(southToCall());
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    await userEvent.click(getByRole("button", { name: "3 spades" }));
+    expect(getByRole("status").textContent).toContain("means 3spades");
+    expect(onBid).not.toHaveBeenCalled();
+  });
+
+  it("Escape or a tap outside the bidding box clears the selection", async () => {
+    const { getByRole, queryByRole, container } = renderAuction(southToCall());
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(queryByRole("button", { name: /^Confirm/ })).toBeNull();
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    fireEvent.click(container.querySelector(".table-surface") ?? document.body);
+    expect(queryByRole("button", { name: /^Confirm/ })).toBeNull();
+  });
+
+  it("the selection is dropped when the auction moves on", async () => {
+    const onBid = vi.fn();
+    const props = { bottomSeat: "south" as const, actingSeat: "south" as const, showBottomHand: true, onBid, confirmCalls: { meaning } };
+    const { getByRole, queryByRole, rerender, container } = renderTable(publicGame(southToCall(), ["south"]), props);
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    // The view refreshes with one more call while South is (again) the one to act, e.g. after a take-back elsewhere.
+    const moved = publicGame(apply(southToCall(), { type: "bid", seat: "south", bid: "pass" }, { type: "bid", seat: "west", bid: "2hearts" }, { type: "bid", seat: "north", bid: "2spades" }, { type: "bid", seat: "east", bid: "pass" }), ["south"]);
+    rerender(<TableView game={moved} displayedTrick={moved.currentTrick} showCalls={false} onToggleCalls={() => {}} lastTrickOpen={false} onToggleLastTrick={() => {}}
+      fixedSeatHands statusText="" ariaLabel="Table" {...props} />);
+    expect(queryByRole("button", { name: /^Confirm/ })).toBeNull();
+    expect(container.querySelector(".selected-bid")).toBeNull();
+  });
+
+  it("without confirmCalls one tap bids", async () => {
+    const { onBid, getByRole, queryByRole } = renderAuction(southToCall(), { confirmCalls: undefined });
+    await userEvent.click(getByRole("button", { name: "2 spades" }));
+    expect(onBid).toHaveBeenCalledWith("2spades");
+    expect(queryByRole("status")).toBeNull();
+  });
+
+  it("can open with a call already selected", () => {
+    renderAuction(southToCall(), { confirmCalls: { meaning, initial: "2spades" } });
+    expect(screen.getByRole("status").textContent).toContain("means 2spades");
   });
 });

@@ -423,6 +423,15 @@ button.dummy-card { cursor: pointer; transition: transform .12s ease; }
 .bid-special-double { background: #c22b25; }
 .bid-special-redouble { background: #1f55b5; }
 .bid-special-pass { background: #2f7d4f; }
+/* A call picked but not yet made: a white ring that still shows on a gold suggested call, and a slight lift. */
+.bid-cell.selected-bid:not(:disabled), .bid-special.selected-bid:not(:disabled) { position: relative; z-index: 1; outline: max(2px, calc(.4 * var(--u))) solid #fff; outline-offset: max(1px, calc(.2 * var(--u))); transform: translateY(calc(-.25 * var(--u))); }
+/* Under the box: what the picked call means, and the button that makes it. Two lines tall, so picking never moves the box. */
+.call-preview { display: flex; min-height: calc(2 * 1.3 * var(--text-m) + 1.2 * var(--u)); align-items: center; gap: var(--u); margin-top: var(--u); border-top: 1px solid rgba(255, 255, 255, .12); padding-top: var(--u); }
+.call-preview p { flex: 1; margin: 0; color: var(--ink); font-size: var(--text-m); line-height: 1.3; text-align: left; }
+.call-preview p.quiet-copy { color: var(--muted); }
+.call-preview strong { margin-right: .35em; color: var(--gold); font-family: var(--suit-font); }
+.call-preview strong.auction-call-red { color: #ff6b6b; }
+.call-preview .primary-button { flex: none; min-height: calc(4.7 * var(--u)); padding: 0 calc(1.6 * var(--u)); font-size: var(--text-m); white-space: nowrap; }
 .bid-special:disabled { opacity: .28; cursor: not-allowed; }
 
 .score-panel { position: absolute; z-index: 5; top: 50%; left: 50%; display: grid; justify-items: center; gap: calc(1.4 * var(--u)); min-width: calc(40 * var(--u)); border: 1px solid rgba(255, 255, 255, .13); border-radius: calc(1.4 * var(--u)); padding: calc(3 * var(--u)) calc(4 * var(--u)); background: rgba(12, 40, 34, .94); box-shadow: 0 calc(1.5 * var(--u)) calc(4 * var(--u)) #0007; text-align: center; transform: translate(-50%, -50%); }

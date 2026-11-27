@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { cardId, SUITS, trickWinner, tricksWonBySide, type Bid, type Card, type Seat, type TrickCard } from "@contractplay/core";
 import type { PublicGame } from "@contractplay/protocol";
 import { highCardPoints } from "@contractplay/bots";
@@ -65,6 +65,11 @@ export type TableViewProps = {
   onBid?(bid: Bid): void; onPlay?(seat: Seat, card: Card): void;
   hintedBid?: Bid | undefined; hintedCards?: ReadonlySet<string> | undefined;
   explainCall?: { shown?: number | undefined; onToggle(index: number): void; text(index: number): string } | undefined;
+  /**
+   * When given, a tap in the bidding box first selects a call and shows `meaning(call)` under it; a second tap on the
+   * call, or the confirm button, makes it. `initial` opens with a call already selected (a preview).
+   */
+  confirmCalls?: { meaning(bid: Bid): string; initial?: Bid | undefined } | undefined;
   /** Running match score, shown under the trick count in the top-right status card. */
   matchScore?: { ns: number; ew: number } | undefined;
   /** Once the hand is over: the whole deal, laid face-up at each seat with its high-card points. Nothing is playable. */
@@ -90,11 +95,26 @@ const MIN_PANEL_WIDTH = 320;
 /** The bridge table: status, seats with their calls and dummy, the trick, the bid picker, and the hand zone. */
 export function TableView({
   game, bottomSeat, actingSeat, displayedTrick, showCalls, onToggleCalls, lastTrickOpen, onToggleLastTrick, showBottomHand, fixedSeatHands = false, showBacksAtBottom = false, exposedSeat,
-  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, matchScore, revealedHands, dealing = false, tools, toolsNote, overlay, handLayout = defaultHandLayout
+  queueSeats, queuedCard, onQueue, cardsDisabled = false, bidsDisabled = false, statusText, ariaLabel, boardLabel, botSeats, seatLabel, onBid, onPlay, hintedBid, hintedCards, explainCall, confirmCalls, matchScore, revealedHands, dealing = false, tools, toolsNote, overlay, handLayout = defaultHandLayout
 }: TableViewProps): React.JSX.Element {
   const auctionListRef = useRef<HTMLOListElement>(null);
+  const bidPickerRef = useRef<HTMLDivElement>(null);
   const phase = game.phase;
   const auctionLength = game.auction.length;
+  // The call picked in the bidding box but not yet made, and the auction length it was picked at: once the auction
+  // moves on, the pick no longer applies.
+  const [picked, setPicked] = useState<{ bid: Bid; at: number } | undefined>(() => confirmCalls?.initial ? { bid: confirmCalls.initial, at: auctionLength } : undefined);
+  const pickedNow = picked && picked.at === auctionLength ? picked.bid : undefined;
+
+  useEffect(() => {
+    if (!pickedNow) return;
+    const clear = (event: Event) => {
+      if (event instanceof KeyboardEvent ? event.key === "Escape" : !bidPickerRef.current?.contains(event.target as Node)) setPicked(undefined);
+    };
+    document.addEventListener("click", clear);
+    document.addEventListener("keydown", clear);
+    return () => { document.removeEventListener("click", clear); document.removeEventListener("keydown", clear); };
+  }, [pickedNow]);
 
   useEffect(() => {
     const list = auctionListRef.current;
@@ -143,6 +163,13 @@ export function TableView({
   const { ns: completedNsTricks, ew: completedEwTricks } = tricksWonBySide(game);
   const positionOf = (seat: Seat) => tablePositions[(seats.indexOf(seat) - seats.indexOf(bottomSeat) + 4) % 4]!;
   const canAct = actingSeat !== undefined;
+  const selectedCall = confirmCalls && canAct && onBid && phase === "auction" && !bidsDisabled && pickedNow && isCallAvailable(game, pickedNow) ? pickedNow : undefined;
+  // Without confirmCalls a tap makes the call; with it, a tap picks a call and a second tap on it makes it.
+  const chooseCall = (bid: Bid) => {
+    if (!onBid) return;
+    if (!confirmCalls || selectedCall === bid) { setPicked(undefined); onBid(bid); return; }
+    setPicked({ bid, at: auctionLength });
+  };
   // Dummy laid out across the table is played from there, so the bottom edge keeps showing declarer's own cards.
   const playFromDummy = canAct && phase === "play" && dummyVisible && actingSeat === dummySeat && positionOf(actingSeat) !== "bottom";
   const handIsInteractive = canAct && !playFromDummy;
@@ -255,16 +282,22 @@ export function TableView({
 
         <section className={phase === "auction" ? "auction-panel centered-auction" : "sr-only"} aria-label="Auction">
           {auctionList}
-          {canAct && onBid && phase === "auction" ? <div className="bid-picker" aria-label="Choose a bid">
+          {canAct && onBid && phase === "auction" ? <div ref={bidPickerRef} className="bid-picker" aria-label="Choose a bid">
             <div className="bid-grid" role="group" aria-label="Contract bids by level and strain">
               {[1, 2, 3, 4, 5, 6, 7].map((level) => bidBoxStrains.map((strain) => {
                 const bid = `${level}${strain}` as Bid;
-                return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""} ${hintedBid === bid ? "hinted-bid" : ""}`} aria-label={`${level} ${strain}`} title={hintedBid === bid ? "Suggested bid" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
+                return <button key={bid} type="button" className={`bid-cell ${isRedSuit(strain) ? "bid-red" : ""} ${hintedBid === bid ? "hinted-bid" : ""} ${selectedCall === bid ? "selected-bid" : ""}`} aria-label={`${level} ${strain}`} aria-pressed={confirmCalls ? selectedCall === bid : undefined} title={hintedBid === bid ? "Suggested bid" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => chooseCall(bid)}>{level}<span>{strain === "notrump" ? "NT" : suitSymbols[strain]}</span></button>;
               }))}
             </div>
             <div className="bid-special-calls" role="group" aria-label="Pass, double, or redouble">
-              {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid} ${hintedBid === bid ? "hinted-bid" : ""}`} title={hintedBid === bid ? "Suggested call" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => onBid(bid)}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
+              {(["double", "redouble", "pass"] as const).map((bid) => <button key={bid} type="button" className={`bid-special bid-special-${bid} ${hintedBid === bid ? "hinted-bid" : ""} ${selectedCall === bid ? "selected-bid" : ""}`} aria-pressed={confirmCalls ? selectedCall === bid : undefined} title={hintedBid === bid ? "Suggested call" : undefined} disabled={bidsDisabled || !isCallAvailable(game, bid)} onClick={() => chooseCall(bid)}>{bid === "double" ? "X" : bid === "redouble" ? "XX" : "Pass"}</button>)}
             </div>
+            {confirmCalls ? <div className="call-preview">
+              {selectedCall ? <>
+                <p role="status"><strong className={callChipClass(selectedCall)}>{compactCallLabel(selectedCall)}</strong> {confirmCalls.meaning(selectedCall)}</p>
+                <button className="primary-button" type="button" aria-label={`Confirm ${/^[1-7]/.test(selectedCall) ? compactCallLabel(selectedCall) : callLabel(selectedCall)}`} onClick={() => chooseCall(selectedCall)}>{/^[1-7]/.test(selectedCall) ? `Bid ${compactCallLabel(selectedCall)}` : callLabel(selectedCall)}</button>
+              </> : <p className="quiet-copy">Tap a call to see what it means.</p>}
+            </div> : null}
           </div> : null}
         </section>
 
