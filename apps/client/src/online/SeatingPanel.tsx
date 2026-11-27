@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { RubberHand, RubberSummary, Seat, SkillLevel } from "@contractplay/core";
+import { MAX_TABLE_NAME } from "@contractplay/protocol";
 import type { ClientMessage, PublicGame, SeatInfo, TableView as TableViewData } from "@contractplay/protocol";
 import type { OwnCharacter } from "@contractplay/persistence";
 import { ContractOutcome } from "../table/ResultSummary.js";
@@ -87,7 +88,7 @@ export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, sco
         </div>
         <div className="lobby-panel">
           <div className="section-heading">
-            <h2>{view.name}</h2>
+            <TableName name={view.name} canRename={yourSeat !== undefined && view.host === yourSeat} send={send} />
             <span className="quiet-copy">{view.style}{rubberSummary ? " · Rubber bridge" : ""}</span>
           </div>
           {rubberSummary ? scorecard : <p className="online-totals">{totals}</p>}
@@ -120,6 +121,28 @@ export function SeatingPanel({ view, own, totals, rubberSummary, rubberHand, sco
       </section>
     </main>
   );
+}
+
+/** The table's name; the host also gets a Rename button that opens an inline form. The new name arrives with the next view. */
+function TableName({ name, canRename, send }: { name: string; canRename: boolean; send(message: Outgoing): void }) {
+  const [draft, setDraft] = useState<string | undefined>();
+  if (draft === undefined || !canRename) {
+    return <span className="table-tools-row">
+      <h2>{name}</h2>
+      {canRename ? <button className="secondary-button" type="button" title="Change this table's name for everyone, here and in the lobby" onClick={() => setDraft(name)}>Rename</button> : null}
+    </span>;
+  }
+  const next = draft.trim();
+  return <form className="table-tools-row table-rename" aria-label="Rename table" onSubmit={(event) => {
+    event.preventDefault();
+    if (next === "") return;
+    if (next !== name) send({ type: "rename", name: next });
+    setDraft(undefined);
+  }}>
+    <input aria-label="Table name" value={draft} maxLength={MAX_TABLE_NAME} autoFocus onChange={(event) => setDraft(event.target.value)} />
+    <button className="primary-button" type="submit" disabled={next === ""}>Save name</button>
+    <button className="secondary-button" type="button" onClick={() => setDraft(undefined)}>Cancel</button>
+  </form>;
 }
 
 /**

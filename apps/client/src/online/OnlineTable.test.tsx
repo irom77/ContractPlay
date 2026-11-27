@@ -196,6 +196,26 @@ describe("OnlineTable seating", () => {
     expect(within(screen.getByRole("group", { name: "East seat" })).getByRole("button", { name: "Free seat" })).toBeTruthy();
   });
 
+  it("lets only the host rename the table", async () => {
+    const user = userEvent.setup();
+    const service = setup();
+    const seated = { north: human("Bob"), east: human("Ann"), south: empty, west: empty };
+    service.push(tableView({ yourSeat: "east", host: "north", seats: seated }));
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
+    service.push(tableView({ yourSeat: "north", host: "north", seats: seated }));
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(service.sent).toEqual([]);
+    await user.click(screen.getByRole("button", { name: "Rename" }));
+    const input = screen.getByLabelText("Table name");
+    await user.clear(input);
+    expect((screen.getByRole("button", { name: "Save name" }) as HTMLButtonElement).disabled).toBe(true);
+    await user.type(input, "  Friday game ");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    expect(service.sent).toEqual([{ type: "rename", name: "Friday game" }]);
+    expect(screen.queryByLabelText("Table name")).toBeNull();
+  });
+
   it("enables Deal only when the view allows it and sends deal", async () => {
     const user = userEvent.setup();
     const service = setup();

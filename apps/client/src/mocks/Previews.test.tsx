@@ -46,6 +46,7 @@ const expectations: Record<string, () => Promise<void> | void> = {
     expect(east.getByText("Bold Bea · Advanced · Aggressive", { selector: "strong" })).toBeTruthy();
     expect((east.getByLabelText("Bot") as HTMLSelectElement).value).toBe("bea");
     expect(screen.getByRole("button", { name: "Deal" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Rename" })).toBeTruthy();
   },
   auction: () => {
     expect(screen.getByText("Your call")).toBeTruthy();

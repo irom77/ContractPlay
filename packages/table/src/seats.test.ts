@@ -15,6 +15,18 @@ describe("seats", () => {
     expect(send(b, "bob", { type: "sit", seat: "west" }).refused).toBe("already-seated");
   });
 
+  it("lets only the host rename the table, without making pending actions stale", () => {
+    let t = sendOk(newTable(), "alice", { type: "sit", seat: "north" }, 1);
+    t = sendOk(t, "bob", { type: "sit", seat: "east" }, 2);
+    expect(send(t, "bob", { type: "rename", name: "Bob's game" })).toEqual({ state: t, refused: "not-allowed" });
+    expect(send(t, "zed", { type: "rename", name: "Zed's game" }).refused).toBe("not-allowed");
+    const renamed = sendOk(t, "alice", { type: "rename", name: "Friday game" });
+    expect(renamed.name).toBe("Friday game");
+    expect(renamed.revision).toBe(t.revision);
+    expect(send(renamed, "alice", { type: "rename", name: "Friday game" }).state).toBe(renamed);
+    expect(send(newTable(), "alice", { type: "rename", name: "Nobody's" }).refused).toBe("not-allowed");
+  });
+
   it("never uses the player id as a display name", () => {
     const named = { ...newTable(), names: { alice: "Alice" } };
     expect(sendOk(named, "alice", { type: "sit", seat: "north" }).seats.north).toMatchObject({ name: "Alice" });

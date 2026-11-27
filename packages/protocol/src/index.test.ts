@@ -25,7 +25,8 @@ const valid: ClientMessage[] = [
   { type: "claim", tricks: 13 },
   { type: "answerClaim", accept: true, claimId: 7 },
   { type: "answerClaim", accept: false, claimId: 0 },
-  { type: "withdrawClaim" }
+  { type: "withdrawClaim" },
+  { type: "rename", name: "Friday game" }
 ];
 const parse = (v: unknown) => parseClientMessage(JSON.stringify(v));
 
@@ -43,6 +44,12 @@ describe("parseClientMessage", () => {
     for (const expectedPlayerId of [null, 42, "", "x".repeat(129), "bad player"]) expect(parse({ ...hello, expectedPlayerId })).toBeUndefined();
   });
   it.each(valid)("round-trips %j", (m) => expect(parse(m)).toEqual(m));
+
+  it("cleans a table rename and refuses an empty or overlong name", () => {
+    expect(parse({ type: "rename", name: "  Friday \n game " })).toEqual({ type: "rename", name: "Friday game" });
+    expect(parse({ type: "rename", name: "x".repeat(40) })).toEqual({ type: "rename", name: "x".repeat(40) });
+    for (const name of ["", "   ", "x".repeat(41), 7, undefined]) expect(parse({ type: "rename", name })).toBeUndefined();
+  });
 
   it("rejects non-JSON, arrays, and non-objects", () => {
     expect(parseClientMessage("nope")).toBeUndefined();

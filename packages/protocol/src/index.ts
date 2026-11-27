@@ -2,7 +2,7 @@ import { botCharacter, cleanName, isBotTraits, isOwnCharacterId, MAX_CHARACTER_N
 export { cleanName } from "@contractplay/core";
 import type { Aggression, BotTraits, Card, Deal, GameAction, GameState, HandRecord, Rubber, Seat, SkillLevel, TravellerRow } from "@contractplay/core";
 
-export const PROTOCOL_VERSION = 9;
+export const PROTOCOL_VERSION = 10;
 export const MAX_MESSAGE_BYTES = 4096;
 export const MAX_PLAYER_NAME = 20;
 export const MAX_TABLE_NAME = 40;
@@ -72,6 +72,8 @@ export type ClientMessage =
   | { type: "act"; handNumber: number; revision: number; action: GameAction }
   | { type: "handToBot"; seat: Seat } | { type: "resume" } | { type: "autoPlay" }
   | { type: "takeBack" } | { type: "cancelHand" }
+  /** The host renames the table; `name` is cleaned and 1–MAX_TABLE_NAME characters. */
+  | { type: "rename"; name: string }
   | { type: "claim"; tricks: number } | { type: "answerClaim"; accept: boolean; claimId: number } | { type: "withdrawClaim" };
 
 export type CustomBot = { id: string; name: string; skill: SkillLevel; traits: BotTraits };
@@ -147,6 +149,10 @@ export function parseClientMessage(raw: string): ClientMessage | undefined {
       return character ? { type: "setBot", seat, skill: character.skill, character: character.id } : undefined;
     }
     case "leave": case "refresh": case "deal": case "resume": case "autoPlay": case "takeBack": case "cancelHand": case "withdrawClaim": return { type: data.type };
+    case "rename": {
+      const name = cleanName(data.name, MAX_TABLE_NAME);
+      return name === undefined ? undefined : { type: "rename", name };
+    }
     case "claim": {
       const tricks = count(data.tricks);
       return tricks !== undefined && tricks <= 13 ? { type: "claim", tricks } : undefined;

@@ -344,6 +344,19 @@ describe("connections", () => {
     expect(view.seats.north).toMatchObject({ kind: "human", name: "Alice", away: false });
   });
 
+  it("lets the host rename the table for everyone at it and in the lobby, and refuses anyone else", async () => {
+    const id = await newTableId(true, "Old name");
+    const { client: alice } = await Client.join(id, SECRET_A, "Alice");
+    alice.send({ type: "sit", seat: "north" });
+    await alice.viewAfter(0);
+    const { client: bob } = await Client.join(id, SECRET_B, "Bob");
+    bob.send({ type: "rename", name: "Bob's table" });
+    expect(await bob.next()).toMatchObject({ type: "refused", reason: "not-allowed" });
+    alice.send({ type: "rename", name: "Friday game" });
+    expect((await bob.until((view) => view.name === "Friday game")).name).toBe("Friday game");
+    expect((await listTables()).find((t) => t.id === id)?.name).toBe("Friday game");
+  });
+
   it("closes the socket on a frame over 4096 bytes or a binary frame", async () => {
     const id = await newTableId();
     const { client } = await Client.join(id, SECRET_A, "Alice");

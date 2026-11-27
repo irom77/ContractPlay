@@ -155,7 +155,7 @@ const onlineScreens: readonly PreviewScreen[] = [
     }
   },
   {
-    id: "seating", title: "Seating", detail: "You host at South with Gentle Gina, your own character, at North (her non-standard dials under her name), and Bold Bea, a named bot, at East. West is still open, so Deal waits.",
+    id: "seating", title: "Seating", detail: "You host at South with Gentle Gina, your own character, at North (her non-standard dials under her name), and Bold Bea, a named bot, at East. West is still open, so Deal waits. As host you can rename the table.",
     build: () => {
       const people: People = { south: "Alex" };
       const host = player("south");

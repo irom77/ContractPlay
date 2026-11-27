@@ -66,6 +66,15 @@ export function clearSeat(state: TableState, player: PlayerId, seat: Seat): Outc
   return allowed ? vacate(state, seat, target.player) : refuse(state, "not-allowed");
 }
 
+/**
+ * The host renames the table, at any time. The revision stays: a new name never makes a pending call or card stale.
+ * `name` arrives cleaned and length-checked by the protocol parser.
+ */
+export function rename(state: TableState, player: PlayerId, name: string): Outcome {
+  if (state.host === undefined || state.host !== player) return refuse(state, "not-allowed");
+  return name === state.name ? { state } : { state: { ...state, name } };
+}
+
 /** Empties a human's seat (or hands it to `replacement`), drops their away mark (and their name if they have no open connection), and passes host on if needed. */
 function vacate(state: TableState, seat: Seat, player: PlayerId, replacement: SeatState = { kind: "empty" }): Outcome {
   const seats = withSeat(state, seat, replacement);

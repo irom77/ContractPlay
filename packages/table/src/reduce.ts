@@ -1,7 +1,7 @@
 import { answerClaim, claim, withdrawClaim } from "./claim.js";
 import { act, applyBotEvent, cancelHand, dealHand, takeBack } from "./hand.js";
 import { autoPlay, connect, disconnect, handToBot, resume, tick } from "./presence.js";
-import { clearSeat, leave, setBot, sit } from "./seats.js";
+import { clearSeat, leave, rename, setBot, sit } from "./seats.js";
 import type { Outcome, TableEvent, TableState } from "./state.js";
 
 /**
@@ -22,6 +22,7 @@ export function reduce(state: TableState, event: TableEvent, random: () => numbe
     case "leave": return leave(state, player);
     case "setBot": return setBot(state, player, message.seat, message.skill, message.character, message.custom);
     case "clearSeat": return clearSeat(state, player, message.seat);
+    case "rename": return rename(state, player, message.name);
     case "deal": return dealHand(state, player, at, random);
     case "refresh": return { state };
     case "act": return act(state, player, message, at);
